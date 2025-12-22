@@ -1,0 +1,213 @@
+/* src/index.css */
+@import "tailwindcss";
+
+/* jouw eigen design tokens / base css eronder */
+:root{
+  --bg: #f6f7f6;
+  --card: #ffffff;
+  --card-2: #f1f3f4;
+  --text: #1f2933;
+  --text-muted: #6b7280;
+  --border: #e5e7eb;
+  --shadow-soft: 0 8px 24px rgba(0,0,0,.06);
+  --shadow-xs: 0 1px 2px rgba(0,0,0,.04);
+  --accent: #3b82f6;
+  --accent-muted: #93c5fd;
+  --accent-bg: #eff6ff;
+  --success: #16a34a;
+  --warning: #f59e0b;
+  --danger: #dc2626;
+  --radius-sm: 10px;
+  --radius-md: 16px;
+  --radius-lg: 24px;
+}
+
+/* etc… (de rest van je CSS mag blijven) */
+
+
+/* =========================
+   CSS VARIABLES (THEME)
+   ========================= */
+:root {
+  /* Surfaces */
+  --bg: #f6f7f6;            /* warm off-white */
+  --card: #ffffff;
+  --card-2: #f1f3f4;
+
+  /* Text */
+  --text: #1f2933;          /* near charcoal */
+  --text-muted: #6b7280;
+
+  /* Borders & shadows */
+  --border: #e5e7eb;
+  --shadow-soft: 0 8px 24px rgba(0, 0, 0, 0.06);
+  --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.04);
+
+  /* Accent (Japandi blue) */
+  --accent: #3b82f6;        /* soft indigo-blue */
+  --accent-muted: #93c5fd;
+  --accent-bg: #eff6ff;
+
+  /* States */
+  --success: #16a34a;
+  --warning: #f59e0b;
+  --danger: #dc2626;
+
+  /* Radius */
+  --radius-sm: 10px;
+  --radius-md: 16px;
+  --radius-lg: 24px;
+}
+
+/* Dark mode (optional, auto) */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0f1419;
+    --card: #141a20;
+    --card-2: #1b222a;
+    --text: #e5e7eb;
+    --text-muted: #9ca3af;
+    --border: #2a313a;
+    --shadow-soft: 0 10px 28px rgba(0, 0, 0, 0.4);
+  }
+}
+
+/* =========================
+   GLOBAL RESET / BASE
+   ========================= */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family:
+    Inter,
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    Roboto,
+    sans-serif;
+  font-size: 14px;
+  line-height: 1.45;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* =========================
+   TYPOGRAPHY
+   ========================= */
+h1,
+h2,
+h3,
+h4 {
+  margin: 0;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+p {
+  margin: 0;
+}
+
+/* =========================
+   FORMS
+   ========================= */
+input,
+select,
+textarea,
+button {
+  font-family: inherit;
+  color: inherit;
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: var(--text-muted);
+}
+
+input:focus,
+select:focus,
+textarea:focus {
+  outline: none;
+}
+
+/* =========================
+   LINKS
+   ========================= */
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+/* =========================
+   UTILITIES
+   ========================= */
+.mono {
+  font-variant-numeric: tabular-nums;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.glass {
+  background: rgba(255, 255, 255, 0.65);
+  backdrop-filter: blur(12px);
+  border: 1px solid var(--border);
+}
+
+@media (prefers-color-scheme: dark) {
+  .glass {
+    background: rgba(20, 26, 32, 0.7);
+  }
+}
+
+/* =========================
+   SCROLLBARS (SUBTLE)
+   ========================= */
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+*::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--text-muted) 40%, transparent);
+  border-radius: 999px;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background: color-mix(in srgb, var(--text-muted) 60%, transparent);
+}
+
+/* =========================
+   TRANSITIONS (CALM)
+   ========================= */
+* {
+  transition:
+    background-color 0.15s ease,
+    border-color 0.15s ease,
+    color 0.15s ease,
+    box-shadow 0.15s ease,
+    transform 0.15s ease;
+}
+
+/* =========================
+   SELECTION
+   ========================= */
+::selection {
+  background: var(--accent-bg);
+  color: var(--text);
+}

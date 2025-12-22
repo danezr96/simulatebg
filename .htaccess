@@ -1,0 +1,17 @@
+Options -MultiViews
+
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+  RewriteBase /
+
+  # echte files/mappen met rust laten
+  RewriteCond %{REQUEST_FILENAME} -f [OR]
+  RewriteCond %{REQUEST_FILENAME} -d
+  RewriteRule ^ - [L]
+
+  # SPA routes -> index.html
+  RewriteRule . index.html [L]
+</IfModule>
+
+AddType application/javascript .js
+AddType text/css .css
