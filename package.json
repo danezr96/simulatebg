@@ -9,7 +9,6 @@
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "preview": "vite preview",
-
     "check:placeholders": "node scripts/checkPlaceholders.mjs",
     "check": "pnpm check:placeholders && pnpm lint && pnpm typecheck"
   },
@@ -42,6 +41,7 @@
     "globals": "^16.5.0",
     "postcss": "^8.5.6",
     "tailwindcss": "^4.1.18",
+    "tsx": "^4.21.0",
     "typescript": "~5.9.3",
     "typescript-eslint": "^8.46.4",
     "vite": "^7.2.4"
