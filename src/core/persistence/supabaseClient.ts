@@ -3,6 +3,7 @@ import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "../../supabase/database.types";
 
 const isBrowser = typeof window !== "undefined";
+const isNode = typeof process !== "undefined" && !!process.versions?.node;
 const nodeEnv = typeof process !== "undefined" ? process.env : undefined;
 
 const supabaseUrl = (isBrowser
@@ -17,9 +18,9 @@ const supabaseServiceRoleKey = (!isBrowser
   ? (nodeEnv?.SUPABASE_SERVICE_ROLE_KEY ?? nodeEnv?.VITE_SUPABASE_SERVICE_ROLE_KEY)
   : undefined) as string | undefined;
 
-const supabaseKey = isBrowser ? supabaseAnonKey : supabaseServiceRoleKey;
+const supabaseKey = supabaseServiceRoleKey ?? supabaseAnonKey;
 
-if (!supabaseUrl || !supabaseKey) {
+if (!supabaseUrl || !supabaseKey || (isNode && !supabaseServiceRoleKey)) {
   throw new Error(
     [
       "[supabaseClient] Missing env vars.",
