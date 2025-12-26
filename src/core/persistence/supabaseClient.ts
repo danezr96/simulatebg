@@ -17,7 +17,7 @@ const supabaseServiceRoleKey = (!isBrowser
   ? (nodeEnv?.SUPABASE_SERVICE_ROLE_KEY ?? nodeEnv?.VITE_SUPABASE_SERVICE_ROLE_KEY)
   : undefined) as string | undefined;
 
-const supabaseKey = supabaseServiceRoleKey ?? supabaseAnonKey;
+const supabaseKey = isBrowser ? supabaseAnonKey : supabaseServiceRoleKey;
 
 if (!supabaseUrl || !supabaseKey) {
   throw new Error(
@@ -25,8 +25,8 @@ if (!supabaseUrl || !supabaseKey) {
       "[supabaseClient] Missing env vars.",
       "Create a .env file (or set in Vite env) with:",
       "VITE_SUPABASE_URL=... (browser) or SUPABASE_URL=... (node)",
-      "VITE_SUPABASE_ANON_KEY=... (browser) or SUPABASE_ANON_KEY=... (node)",
-      "SUPABASE_SERVICE_ROLE_KEY=... (node only, optional)",
+      "VITE_SUPABASE_ANON_KEY=... (browser)",
+      "SUPABASE_SERVICE_ROLE_KEY=... (node)",
     ].join("\n")
   );
 }
