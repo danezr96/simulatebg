@@ -12,6 +12,23 @@ type WorldTickSnapshot = {
   economy: WorldEconomyState;
 };
 
+function formatError(error: unknown): string {
+  if (error instanceof Error) {
+    return error.stack ?? error.message;
+  }
+  if (typeof error === "string") return error;
+  try {
+    return JSON.stringify(error);
+  } catch {
+    return String(error);
+  }
+}
+
+function logSchedulerError(message: string, error: unknown) {
+  // eslint-disable-next-line no-console
+  console.error(`[worker] ${message}`, formatError(error));
+}
+
 function getPollIntervalMs(input?: number): number {
   const fallback = 5_000;
   if (!Number.isFinite(input)) return fallback;
@@ -69,6 +86,8 @@ export function startWorldsScheduler(options: SchedulerOptions = {}) {
     running = true;
     try {
       await tickWorldsOnce();
+    } catch (error) {
+      logSchedulerError("tick loop failed", error);
     } finally {
       running = false;
     }
