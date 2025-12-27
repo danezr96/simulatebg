@@ -99,7 +99,17 @@ async function tickWorldsOnce(): Promise<void> {
     const updatedSnapshot = { ...snapshot, economy };
     if (!isWorldDue(updatedSnapshot, nowMs)) continue;
     try {
+      const tickStartMs = Date.now();
+      console.info("[worker] tick start", {
+        worldId: String(updatedSnapshot.world.id),
+        year: updatedSnapshot.economy.currentYear,
+        week: updatedSnapshot.economy.currentWeek,
+      });
       await runWorldTick(updatedSnapshot.world.id);
+      console.info("[worker] tick done", {
+        worldId: String(updatedSnapshot.world.id),
+        durationMs: Date.now() - tickStartMs,
+      });
     } catch (error) {
       // eslint-disable-next-line no-console
       console.error("[worker] tick failed", {
