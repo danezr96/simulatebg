@@ -20,6 +20,7 @@ import { Card } from "../components/Card";
 import Button from "../components/Button";
 import Table, { TBody, TD, TH, THead, TR } from "../components/Table";
 import KPIChip from "../components/KPIChip";
+import Sparkline from "../components/Sparkline";
 
 import { useWorld } from "../hooks/useWorld";
 import { useHolding } from "../hooks/useHolding";
@@ -41,6 +42,12 @@ type PortfolioTotals = {
   cashChange: number;
   assets: number;
   liabilities: number;
+};
+
+type PortfolioSeries = {
+  revenue: number[];
+  netProfit: number[];
+  cashChange: number[];
 };
 
 type MarketRow = {
@@ -67,6 +74,12 @@ const emptyTotals: PortfolioTotals = {
   cashChange: 0,
   assets: 0,
   liabilities: 0,
+};
+
+const emptySeries: PortfolioSeries = {
+  revenue: [],
+  netProfit: [],
+  cashChange: [],
 };
 
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
@@ -102,6 +115,9 @@ export const FinancePanel: React.FC = () => {
   const [portfolioTotals, setPortfolioTotals] = React.useState<PortfolioTotals>(emptyTotals);
   const [portfolioLoading, setPortfolioLoading] = React.useState(false);
   const [portfolioError, setPortfolioError] = React.useState<string | null>(null);
+  const [portfolioSeries, setPortfolioSeries] = React.useState<PortfolioSeries>(emptySeries);
+  const [portfolioSeriesLoading, setPortfolioSeriesLoading] = React.useState(false);
+  const [portfolioSeriesError, setPortfolioSeriesError] = React.useState<string | null>(null);
 
   const [loans, setLoans] = React.useState<Loan[]>([]);
   const [loansLoading, setLoansLoading] = React.useState(false);
@@ -145,6 +161,50 @@ export const FinancePanel: React.FC = () => {
       setPortfolioTotals(emptyTotals);
     } finally {
       setPortfolioLoading(false);
+    }
+  }, [companies]);
+
+  const loadPortfolioSeries = React.useCallback(async () => {
+    if (!companies.length) {
+      setPortfolioSeries(emptySeries);
+      return;
+    }
+
+    setPortfolioSeriesLoading(true);
+    setPortfolioSeriesError(null);
+    try {
+      const rowsByCompany = await Promise.all(
+        companies.map((company) => companyService.listFinancials(asCompanyId(String(company.id)), 26))
+      );
+
+      const byWeek = new Map<number, { revenue: number; netProfit: number; cashChange: number }>();
+
+      for (const rows of rowsByCompany) {
+        for (const row of rows ?? []) {
+          const year = Number((row as any).year ?? 0);
+          const week = Number((row as any).week ?? 0);
+          if (!year || !week) continue;
+          const key = year * 52 + week;
+          const prev = byWeek.get(key) ?? { revenue: 0, netProfit: 0, cashChange: 0 };
+          byWeek.set(key, {
+            revenue: prev.revenue + Number(row.revenue ?? 0),
+            netProfit: prev.netProfit + Number(row.netProfit ?? 0),
+            cashChange: prev.cashChange + Number(row.cashChange ?? 0),
+          });
+        }
+      }
+
+      const ordered = Array.from(byWeek.entries()).sort((a, b) => a[0] - b[0]);
+      const revenue = ordered.map(([, value]) => value.revenue);
+      const netProfit = ordered.map(([, value]) => value.netProfit);
+      const cashChange = ordered.map(([, value]) => value.cashChange);
+
+      setPortfolioSeries({ revenue, netProfit, cashChange });
+    } catch (error: any) {
+      setPortfolioSeriesError(error?.message ?? "Failed to load portfolio trends.");
+      setPortfolioSeries(emptySeries);
+    } finally {
+      setPortfolioSeriesLoading(false);
     }
   }, [companies]);
 
@@ -205,7 +265,9 @@ export const FinancePanel: React.FC = () => {
     setMarketError(null);
     try {
       const rows = await companyRepo.listByWorld(asWorldId(worldId));
-      const candidates = (rows ?? []).filter((row) => String(row.holdingId) !== String(holdingId));
+      const candidates = (rows ?? []).filter(
+        (row) => String(row.holdingId) !== String(holdingId) && String(row.status ?? "ACTIVE") === "ACTIVE"
+      );
       const slice = candidates.slice(0, 18);
 
       const financials = await Promise.all(
@@ -244,6 +306,10 @@ export const FinancePanel: React.FC = () => {
   React.useEffect(() => {
     void loadPortfolio();
   }, [loadPortfolio, currentWeek, currentYear]);
+
+  React.useEffect(() => {
+    void loadPortfolioSeries();
+  }, [loadPortfolioSeries, currentWeek, currentYear]);
 
   React.useEffect(() => {
     void loadLoans();
@@ -297,6 +363,9 @@ export const FinancePanel: React.FC = () => {
 
   const [loanBusy, setLoanBusy] = React.useState(false);
   const [loanMessage, setLoanMessage] = React.useState<string | null>(null);
+  const [repayAmountByLoanId, setRepayAmountByLoanId] = React.useState<Record<string, string>>({});
+  const [repayBusyId, setRepayBusyId] = React.useState<string | null>(null);
+  const [repayMessage, setRepayMessage] = React.useState<string | null>(null);
 
   const onTakeLoan = async () => {
     setLoanMessage(null);
@@ -322,6 +391,61 @@ export const FinancePanel: React.FC = () => {
       setLoanMessage(error?.message ?? "Failed to take loan.");
     } finally {
       setLoanBusy(false);
+    }
+  };
+
+  const onRepayLoan = async (loan: Loan) => {
+    setRepayMessage(null);
+    if (!worldId || !holdingId) {
+      setRepayMessage("World or holding is not ready yet.");
+      return;
+    }
+
+    const raw = repayAmountByLoanId[String(loan.id)] ?? "";
+    const requested = Number(raw);
+    if (!Number.isFinite(requested) || requested <= 0) {
+      setRepayMessage("Enter a valid repayment amount.");
+      return;
+    }
+
+    const outstanding = Number(loan.outstandingBalance ?? 0);
+    if (outstanding <= 0) {
+      setRepayMessage("This loan is already paid off.");
+      return;
+    }
+
+    if (cash <= 0) {
+      setRepayMessage("Not enough cash to repay right now.");
+      return;
+    }
+
+    const amount = Math.min(requested, outstanding, cash);
+    if (amount <= 0) {
+      setRepayMessage("Repayment amount is too small.");
+      return;
+    }
+
+    setRepayBusyId(String(loan.id));
+    try {
+      await decisionService.submitHoldingDecision({
+        worldId: asWorldId(worldId),
+        holdingId: asHoldingId(holdingId),
+        year: currentYear as any,
+        week: currentWeek as any,
+        source: "PLAYER" as any,
+        payload: {
+          type: "REPAY_HOLDING_LOAN",
+          loanId: loan.id,
+          amount,
+        } as any,
+      });
+
+      setRepayMessage("Repayment queued for the next tick.");
+      setRepayAmountByLoanId((prev) => ({ ...prev, [String(loan.id)]: "" }));
+    } catch (error: any) {
+      setRepayMessage(error?.message ?? "Failed to queue repayment.");
+    } finally {
+      setRepayBusyId(null);
     }
   };
 
@@ -373,7 +497,8 @@ export const FinancePanel: React.FC = () => {
   const onRefresh = async () => {
     setLoanMessage(null);
     setOfferMessage(null);
-    await Promise.all([loadPortfolio(), loadLoans()]);
+    setRepayMessage(null);
+    await Promise.all([loadPortfolio(), loadPortfolioSeries(), loadLoans()]);
     if (activeTab === "acquisitions") {
       await loadMarketplace();
     }
@@ -473,6 +598,49 @@ export const FinancePanel: React.FC = () => {
               {loansError ? <div className="mt-3 text-xs text-rose-600">{loansError}</div> : null}
             </Card>
           </div>
+
+          <Card className="rounded-3xl p-5">
+            <div className="text-sm font-semibold text-[var(--text)]">Portfolio trends</div>
+            <div className="mt-1 text-xs text-[var(--text-muted)]">Last 26 weeks across your companies.</div>
+            {portfolioSeriesError ? (
+              <div className="mt-3 text-xs text-rose-600">{portfolioSeriesError}</div>
+            ) : null}
+            {portfolioSeriesLoading ? (
+              <div className="mt-3 text-xs text-[var(--text-muted)]">Loading trends...</div>
+            ) : portfolioSeries.revenue.length > 1 ? (
+              <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-3">
+                <div className="rounded-2xl border border-[var(--border)] bg-[var(--card-2)] p-3">
+                  <div className="text-xs text-[var(--text-muted)]">Revenue</div>
+                  <div className="mt-1 text-sm font-semibold text-[var(--text)]">
+                    {money.compact(portfolioSeries.revenue[portfolioSeries.revenue.length - 1] ?? 0)}
+                  </div>
+                  <div className="mt-2">
+                    <Sparkline data={portfolioSeries.revenue} />
+                  </div>
+                </div>
+                <div className="rounded-2xl border border-[var(--border)] bg-[var(--card-2)] p-3">
+                  <div className="text-xs text-[var(--text-muted)]">Net profit</div>
+                  <div className="mt-1 text-sm font-semibold text-[var(--text)]">
+                    {money.compact(portfolioSeries.netProfit[portfolioSeries.netProfit.length - 1] ?? 0)}
+                  </div>
+                  <div className="mt-2">
+                    <Sparkline data={portfolioSeries.netProfit} stroke="var(--success)" />
+                  </div>
+                </div>
+                <div className="rounded-2xl border border-[var(--border)] bg-[var(--card-2)] p-3">
+                  <div className="text-xs text-[var(--text-muted)]">Cash change</div>
+                  <div className="mt-1 text-sm font-semibold text-[var(--text)]">
+                    {money.compact(portfolioSeries.cashChange[portfolioSeries.cashChange.length - 1] ?? 0)}
+                  </div>
+                  <div className="mt-2">
+                    <Sparkline data={portfolioSeries.cashChange} stroke="var(--warning)" />
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="mt-3 text-xs text-[var(--text-muted)]">No trend data yet.</div>
+            )}
+          </Card>
 
           <Table
             caption={`Active loans (${loans.length})`}
@@ -608,6 +776,7 @@ export const FinancePanel: React.FC = () => {
                 <TH className="text-right">Balance</TH>
                 <TH className="text-right">Rate</TH>
                 <TH className="text-right">Remaining</TH>
+                <TH className="text-right">Repay</TH>
               </TR>
             </THead>
             <TBody>
@@ -626,10 +795,46 @@ export const FinancePanel: React.FC = () => {
                   <TD className="text-right" mono>
                     {loan.remainingWeeks ?? 0}w
                   </TD>
+                  <TD className="text-right">
+                    <div className="flex items-center justify-end gap-2">
+                      <input
+                        type="number"
+                        min={0}
+                        step={100}
+                        placeholder="Amount"
+                        className={cn(
+                          "w-24 rounded-xl border border-[var(--border)] bg-[var(--card-2)] px-2 py-1 text-xs outline-none",
+                          "text-[var(--text)]"
+                        )}
+                        value={repayAmountByLoanId[String(loan.id)] ?? ""}
+                        onChange={(e) =>
+                          setRepayAmountByLoanId((prev) => ({
+                            ...prev,
+                            [String(loan.id)]: e.target.value,
+                          }))
+                        }
+                      />
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        onClick={() => onRepayLoan(loan)}
+                        loading={repayBusyId === String(loan.id)}
+                        disabled={!worldId || !holdingId || Number(loan.outstandingBalance ?? 0) <= 0}
+                      >
+                        Repay
+                      </Button>
+                    </div>
+                  </TD>
                 </TR>
               ))}
             </TBody>
           </Table>
+
+          {repayMessage ? (
+            <div className="rounded-2xl border border-[var(--border)] bg-[var(--card-2)] px-3 py-2 text-xs">
+              {repayMessage}
+            </div>
+          ) : null}
         </>
       ) : null}
 

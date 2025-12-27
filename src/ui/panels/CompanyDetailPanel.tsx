@@ -2,6 +2,7 @@
 import * as React from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
+import { useQuery } from "@tanstack/react-query";
 import { ArrowLeft, RefreshCw, Settings2, TrendingUp, Wallet } from "lucide-react";
 
 import { MOTION } from "../../config/motion";
@@ -10,8 +11,11 @@ import Card from "../components/Card";
 import Button from "../components/Button";
 import KPIChip from "../components/KPIChip";
 import Table, { TBody, TD, TH, THead, TR } from "../components/Table";
+import Sparkline from "../components/Sparkline";
 import { useCompany } from "../hooks/useCompany";
 import { money } from "../../utils/money";
+import { companyService } from "../../core/services/companyService";
+import { asCompanyId } from "../../core/domain";
 
 /**
  * CompanyDetailPanel
@@ -24,6 +28,22 @@ export const CompanyDetailPanel: React.FC = () => {
   const nav = useNavigate();
 
   const { company, state, financials, isLoading, error, refetch } = useCompany(companyId);
+
+  const financialsHistoryQuery = useQuery({
+    queryKey: ["companyFinancialsHistory", companyId],
+    queryFn: async () => {
+      if (!companyId) return [];
+      return companyService.listFinancials(asCompanyId(companyId), 26);
+    },
+    enabled: !!companyId,
+    staleTime: 10_000,
+  });
+
+  const financialsHistory = financialsHistoryQuery.data ?? [];
+  const orderedHistory = React.useMemo(() => [...financialsHistory].reverse(), [financialsHistory]);
+  const revenueSeries = orderedHistory.map((row) => Number(row.revenue ?? 0));
+  const profitSeries = orderedHistory.map((row) => Number(row.netProfit ?? 0));
+  const cashSeries = orderedHistory.map((row) => Number(row.cashChange ?? 0));
 
   const onRefresh = async () => {
     await refetch();
@@ -164,6 +184,59 @@ export const CompanyDetailPanel: React.FC = () => {
           <div className="mt-4 text-xs text-[var(--text-muted)]">
             Next: decisions + projects + upgrades.
           </div>
+        </Card>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <Card className="rounded-3xl p-5">
+          <div className="text-sm font-semibold text-[var(--text)]">Revenue trend</div>
+          <div className="mt-1 text-xs text-[var(--text-muted)]">Last 26 weeks</div>
+          {revenueSeries.length > 1 ? (
+            <>
+              <div className="mt-3 text-sm font-semibold text-[var(--text)]">
+                {money.compact(revenueSeries[revenueSeries.length - 1] ?? 0)}
+              </div>
+              <div className="mt-2">
+                <Sparkline data={revenueSeries} />
+              </div>
+            </>
+          ) : (
+            <div className="mt-3 text-xs text-[var(--text-muted)]">No trend data yet.</div>
+          )}
+        </Card>
+
+        <Card className="rounded-3xl p-5">
+          <div className="text-sm font-semibold text-[var(--text)]">Profit trend</div>
+          <div className="mt-1 text-xs text-[var(--text-muted)]">Last 26 weeks</div>
+          {profitSeries.length > 1 ? (
+            <>
+              <div className="mt-3 text-sm font-semibold text-[var(--text)]">
+                {money.compact(profitSeries[profitSeries.length - 1] ?? 0)}
+              </div>
+              <div className="mt-2">
+                <Sparkline data={profitSeries} stroke="var(--success)" />
+              </div>
+            </>
+          ) : (
+            <div className="mt-3 text-xs text-[var(--text-muted)]">No trend data yet.</div>
+          )}
+        </Card>
+
+        <Card className="rounded-3xl p-5">
+          <div className="text-sm font-semibold text-[var(--text)]">Cash change trend</div>
+          <div className="mt-1 text-xs text-[var(--text-muted)]">Last 26 weeks</div>
+          {cashSeries.length > 1 ? (
+            <>
+              <div className="mt-3 text-sm font-semibold text-[var(--text)]">
+                {money.compact(cashSeries[cashSeries.length - 1] ?? 0)}
+              </div>
+              <div className="mt-2">
+                <Sparkline data={cashSeries} stroke="var(--warning)" />
+              </div>
+            </>
+          ) : (
+            <div className="mt-3 text-xs text-[var(--text-muted)]">No trend data yet.</div>
+          )}
         </Card>
       </div>
 

@@ -17,7 +17,7 @@ import { holdingRepo } from "../persistence/holdingRepo";
 import { financeRepo } from "../persistence/financeRepo";
 import { decisionRepo } from "../persistence/decisionRepo";
 import { sectorRepo } from "../persistence/sectorRepo";
-import { economyConfig } from "../../config/economy";
+import { getStartupPricing } from "../config/companyPricing";
 
 /**
  * CompanyService responsibilities:
@@ -50,7 +50,16 @@ export const companyService = {
     region: string;
     foundedYear: number;
   }): Promise<Company> {
-    const creationCost = Number(economyConfig.company.creationCost ?? 0);
+    const sector = await sectorRepo.getSectorById(input.sectorId);
+    const niche = await sectorRepo.getNicheById(input.nicheId);
+    if (!sector || !niche) {
+      throw new Error("Sector or niche not found.");
+    }
+    if (String(niche.sectorId) !== String(input.sectorId)) {
+      throw new Error("Niche does not belong to selected sector.");
+    }
+
+    const creationCost = Number(getStartupPricing(sector, niche).startupCost ?? 0);
     let charged = false;
     let currentCash = 0;
 
@@ -60,7 +69,7 @@ export const companyService = {
 
       currentCash = Number(holding.cashBalance ?? 0);
       if (currentCash < creationCost) {
-        throw new Error(`Not enough cash to start a company (need ${creationCost}).`);
+        throw new Error(`Not enough cash to purchase a company (need ${creationCost}).`);
       }
 
       await holdingRepo.update(input.holdingId, {

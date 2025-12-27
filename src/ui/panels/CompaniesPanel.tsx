@@ -1,130 +1,50 @@
-// src/ui/panels/CompaniesPanel.tsx
+﻿// src/ui/panels/CompaniesPanel.tsx
 import * as React from "react";
 import { motion } from "framer-motion";
-import { Plus, Search, Filter, RefreshCw } from "lucide-react";
+import { Search, Filter, RefreshCw, Store } from "lucide-react";
 
 import { MOTION } from "../../config/motion";
 
 import { Card } from "../components/Card";
 import Button from "../components/Button";
-import Modal from "../components/Modal";
+import CompanyMarketplace from "../components/CompanyMarketplace";
 import Table, { TBody, TD, TH, THead, TR } from "../components/Table";
-import { cn } from "../../utils/format";
+import { cn, formatPercent } from "../../utils/format";
+import { formatMoney } from "../../utils/money";
 
 import { useCompanies } from "../hooks/useCompany";
 import { useHolding } from "../hooks/useHolding";
 import { useWorld } from "../hooks/useWorld";
+import { useStartupListings } from "../hooks/useStartupListings";
+import type { StartupListing } from "../hooks/useStartupListings";
 
 import { companyService } from "../../core/services/companyService";
-import { sectorRepo } from "../../core/persistence/sectorRepo";
-import { economyConfig } from "../../config/economy";
-import { formatMoney } from "../../utils/money";
-
-import {
-  asHoldingId,
-  asWorldId,
-  asSectorId,
-  asNicheId,
-} from "../../core/domain";
-
-type SectorOption = { id: string; name: string };
-type NicheOption = { id: string; sectorId: string; name: string };
-
-type CreateCompanyForm = {
-  name: string;
-  region: string;
-  sectorId: string;
-  nicheId: string;
-};
-
-const defaultForm: CreateCompanyForm = {
-  name: "",
-  region: "EU-WEST",
-  sectorId: "",
-  nicheId: "",
-};
+import { asHoldingId, asSectorId, asNicheId } from "../../core/domain";
 
 export const CompaniesPanel: React.FC = () => {
   const { companies, refetch, isLoading, holdingId } = useCompanies();
   const { holding } = useHolding();
   const { world, economy } = useWorld();
+  const { listings, sectors, niches, loading: listingsLoading, error: listingsError } = useStartupListings();
 
   const worldId = world?.id ? String(world.id) : undefined;
+  const holdingCash = Number(holding?.cashBalance ?? 0);
 
   const [query, setQuery] = React.useState("");
   const [statusFilter, setStatusFilter] = React.useState<string>("ALL");
 
-  const [openCreate, setOpenCreate] = React.useState(false);
-  const [creating, setCreating] = React.useState(false);
-  const [form, setForm] = React.useState<CreateCompanyForm>(defaultForm);
-  const [error, setError] = React.useState<string | null>(null);
+  const [selectedListingId, setSelectedListingId] = React.useState<string | null>(null);
+  const [purchaseName, setPurchaseName] = React.useState("");
+  const [purchaseRegion, setPurchaseRegion] = React.useState("EU-WEST");
+  const [purchaseError, setPurchaseError] = React.useState<string | null>(null);
+  const [purchaseBusy, setPurchaseBusy] = React.useState(false);
 
-  const creationCost = Number(economyConfig.company.creationCost ?? 0);
-  const holdingCash = Number(holding?.cashBalance ?? 0);
-  const canAffordSetup = creationCost <= 0 || holdingCash >= creationCost;
+  const marketplaceRef = React.useRef<HTMLDivElement | null>(null);
 
-  // --- load sectors/niches (real DB lists) ---
-  const [sectors, setSectors] = React.useState<SectorOption[]>([]);
-  const [niches, setNiches] = React.useState<NicheOption[]>([]);
-  const [listsLoading, setListsLoading] = React.useState(false);
-  const [listsError, setListsError] = React.useState<string | null>(null);
-
-  React.useEffect(() => {
-    let alive = true;
-
-    async function loadLists() {
-      setListsLoading(true);
-      setListsError(null);
-      try {
-        const s = await sectorRepo.listSectors();
-        const n = await sectorRepo.listAllNiches();
-
-        if (!alive) return;
-
-        setSectors(
-          (s ?? []).map((x: any) => ({
-            id: String(x.id),
-            name: String(x.name ?? x.label ?? x.code ?? x.id),
-          }))
-        );
-
-        setNiches(
-          (n ?? []).map((x: any) => ({
-            id: String(x.id),
-            sectorId: String(x.sectorId ?? x.sector_id),
-            name: String(x.name ?? x.label ?? x.code ?? x.id),
-          }))
-        );
-      } catch (e: any) {
-        if (!alive) return;
-        setListsError(e?.message ?? "Failed to load sectors/niches");
-      } finally {
-        if (!alive) return;
-        setListsLoading(false);
-      }
-    }
-
-    if (openCreate) void loadLists();
-    return () => {
-      alive = false;
-    };
-  }, [openCreate]);
-
-  const filteredNiches = React.useMemo(() => {
-    if (!form.sectorId) return [];
-    return niches.filter((n) => n.sectorId === form.sectorId);
-  }, [niches, form.sectorId]);
-
-  // reset niche if sector changes
-  React.useEffect(() => {
-    if (!form.sectorId) {
-      if (form.nicheId) setForm((f) => ({ ...f, nicheId: "" }));
-      return;
-    }
-    if (form.nicheId && !filteredNiches.some((n) => n.id === form.nicheId)) {
-      setForm((f) => ({ ...f, nicheId: "" }));
-    }
-  }, [form.sectorId, form.nicheId, filteredNiches]);
+  const selectedListing = React.useMemo(
+    () => listings.find((listing) => listing.id === selectedListingId) ?? null,
+    [listings, selectedListingId]
+  );
 
   const filteredCompanies = React.useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -139,68 +59,71 @@ export const CompaniesPanel: React.FC = () => {
     });
   }, [companies, query, statusFilter]);
 
-  const resetForm = () => setForm(defaultForm);
+  const canPurchase =
+    !!selectedListing &&
+    !!worldId &&
+    !!holdingId &&
+    purchaseName.trim().length > 0 &&
+    holdingCash >= selectedListing.pricing.startupCost &&
+    !purchaseBusy;
 
-  const onCreate = async () => {
-    setError(null);
+  const onSelectListing = (listing: StartupListing) => {
+    setSelectedListingId(listing.id);
+    if (!purchaseName.trim()) {
+      setPurchaseName(`${listing.niche.name} Co`);
+    }
+    setPurchaseError(null);
+  };
+
+  const onPurchase = async () => {
+    setPurchaseError(null);
 
     if (!worldId || !holdingId) {
-      setError("World/Holding not ready yet.");
+      setPurchaseError("World/Holding not ready yet.");
       return;
     }
-    if (!form.name.trim()) {
-      setError("Company name is required.");
+    if (!selectedListing) {
+      setPurchaseError("Select a listing first.");
       return;
     }
-    if (!form.sectorId) {
-      setError("Sector is required.");
+    if (!purchaseName.trim()) {
+      setPurchaseError("Company name is required.");
       return;
     }
-    if (!form.nicheId) {
-      setError("Niche is required.");
-      return;
-    }
-    if (!canAffordSetup) {
-      setError(`Not enough cash to cover the startup cost (${formatMoney(creationCost)}).`);
+    if (holdingCash < selectedListing.pricing.startupCost) {
+      setPurchaseError("Not enough cash to purchase this company.");
       return;
     }
 
-    setCreating(true);
+    setPurchaseBusy(true);
     try {
       await companyService.createCompany({
         worldId: asWorldId(worldId),
         holdingId: asHoldingId(holdingId),
-        name: form.name.trim(),
-        region: form.region.trim(),
-        sectorId: asSectorId(form.sectorId),
-        nicheId: asNicheId(form.nicheId),
+        name: purchaseName.trim(),
+        region: purchaseRegion.trim(),
+        sectorId: asSectorId(String(selectedListing.sector.id)),
+        nicheId: asNicheId(String(selectedListing.niche.id)),
         foundedYear: Number(economy?.currentYear ?? 1),
       });
 
       await refetch();
-      setOpenCreate(false);
-      resetForm();
+      setPurchaseName("");
+      setSelectedListingId(null);
     } catch (e: any) {
-      setError(e?.message ?? "Failed to create company");
+      setPurchaseError(e?.message ?? "Failed to purchase company");
     } finally {
-      setCreating(false);
+      setPurchaseBusy(false);
     }
   };
 
   return (
-    <motion.div
-      className="space-y-4"
-      initial="hidden"
-      animate="show"
-      variants={MOTION.page.variants}
-    >
+    <motion.div className="space-y-4" initial="hidden" animate="show" variants={MOTION.page.variants}>
       <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div>
-          <div className="text-base font-semibold text-[var(--text)]">
-            Companies
-          </div>
+          <div className="text-base font-semibold text-[var(--text)]">Companies</div>
           <div className="text-sm text-[var(--text-muted)]">
-            Manage your BV’s across sectors and niches.
+            Manage your portfolio and purchase new companies.
           </div>
         </div>
 
@@ -218,10 +141,9 @@ export const CompaniesPanel: React.FC = () => {
           <Button
             variant="primary"
             size="sm"
-            leftIcon={<Plus className="h-4 w-4" />}
-            onClick={() => setOpenCreate(true)}
+            onClick={() => marketplaceRef.current?.scrollIntoView({ behavior: "smooth" })}
           >
-            New company
+            Purchase company
           </Button>
         </div>
       </div>
@@ -235,7 +157,7 @@ export const CompaniesPanel: React.FC = () => {
                 "w-full bg-transparent outline-none text-sm text-[var(--text)]",
                 "placeholder:text-[var(--text-muted)]"
               )}
-              placeholder="Search by name or region…"
+              placeholder="Search by name or region"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
             />
@@ -261,7 +183,7 @@ export const CompaniesPanel: React.FC = () => {
       <Table
         caption={`Companies (${filteredCompanies.length})`}
         isEmpty={!isLoading && filteredCompanies.length === 0}
-        emptyMessage="No companies found. Create one to start."
+        emptyMessage="No companies found. Purchase one to start."
       >
         <THead>
           <TR>
@@ -294,135 +216,105 @@ export const CompaniesPanel: React.FC = () => {
         </TBody>
       </Table>
 
-      <Modal
-        open={openCreate}
-        onOpenChange={(v) => {
-          setOpenCreate(v);
-          if (!v) {
-            setError(null);
-            setListsError(null);
-            resetForm();
-          }
-        }}
-        title="Create new company"
-        description="Pick a sector + niche and create your company."
-        size="lg"
-        footer={
-          <div className="flex items-center justify-end gap-2">
-            <Button variant="ghost" onClick={() => setOpenCreate(false)}>
-              Cancel
-            </Button>
-            <Button
-              variant="primary"
-              loading={creating}
-              onClick={onCreate}
-              disabled={!canAffordSetup || creating}
-              title={!canAffordSetup ? "Not enough cash for the startup cost." : undefined}
-            >
-              Create
-            </Button>
+      <div ref={marketplaceRef} id="company-marketplace" className="space-y-4">
+        <Card className="rounded-3xl p-5">
+          <div className="flex items-center gap-2 text-[var(--text-muted)]">
+            <Store className="h-4 w-4" />
+            <div className="text-sm font-semibold text-[var(--text)]">Purchase company</div>
           </div>
-        }
-      >
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-          {creationCost > 0 ? (
-            <div className="md:col-span-2 text-xs text-[var(--text-muted)]">
-              Startup cost: {formatMoney(creationCost)} | Available cash: {formatMoney(holdingCash)}
+          <div className="mt-2 text-sm text-[var(--text-muted)]">
+            Browse blank company listings. Each sector and niche has its own startup cost and expected return.
+          </div>
+
+          <div className="mt-5 grid gap-4 lg:grid-cols-[1.3fr_1fr]">
+            <div className="rounded-2xl border border-[var(--border)] bg-[var(--card-2)] p-4">
+              <div className="text-xs text-[var(--text-muted)]">Selected listing</div>
+              {selectedListing ? (
+                <div className="mt-2 space-y-2 text-sm">
+                  <div className="text-base font-semibold text-[var(--text)]">
+                    {selectedListing.niche.name} - {selectedListing.sector.name}
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <span className="rounded-full border border-[var(--border)] bg-[var(--bg)] px-2 py-1 text-xs">
+                      Startup: {formatMoney(selectedListing.pricing.startupCost)}
+                    </span>
+                    <span className="rounded-full border border-[var(--border)] bg-[var(--bg)] px-2 py-1 text-xs">
+                      ROI: {formatPercent(selectedListing.pricing.roi)}
+                    </span>
+                    <span className="rounded-full border border-[var(--border)] bg-[var(--bg)] px-2 py-1 text-xs">
+                      Payback: {selectedListing.pricing.paybackYears.toFixed(1)} yrs
+                    </span>
+                  </div>
+                  <div className="text-xs text-[var(--text-muted)]">
+                    Expected annual profit: {formatMoney(selectedListing.pricing.annualProfit)}
+                  </div>
+                </div>
+              ) : (
+                <div className="mt-2 text-sm text-[var(--text-muted)]">
+                  Select a listing to see the full purchase summary.
+                </div>
+              )}
+            </div>
+
+            <div className="rounded-2xl border border-[var(--border)] bg-[var(--card-2)] p-4">
+              <div className="grid gap-3">
+                <div>
+                  <label className="text-xs font-medium text-[var(--text-muted)]">Company name</label>
+                  <input
+                    className="mt-1 w-full rounded-2xl border border-[var(--border)] bg-[var(--bg)] px-3 py-2 text-sm outline-none"
+                    placeholder="e.g., Northwind Logistics BV"
+                    value={purchaseName}
+                    onChange={(e) => setPurchaseName(e.target.value)}
+                  />
+                </div>
+
+                <div>
+                  <label className="text-xs font-medium text-[var(--text-muted)]">Region</label>
+                  <select
+                    className="mt-1 w-full rounded-2xl border border-[var(--border)] bg-[var(--bg)] px-3 py-2 text-sm outline-none"
+                    value={purchaseRegion}
+                    onChange={(e) => setPurchaseRegion(e.target.value)}
+                  >
+                    <option value="EU-WEST">EU-WEST</option>
+                    <option value="EU-CENTRAL">EU-CENTRAL</option>
+                    <option value="US-EAST">US-EAST</option>
+                  </select>
+                </div>
+
+                <div className="text-xs text-[var(--text-muted)]">
+                  Available cash: <span className="text-[var(--text)]">{formatMoney(holdingCash)}</span>
+                </div>
+
+                <Button variant="primary" size="sm" onClick={onPurchase} loading={purchaseBusy} disabled={!canPurchase}>
+                  Purchase company
+                </Button>
+              </div>
+            </div>
+          </div>
+
+          {purchaseError ? (
+            <div className="mt-3 rounded-2xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
+              {purchaseError}
             </div>
           ) : null}
-          <div className="md:col-span-2">
-            <label className="text-xs font-medium text-[var(--text-muted)]">
-              Company name
-            </label>
-            <input
-              className="mt-1 w-full rounded-2xl border border-[var(--border)] bg-[var(--card-2)] px-3 py-2 text-sm outline-none"
-              placeholder="e.g., Northwind Logistics BV"
-              value={form.name}
-              onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-            />
-          </div>
+        </Card>
 
-          <div>
-            <label className="text-xs font-medium text-[var(--text-muted)]">
-              Region
-            </label>
-            <input
-              className="mt-1 w-full rounded-2xl border border-[var(--border)] bg-[var(--card-2)] px-3 py-2 text-sm outline-none"
-              placeholder="EU-WEST"
-              value={form.region}
-              onChange={(e) =>
-                setForm((f) => ({ ...f, region: e.target.value }))
-              }
-            />
-          </div>
-
-          <div>
-            <label className="text-xs font-medium text-[var(--text-muted)]">
-              Sector
-            </label>
-            <select
-              className="mt-1 w-full rounded-2xl border border-[var(--border)] bg-[var(--card-2)] px-3 py-2 text-sm outline-none"
-              value={form.sectorId}
-              onChange={(e) =>
-                setForm((f) => ({ ...f, sectorId: e.target.value }))
-              }
-              disabled={listsLoading || !!listsError}
-            >
-              <option value="">
-                {listsLoading ? "Loading…" : "Select a sector"}
-              </option>
-              {sectors.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.name}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div>
-            <label className="text-xs font-medium text-[var(--text-muted)]">
-              Niche
-            </label>
-            <select
-              className="mt-1 w-full rounded-2xl border border-[var(--border)] bg-[var(--card-2)] px-3 py-2 text-sm outline-none"
-              value={form.nicheId}
-              onChange={(e) =>
-                setForm((f) => ({ ...f, nicheId: e.target.value }))
-              }
-              disabled={!form.sectorId || listsLoading || !!listsError}
-            >
-              <option value="">
-                {!form.sectorId
-                  ? "Select sector first"
-                  : listsLoading
-                  ? "Loading…"
-                  : filteredNiches.length
-                  ? "Select a niche"
-                  : "No niches for this sector"}
-              </option>
-              {filteredNiches.map((n) => (
-                <option key={n.id} value={n.id}>
-                  {n.name}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {listsError ? (
-            <div className="md:col-span-2 rounded-2xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
-              {listsError}
-            </div>
-          ) : null}
-
-          {error ? (
-            <div className="md:col-span-2 rounded-2xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
-              {error}
-            </div>
-          ) : null}
-        </div>
-      </Modal>
+        <CompanyMarketplace
+          listings={listings}
+          sectors={sectors}
+          niches={niches}
+          loading={listingsLoading}
+          error={listingsError}
+          selectedId={selectedListingId}
+          availableCash={holdingCash}
+          actionLabel="Select"
+          onSelect={onSelectListing}
+        />
+      </div>
     </motion.div>
   );
 };
 
 export default CompaniesPanel;
+
+

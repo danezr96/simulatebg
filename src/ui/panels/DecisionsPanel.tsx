@@ -20,8 +20,9 @@ import { programService } from "../../core/services/programService";
 import { upgradeService } from "../../core/services/upgradeService";
 import { sectorRepo } from "../../core/persistence/sectorRepo";
 import { getDecisionModulesForNiche } from "../../core/config/nicheDecisions";
+import { getDecisionGuidance } from "../../core/config/decisionGuidance";
 import type { CompanyDecisionPayload, CompanyProgram, NicheUpgrade, CompanyUpgrade } from "../../core/domain";
-import { asWorldId, asCompanyId, asNicheId } from "../../core/domain";
+import { asWorldId, asCompanyId, asNicheId, asSectorId } from "../../core/domain";
 
 /**
  * DecisionsPanel (v0)
@@ -39,6 +40,11 @@ type Knobs = {
 };
 
 const clamp = (v: number, min: number, max: number) => Math.min(max, Math.max(min, v));
+const formatRange = (min: number, max: number, decimals = 0) => {
+  const formatValue = (value: number) =>
+    decimals > 0 ? value.toFixed(decimals) : Math.round(value).toString();
+  return `${formatValue(min)} - ${formatValue(max)}`;
+};
 
 const defaultKnobs: Knobs = {
   priceLevel: 1.0,
@@ -95,8 +101,20 @@ export const DecisionsPanel: React.FC = () => {
     staleTime: 30_000,
   });
 
+  const sectorQuery = useQuery({
+    queryKey: ["sector", company?.sectorId],
+    queryFn: async () => {
+      if (!company?.sectorId) return null;
+      return sectorRepo.getSectorById(asSectorId(String(company.sectorId)));
+    },
+    enabled: !!company?.sectorId,
+    staleTime: 60_000,
+  });
+
   const niche = nicheQuery.data ?? null;
+  const sector = sectorQuery.data ?? null;
   const decisionModules = React.useMemo(() => getDecisionModulesForNiche(niche), [niche]);
+  const guidance = React.useMemo(() => getDecisionGuidance(niche, sector, state), [niche, sector, state]);
 
   const programsQuery = useQuery({
     queryKey: ["companyPrograms", selectedCompanyId],
@@ -516,6 +534,58 @@ export const DecisionsPanel: React.FC = () => {
         }
       >
         <div className="space-y-4">
+          {guidance ? (
+            <div className="rounded-2xl border border-[var(--border)] bg-[var(--card-2)] p-4">
+              <div className="text-sm font-semibold text-[var(--text)]">Niche guidance</div>
+              <div className="mt-1 text-xs text-[var(--text-muted)]">{guidance.summary}</div>
+
+              <div className="mt-3 flex flex-wrap gap-2 text-xs">
+                {guidance.drivers.map((driver) => (
+                  <div
+                    key={driver.label}
+                    className="rounded-full border border-[var(--border)] bg-[var(--bg)] px-2 py-1 text-[var(--text-muted)]"
+                  >
+                    {driver.label}: <span className="text-[var(--text)]">{driver.value}</span>
+                  </div>
+                ))}
+              </div>
+
+              <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg)] p-3">
+                  <div className="text-xs text-[var(--text-muted)]">Price level</div>
+                  <div className="mt-1 text-sm font-semibold text-[var(--text)]">
+                    {formatRange(guidance.ranges.priceLevel.min, guidance.ranges.priceLevel.max, 2)}{" "}
+                    {guidance.ranges.priceLevel.unit ?? ""}
+                  </div>
+                  <div className="mt-1 text-xs text-[var(--text-muted)]">{guidance.ranges.priceLevel.note}</div>
+                </div>
+                <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg)] p-3">
+                  <div className="text-xs text-[var(--text-muted)]">Marketing level</div>
+                  <div className="mt-1 text-sm font-semibold text-[var(--text)]">
+                    {formatRange(guidance.ranges.marketingLevel.min, guidance.ranges.marketingLevel.max, 0)}
+                  </div>
+                  <div className="mt-1 text-xs text-[var(--text-muted)]">
+                    {guidance.ranges.marketingLevel.note}
+                  </div>
+                </div>
+                <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg)] p-3">
+                  <div className="text-xs text-[var(--text-muted)]">Employees change</div>
+                  <div className="mt-1 text-sm font-semibold text-[var(--text)]">
+                    {formatRange(guidance.ranges.employeesDelta.min, guidance.ranges.employeesDelta.max, 0)}
+                  </div>
+                  <div className="mt-1 text-xs text-[var(--text-muted)]">{guidance.ranges.employeesDelta.note}</div>
+                </div>
+                <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg)] p-3">
+                  <div className="text-xs text-[var(--text-muted)]">Capacity change</div>
+                  <div className="mt-1 text-sm font-semibold text-[var(--text)]">
+                    {formatRange(guidance.ranges.capacityDelta.min, guidance.ranges.capacityDelta.max, 0)}
+                  </div>
+                  <div className="mt-1 text-xs text-[var(--text-muted)]">{guidance.ranges.capacityDelta.note}</div>
+                </div>
+              </div>
+            </div>
+          ) : null}
+
           <div className="rounded-2xl border border-[var(--border)] bg-[var(--card-2)] p-4">
             <div className="flex items-center gap-2 text-[var(--text-muted)]">
               <SlidersHorizontal className="h-4 w-4" />

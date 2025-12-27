@@ -77,6 +77,17 @@ export const sectorRepo = {
     return (data ?? []).map((r: NicheRow) => mapNiche(r));
   },
 
+  async getSectorById(sectorId: SectorId): Promise<Sector | null> {
+    const { data, error } = await supabase
+      .from("sectors")
+      .select("*")
+      .eq("id", sectorId as unknown as string)
+      .maybeSingle();
+
+    if (error) throw error;
+    return data ? mapSector(data as SectorRow) : null;
+  },
+
   async getNicheById(nicheId: NicheId): Promise<Niche | null> {
     const { data, error } = await supabase
       .from("niches")

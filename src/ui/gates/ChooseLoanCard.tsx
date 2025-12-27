@@ -1,23 +1,25 @@
-// src/ui/gates/ChooseLoanCard.tsx
+﻿// src/ui/gates/ChooseLoanCard.tsx
 import * as React from "react";
 import { Card } from "../components/Card";
 import Button from "../components/Button";
+import CompanyMarketplace from "../components/CompanyMarketplace";
 
 import type { WorldId, HoldingId } from "../../core/domain";
-import { sectorRepo } from "../../core/persistence/sectorRepo";
 import { financeRepo } from "../../core/persistence/financeRepo";
 import { companyService } from "../../core/services/companyService";
-import { economyConfig } from "../../config/economy";
+
+import { useStartupListings } from "../hooks/useStartupListings";
+import type { StartupListing } from "../hooks/useStartupListings";
 import { formatMoney } from "../../utils/money";
+import { formatPercent } from "../../utils/format";
+
+// Loan presets remain a simple onboarding choice.
 
 type Props = {
   worldId: string;
   holding: unknown | null;
   onDone: () => void | Promise<void>;
 };
-
-type Sector = { id: string; name: string };
-type Niche = { id: string; sectorId: string; name: string };
 
 type LoanPreset = {
   id: string;
@@ -43,7 +45,7 @@ const LOAN_PRESETS: LoanPreset[] = [
     principal: 0,
     interestRate: 0,
     termWeeks: 0,
-    lenderName: "—",
+    lenderName: "Starter Bank",
   },
   {
     id: "starter",
@@ -67,106 +69,39 @@ const LOAN_PRESETS: LoanPreset[] = [
 
 export default function ChooseLoanCard({ worldId, holding, onDone }: Props) {
   const holdingIdStr = readId(holding);
+  const holdingCash = Number((holding as any)?.cashBalance ?? 0);
 
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const [success, setSuccess] = React.useState<string | null>(null);
 
-  const [sectors, setSectors] = React.useState<Sector[]>([]);
-  const [niches, setNiches] = React.useState<Niche[]>([]);
-  const [listsLoading, setListsLoading] = React.useState(false);
-
-  // company fields
   const [companyName, setCompanyName] = React.useState("");
   const [region, setRegion] = React.useState("EU-WEST");
-  const [sectorId, setSectorId] = React.useState("");
-  const [nicheId, setNicheId] = React.useState("");
 
-  // loan choice
   const [loanPresetId, setLoanPresetId] = React.useState<string>(LOAN_PRESETS[0].id);
-
   const preset = React.useMemo(
     () => LOAN_PRESETS.find((p) => p.id === loanPresetId) ?? LOAN_PRESETS[0],
     [loanPresetId]
   );
 
-  const holdingCash = Number((holding as any)?.cashBalance ?? 0);
-  const creationCost = Number(economyConfig.company.creationCost ?? 0);
-  const projectedCash = holdingCash + Number(preset.principal ?? 0);
-  const canAffordSetup = projectedCash >= creationCost;
+  const { listings, sectors, niches, loading: listingsLoading, error: listingsError } = useStartupListings();
+  const [selectedListingId, setSelectedListingId] = React.useState<string | null>(null);
 
-  // load sectors + niches
-  React.useEffect(() => {
-    let alive = true;
+  const selectedListing = React.useMemo(
+    () => listings.find((listing) => listing.id === selectedListingId) ?? null,
+    [listings, selectedListingId]
+  );
 
-    (async () => {
-      setListsLoading(true);
-      setError(null);
+  const availableCash = holdingCash + Number(preset.principal ?? 0);
+  const canAffordSetup = !!selectedListing && availableCash >= selectedListing.pricing.startupCost;
 
-      try {
-        const s = await sectorRepo.listSectors();
-        const n = await sectorRepo.listAllNiches();
-        if (!alive) return;
-
-        const mappedS: Sector[] = (s ?? []).map((x: any) => ({
-          id: String(x.id),
-          name: String(x.name ?? x.label ?? x.code ?? x.id),
-        }));
-
-        const mappedN: Niche[] = (n ?? []).map((x: any) => ({
-          id: String(x.id),
-          sectorId: String(x.sectorId ?? x.sector_id ?? ""),
-          name: String(x.name ?? x.label ?? x.code ?? x.id),
-        }));
-
-        setSectors(mappedS);
-        setNiches(mappedN);
-
-        // sensible defaults
-        if (mappedS.length > 0) {
-          const firstSectorId = mappedS[0].id;
-          setSectorId((prev) => prev || firstSectorId);
-
-          const firstNicheId =
-            mappedN.find((nn) => nn.sectorId === firstSectorId)?.id ?? "";
-          setNicheId((prev) => prev || firstNicheId);
-        }
-      } catch (e: any) {
-        if (!alive) return;
-        setError(e?.message ?? "Failed to load sectors/niches");
-      } finally {
-        if (!alive) return;
-        setListsLoading(false);
-      }
-    })();
-
-    return () => {
-      alive = false;
-    };
-  }, []);
-
-  const availableNiches = React.useMemo(() => {
-    if (!sectorId) return [];
-    return niches.filter((n) => n.sectorId === sectorId);
-  }, [niches, sectorId]);
-
-  // keep niche valid when sector changes
-  React.useEffect(() => {
-    if (!sectorId) {
-      if (nicheId) setNicheId("");
-      return;
+  const onSelectListing = (listing: StartupListing) => {
+    setSelectedListingId(listing.id);
+    if (!companyName.trim()) {
+      setCompanyName(`${listing.niche.name} Co`);
     }
-    if (availableNiches.length === 0) {
-      if (nicheId) setNicheId("");
-      return;
-    }
-    if (nicheId && !availableNiches.some((n) => n.id === nicheId)) {
-      setNicheId(availableNiches[0].id);
-    }
-    if (!nicheId) {
-      setNicheId(availableNiches[0].id);
-    }
-  }, [sectorId, availableNiches, nicheId]);
+    setError(null);
+  };
 
   async function runSetup() {
     setError(null);
@@ -177,15 +112,13 @@ export default function ChooseLoanCard({ worldId, holding, onDone }: Props) {
 
     const trimmed = companyName.trim();
     if (!trimmed) return setError("Enter a company name.");
-    if (!sectorId) return setError("Pick a sector.");
-    if (!nicheId) return setError("Pick a niche.");
+    if (!selectedListing) return setError("Select a company listing first.");
     if (!canAffordSetup) {
-      return setError(`Not enough cash to cover the startup cost (${formatMoney(creationCost)}).`);
+      return setError("Not enough cash for the selected company.");
     }
 
     setBusy(true);
     try {
-      // 1) Create holding-level starter loan (optional)
       if (preset.principal > 0) {
         await financeRepo.createStarterHoldingLoan({
           worldId: worldId as unknown as WorldId,
@@ -197,18 +130,17 @@ export default function ChooseLoanCard({ worldId, holding, onDone }: Props) {
         });
       }
 
-      // 2) Create first company
       await companyService.createCompany({
         holdingId: holdingIdStr as unknown as HoldingId,
         worldId: worldId as unknown as WorldId,
-        sectorId: sectorId as any,
-        nicheId: nicheId as any,
+        sectorId: selectedListing.sector.id as any,
+        nicheId: selectedListing.niche.id as any,
         name: trimmed,
         region,
-        foundedYear: 1, // keep consistent with your game-year model
+        foundedYear: 1,
       });
 
-      setSuccess("Setup complete! Entering the game…");
+      setSuccess("Setup complete! Entering the game...");
       await Promise.resolve(onDone());
     } catch (e: any) {
       setError(e?.message ?? "Setup failed");
@@ -219,24 +151,22 @@ export default function ChooseLoanCard({ worldId, holding, onDone }: Props) {
 
   const canSubmit =
     !busy &&
-    !listsLoading &&
+    !listingsLoading &&
     !!holdingIdStr &&
     !!worldId &&
     !!companyName.trim() &&
-    !!sectorId &&
-    !!nicheId &&
+    !!selectedListing &&
     canAffordSetup;
 
   return (
     <Card className="rounded-3xl p-6">
       <div className="text-xs text-[var(--text-muted)]">Step 3 of 3</div>
-      <div className="text-lg font-semibold text-[var(--text)]">Choose your start</div>
+      <div className="text-lg font-semibold text-[var(--text)]">Purchase your first company</div>
       <div className="mt-1 text-sm text-[var(--text-muted)]">
-        Pick a starter loan and your first market (sector + niche).
+        Pick a starter loan and a company listing to enter the game.
       </div>
 
       <div className="mt-6 grid gap-4">
-        {/* Loan */}
         <div>
           <label className="block text-xs font-semibold text-[var(--text-muted)]">Starter loan</label>
           <select
@@ -256,19 +186,11 @@ export default function ChooseLoanCard({ worldId, holding, onDone }: Props) {
 
           {preset.principal > 0 ? (
             <div className="mt-1 text-xs text-[var(--text-muted)]">
-              Principal: {preset.principal.toLocaleString()} • Interest:{" "}
-              {Math.round(preset.interestRate * 1000) / 10}% • Term: {preset.termWeeks} weeks
-            </div>
-          ) : null}
-
-          {creationCost > 0 ? (
-            <div className="mt-2 text-xs text-[var(--text-muted)]">
-              Startup cost: {formatMoney(creationCost)} | Available after loan: {formatMoney(projectedCash)}
+              Principal: {preset.principal.toLocaleString()} | Interest: {Math.round(preset.interestRate * 1000) / 10}% | Term: {preset.termWeeks} weeks
             </div>
           ) : null}
         </div>
 
-        {/* Company name */}
         <div>
           <label className="block text-xs font-semibold text-[var(--text-muted)]">Company name</label>
           <input
@@ -280,7 +202,6 @@ export default function ChooseLoanCard({ worldId, holding, onDone }: Props) {
           />
         </div>
 
-        {/* Region */}
         <div>
           <label className="block text-xs font-semibold text-[var(--text-muted)]">Region</label>
           <select
@@ -295,45 +216,36 @@ export default function ChooseLoanCard({ worldId, holding, onDone }: Props) {
           </select>
         </div>
 
-        {/* Sector */}
-        <div>
-          <label className="block text-xs font-semibold text-[var(--text-muted)]">Sector</label>
-          <select
-            className="mt-2 w-full rounded-2xl border border-[var(--border)] bg-[var(--card-2)] px-4 py-3 text-sm outline-none"
-            value={sectorId}
-            onChange={(e) => setSectorId(e.target.value)}
-            disabled={busy || listsLoading || sectors.length === 0}
-          >
-            {listsLoading ? <option value="">Loading…</option> : null}
-            {!listsLoading && sectors.length === 0 ? <option value="">No sectors</option> : null}
-            {sectors.map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.name}
-              </option>
-            ))}
-          </select>
+        <div className="rounded-2xl border border-[var(--border)] bg-[var(--card-2)] p-4">
+          <div className="text-xs text-[var(--text-muted)]">Selected listing</div>
+          {selectedListing ? (
+            <div className="mt-2 space-y-1 text-sm">
+              <div className="font-semibold text-[var(--text)]">
+                {selectedListing.niche.name} - {selectedListing.sector.name}
+              </div>
+              <div>Startup cost: {formatMoney(selectedListing.pricing.startupCost)}</div>
+              <div>Expected ROI: {formatPercent(selectedListing.pricing.roi)}</div>
+              <div>Payback: {selectedListing.pricing.paybackYears.toFixed(1)} yrs</div>
+            </div>
+          ) : (
+            <div className="mt-2 text-sm text-[var(--text-muted)]">Select a listing below.</div>
+          )}
+          <div className="mt-2 text-xs text-[var(--text-muted)]">
+            Available after loan: {formatMoney(availableCash)}
+          </div>
         </div>
 
-        {/* Niche */}
-        <div>
-          <label className="block text-xs font-semibold text-[var(--text-muted)]">Niche</label>
-          <select
-            className="mt-2 w-full rounded-2xl border border-[var(--border)] bg-[var(--card-2)] px-4 py-3 text-sm outline-none"
-            value={nicheId}
-            onChange={(e) => setNicheId(e.target.value)}
-            disabled={busy || listsLoading || availableNiches.length === 0}
-          >
-            {listsLoading ? <option value="">Loading…</option> : null}
-            {!listsLoading && availableNiches.length === 0 ? (
-              <option value="">No niches for this sector</option>
-            ) : null}
-            {availableNiches.map((n) => (
-              <option key={n.id} value={n.id}>
-                {n.name}
-              </option>
-            ))}
-          </select>
-        </div>
+        <CompanyMarketplace
+          listings={listings}
+          sectors={sectors}
+          niches={niches}
+          loading={listingsLoading}
+          error={listingsError}
+          selectedId={selectedListingId}
+          availableCash={availableCash}
+          actionLabel="Select"
+          onSelect={onSelectListing}
+        />
 
         {success ? (
           <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
@@ -356,3 +268,4 @@ export default function ChooseLoanCard({ worldId, holding, onDone }: Props) {
     </Card>
   );
 }
+

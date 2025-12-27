@@ -167,10 +167,10 @@ export const OverviewPanel: React.FC = () => {
               className="w-full"
               leftIcon={<Plus className="h-4 w-4" />}
               onClick={() => {
-                alert("Create company modal comes next (CompaniesPanel).");
+                window.location.href = "/game/companies#company-marketplace";
               }}
             >
-              Create new company
+              Purchase company
             </Button>
 
             <Button

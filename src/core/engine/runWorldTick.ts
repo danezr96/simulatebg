@@ -14,6 +14,7 @@ import type {
   CompanyEffectModifiers,
   GameEvent,
   Holding,
+  HoldingDecision,
   Loan,
   Niche,
   Player,
@@ -525,6 +526,22 @@ async function getCompanyDecisionsForWeek(
   });
 }
 
+async function getHoldingDecisionsForWeek(
+  worldId: WorldId,
+  holdingId: HoldingId,
+  year: number,
+  week: number,
+  createdBefore?: Timestamp
+): Promise<HoldingDecision[]> {
+  return decisionRepo.listHoldingDecisionsForWeek({
+    worldId,
+    holdingId,
+    year,
+    week,
+    createdBefore,
+  });
+}
+
 export async function runWorldTick(worldId: WorldId): Promise<void> {
   const lockedEconomy = await worldRepo.tryLockEconomyTick(worldId);
   if (!lockedEconomy) {
@@ -585,6 +602,18 @@ async function runWorldTickInternal(
   const holdings = await listHoldingsByWorld(worldId);
   const companies = await listCompaniesByWorld(worldId);
 
+  const holdingById: Record<string, Holding> = {};
+  for (const holding of holdings) {
+    if (!holding.id) continue;
+    holdingById[String(holding.id)] = holding;
+  }
+
+  const companyById: Record<string, Company> = {};
+  for (const company of companies) {
+    if (!company.id) continue;
+    companyById[String(company.id)] = company;
+  }
+
   const eligiblePlayerIds = new Set(
     await presenceRepo.listEligiblePlayerIds({
       worldId,
@@ -620,6 +649,7 @@ async function runWorldTickInternal(
   // 6) Load latest company states + decisions
   const latestStateByCompanyId: Record<string, CompanyState | null> = {};
   const decisionsByCompanyId: Record<string, CompanyDecision[]> = {};
+  const decisionsByHoldingId: Record<string, HoldingDecision[]> = {};
 
   for (const c of companies) {
     if (!c.id) continue;
@@ -630,6 +660,15 @@ async function runWorldTickInternal(
     const isEligible = holdingId ? eligibleHoldingIds.has(holdingId) : false;
     decisionsByCompanyId[cid] = isEligible
       ? await getCompanyDecisionsForWeek(worldId, c.id, yearNum, weekNum, tickStartAt)
+      : [];
+  }
+
+  for (const holding of holdings) {
+    if (!holding.id) continue;
+    const hid = String(holding.id);
+    const isEligible = eligibleHoldingIds.has(hid);
+    decisionsByHoldingId[hid] = isEligible
+      ? await getHoldingDecisionsForWeek(worldId, holding.id, yearNum, weekNum, tickStartAt)
       : [];
   }
 
@@ -931,6 +970,84 @@ async function runWorldTickInternal(
     Object.assign(nextFinancials, sim.financials);
   }
 
+  // 10.5) Apply holding decisions (loans + acquisitions)
+  for (const holding of holdings) {
+    if (!holding.id) continue;
+    const hid = String(holding.id);
+    const decisions = decisionsByHoldingId[hid] ?? [];
+
+    for (const decision of decisions) {
+      const payload = (decision as any)?.payload ?? {};
+
+      switch (payload.type) {
+        case "REPAY_HOLDING_LOAN": {
+          const loanId = String(payload.loanId ?? "");
+          const requested = safeNumber(payload.amount, 0);
+          if (!loanId || requested <= 0) break;
+
+          const loan = await financeRepo.getLoanById(loanId as any);
+          if (!loan || String(loan.holdingId ?? "") !== hid) break;
+          if (String(loan.status ?? "") !== "ACTIVE") break;
+
+          const availableCash = safeNumber(holding.cashBalance, 0);
+          if (availableCash <= 0) break;
+
+          const outstanding = safeNumber(loan.outstandingBalance, 0);
+          const payment = Math.min(requested, availableCash, outstanding);
+          if (payment <= 0) break;
+
+          const newOutstanding = Math.max(0, outstanding - payment);
+          const paidOff = newOutstanding <= 0.01;
+
+          await financeRepo.updateLoan(loan.id, {
+            outstandingBalance: newOutstanding,
+            status: paidOff ? "PAID_OFF" : String(loan.status ?? "ACTIVE"),
+            remainingWeeks: paidOff ? 0 : loan.remainingWeeks,
+          });
+
+          holding.cashBalance = (availableCash - payment) as any;
+          break;
+        }
+
+        case "BUY_COMPANY": {
+          const companyId = String(payload.companyId ?? "");
+          const offerPrice = safeNumber(payload.offerPrice, 0);
+          if (!companyId || offerPrice <= 0) break;
+
+          const company = companyById[companyId];
+          if (!company) break;
+          if (String(company.holdingId) === hid) break;
+          if (String(company.status ?? "ACTIVE") !== "ACTIVE") break;
+
+          const buyerCash = safeNumber(holding.cashBalance, 0);
+          if (buyerCash < offerPrice) break;
+
+          const sellerId = String(company.holdingId ?? "");
+          const seller = holdingById[sellerId];
+
+          holding.cashBalance = (buyerCash - offerPrice) as any;
+          if (seller) {
+            const sellerCash = safeNumber(seller.cashBalance, 0);
+            seller.cashBalance = (sellerCash + offerPrice) as any;
+          }
+
+          company.holdingId = holding.id as any;
+
+          const { error } = await supabase
+            .from("companies")
+            .update({ holding_id: String(holding.id) })
+            .eq("id", String(company.id));
+
+          if (error) throw new Error(`Failed to transfer company: ${error.message}`);
+          break;
+        }
+
+        default:
+          break;
+      }
+    }
+  }
+
   // 11) Finance tick per holding (update prestige_level too)
   const mergedFinancials: Record<string, CompanyFinancials> = { ...nextFinancials };
 
@@ -959,6 +1076,33 @@ async function runWorldTickInternal(
     } as unknown as Parameters<typeof financeEngine.tick>[0]);
 
     const nextHolding = finTick.nextHolding as Holding;
+
+    for (const nextLoan of finTick.nextLoans ?? []) {
+      if (!nextLoan?.id) continue;
+      const patch: Partial<{
+        outstandingBalance: number;
+        remainingWeeks: number;
+        status: string;
+        interestRate: number;
+      }> = {};
+
+      if (Number.isFinite(Number(nextLoan.outstandingBalance))) {
+        patch.outstandingBalance = Number(nextLoan.outstandingBalance);
+      }
+      if (Number.isFinite(Number(nextLoan.remainingWeeks))) {
+        patch.remainingWeeks = Number(nextLoan.remainingWeeks);
+      }
+      if (nextLoan.status) {
+        patch.status = String(nextLoan.status);
+      }
+      if (Number.isFinite(Number(nextLoan.interestRate))) {
+        patch.interestRate = Number(nextLoan.interestRate);
+      }
+
+      if (Object.keys(patch).length > 0) {
+        await financeRepo.updateLoan(nextLoan.id, patch);
+      }
+    }
 
     // ✅ include prestige_level, default to existing if undefined
     const prestige = Number.isFinite((nextHolding as any)?.prestigeLevel)

@@ -1,18 +1,60 @@
+﻿-- ============================================================
+-- SIMULATEBG - ROW LEVEL SECURITY (FINAL)
 -- ============================================================
--- SIMULATEBG — ROW LEVEL SECURITY (FINAL)
 -- ============================================================
-
+-- Cleanup (safe reruns)
 -- ============================================================
--- Helper view: user → player → holding → company
+do $$
+declare r record;
+begin
+  for r in
+    select schemaname, tablename, policyname
+    from pg_policies
+    where schemaname = 'public'
+      and tablename in (
+        'worlds',
+        'world_economy_state',
+        'world_rounds',
+        'sectors',
+        'niches',
+        'world_sector_state',
+        'bot_profiles',
+        'skills',
+        'achievements',
+        'players',
+        'player_settings',
+        'player_friends',
+        'holdings',
+        'holding_policies',
+        'companies',
+        'company_state',
+        'company_financials',
+        'company_decisions',
+        'holding_decisions',
+        'company_programs',
+        'niche_upgrades',
+        'company_upgrades',
+        'loans',
+        'properties',
+        'investments',
+        'events',
+        'bots',
+        'player_skills',
+        'player_achievements'
+      )
+  loop
+    execute format('drop policy if exists %I on %I.%I', r.policyname, r.schemaname, r.tablename);
+  end loop;
+end $$;
 -- ============================================================
-
+-- Helper view: user -> player -> holding -> company
+-- ============================================================
 create or replace view public.v_user_holdings as
 select
   p.user_id,
   h.id as holding_id
 from public.players p
 join public.holdings h on h.player_id = p.id;
-
 create or replace view public.v_user_companies as
 select
   p.user_id,
@@ -20,6 +62,22 @@ select
 from public.players p
 join public.holdings h on h.player_id = p.id
 join public.companies c on c.holding_id = h.id;
+-- ============================================================
+-- Helper function: current player id (bypasses RLS safely)
+-- ============================================================
+create or replace function public.current_player_id()
+returns uuid
+language sql
+security definer
+set search_path = public
+set row_security = off
+as $$
+  select id
+  from public.players
+  where user_id = auth.uid()
+  limit 1
+$$;
+grant execute on function public.current_player_id() to authenticated;
 
 -- ============================================================
 -- Enable RLS everywhere
@@ -121,6 +179,70 @@ to authenticated
 using (true);
 
 -- ============================================================
+-- SERVICE ROLE (worker)
+-- ============================================================
+
+create policy "service_role_world_economy_state"
+on world_economy_state for all
+to service_role
+using (true)
+with check (true);
+
+create policy "service_role_world_rounds"
+on world_rounds for all
+to service_role
+using (true)
+with check (true);
+
+create policy "service_role_world_sector_state"
+on world_sector_state for all
+to service_role
+using (true)
+with check (true);
+
+create policy "service_role_company_state"
+on company_state for all
+to service_role
+using (true)
+with check (true);
+
+create policy "service_role_company_financials"
+on company_financials for all
+to service_role
+using (true)
+with check (true);
+
+create policy "service_role_events"
+on events for all
+to service_role
+using (true)
+with check (true);
+
+create policy "service_role_holdings"
+on holdings for all
+to service_role
+using (true)
+with check (true);
+
+create policy "service_role_players"
+on players for all
+to service_role
+using (true)
+with check (true);
+
+create policy "service_role_company_programs"
+on company_programs for all
+to service_role
+using (true)
+with check (true);
+
+create policy "service_role_company_upgrades"
+on company_upgrades for all
+to service_role
+using (true)
+with check (true);
+
+-- ============================================================
 -- PLAYERS (owner = auth.uid)
 -- ============================================================
 
@@ -146,11 +268,13 @@ to authenticated
 using (
   exists (
     select 1
-    from players me
-    join player_world_presence pwp on pwp.player_id = me.id
-    join holdings h on h.world_id = pwp.world_id
-    where me.user_id = auth.uid()
-      and h.player_id = players.id
+    from public.player_world_presence pwp
+    where pwp.player_id = players.id
+      and pwp.world_id in (
+        select pwp_me.world_id
+        from public.player_world_presence pwp_me
+        where pwp_me.player_id = public.current_player_id()
+      )
   )
 );
 -- ============================================================
@@ -236,29 +360,16 @@ using (
 create policy "holding_owner"
 on holdings for all
 to authenticated
-using (
-  exists (
-    select 1 from players p
-    where p.id = holdings.player_id
-      and p.user_id = auth.uid()
-  )
-)
-with check (
-  exists (
-    select 1 from players p
-    where p.id = holdings.player_id
-      and p.user_id = auth.uid()
-  )
-);
+using (holdings.player_id = public.current_player_id())
+with check (holdings.player_id = public.current_player_id());
 
 create policy "holding_read_world_presence"
 on holdings for select
 to authenticated
 using (
   exists (
-    select 1 from players p
-    join player_world_presence pwp on pwp.player_id = p.id
-    where p.user_id = auth.uid()
+    select 1 from public.player_world_presence pwp
+    where pwp.player_id = public.current_player_id()
       and pwp.world_id = holdings.world_id
   )
 );
@@ -268,13 +379,13 @@ on holdings for select
 to authenticated
 using (
   exists (
-    select 1 from players me
-    join player_friends f on f.status = 'ACCEPTED'
+    select 1
+    from public.player_friends f
+    where f.status = 'ACCEPTED'
       and (
-        (f.player_id = me.id and f.friend_id = holdings.player_id)
-        or (f.friend_id = me.id and f.player_id = holdings.player_id)
+        (f.player_id = public.current_player_id() and f.friend_id = holdings.player_id)
+        or (f.friend_id = public.current_player_id() and f.player_id = holdings.player_id)
       )
-    where me.user_id = auth.uid()
   )
 );
 create policy "holding_policy_owner"
@@ -283,19 +394,17 @@ to authenticated
 using (
   exists (
     select 1
-    from holdings h
-    join players p on p.id = h.player_id
+    from public.holdings h
     where h.id = holding_policies.holding_id
-      and p.user_id = auth.uid()
+      and h.player_id = public.current_player_id()
   )
 )
 with check (
   exists (
     select 1
-    from holdings h
-    join players p on p.id = h.player_id
+    from public.holdings h
     where h.id = holding_policies.holding_id
-      and p.user_id = auth.uid()
+      and h.player_id = public.current_player_id()
   )
 );
 
@@ -370,8 +479,8 @@ using (
   )
 );
 
--- ❌ NO INSERT / UPDATE / DELETE for users
--- ✔ Engine writes using service_role
+-- âŒ NO INSERT / UPDATE / DELETE for users
+-- âœ” Engine writes using service_role
 
 -- ============================================================
 -- DECISIONS (player intent)
@@ -456,6 +565,20 @@ with check (
 -- ============================================================
 -- FINANCE OBJECTS (READ ONLY)
 -- ============================================================
+
+create policy "loans_insert_holding_owner"
+on loans for insert
+to authenticated
+with check (
+  holding_id is not null
+  and company_id is null
+  and exists (
+    select 1
+    from public.holdings h
+    where h.id = loans.holding_id
+      and h.player_id = public.current_player_id()
+  )
+);
 
 create policy "loans_read_owner"
 on loans for select
@@ -569,3 +692,7 @@ using (
 -- ============================================================
 -- END
 -- ============================================================
+
+
+
+
