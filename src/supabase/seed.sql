@@ -854,46 +854,144 @@ on conflict (sector_id, code) do update set
   config = excluded.config;
 
 -- ----------------------------
--- 2b) Decision/upgrade profiles per niche (sector-based)
+-- 2b) Decision/upgrade profiles per niche (sector-based defaults)
 -- ----------------------------
+-- Override per niche by setting config.upgradeProfile in niches_seed.
 update public.niches n
 set config = n.config || jsonb_build_object(
-  'decisionProfile', 'SECTOR_' || s.code,
-  'upgradeProfile', 'SECTOR_' || s.code
+  'decisionProfile', coalesce(n.config->>'decisionProfile', 'SECTOR_' || s.code),
+  'upgradeProfile', coalesce(
+    n.config->>'upgradeProfile',
+    case s.code
+      when 'TECH' then 'DIGITAL'
+      when 'ECOM' then 'DIGITAL'
+      when 'BUILD' then 'INDUSTRIAL'
+      when 'MANU' then 'INDUSTRIAL'
+      when 'LOGI' then 'INDUSTRIAL'
+      when 'AGRI' then 'INDUSTRIAL'
+      when 'RECY' then 'INDUSTRIAL'
+      when 'ENER' then 'REGULATED'
+      when 'HEAL' then 'REGULATED'
+      when 'FIN' then 'REGULATED'
+      when 'PROP' then 'REGULATED'
+      when 'HORECA' then 'SERVICE'
+      when 'RETAIL' then 'SERVICE'
+      when 'AUTO' then 'SERVICE'
+      when 'MEDIA' then 'SERVICE'
+      else 'SERVICE'
+    end
+  )
 )
 from public.sectors s
 where n.sector_id = s.id;
 
 -- ----------------------------
--- 2c) Niche upgrades (generic trees per niche)
+-- 2c) Niche upgrades (profile-based trees)
 -- ----------------------------
 with upgrade_templates as (
   select * from (values
-    ('MARKET', 1, 'Brand Boost I', 'Slightly stronger branding & reach.', 500,
-      '{"marketingMultiplier":1.05,"reputationMultiplier":1.02}'::jsonb),
-    ('MARKET', 2, 'Brand Boost II', 'Noticeable uplift in market presence.', 1500,
-      '{"marketingMultiplier":1.10,"reputationMultiplier":1.04}'::jsonb),
-    ('MARKET', 3, 'Brand Boost III', 'Strong brand advantage in your niche.', 4000,
-      '{"marketingMultiplier":1.18,"reputationMultiplier":1.06}'::jsonb),
+    -- SERVICE (HORECA/RETAIL/AUTO/MEDIA)
+    ('SERVICE','EXPERIENCE', 1, 'Guest experience I', 'Sharper service and consistency.', 60000,
+      '{"qualityMultiplier":1.05,"reputationMultiplier":1.02}'::jsonb),
+    ('SERVICE','EXPERIENCE', 2, 'Guest experience II', 'Noticeable experience lift.', 160000,
+      '{"qualityMultiplier":1.10,"reputationMultiplier":1.05}'::jsonb),
+    ('SERVICE','EXPERIENCE', 3, 'Guest experience III', 'Best-in-class reviews.', 420000,
+      '{"qualityMultiplier":1.18,"reputationMultiplier":1.08}'::jsonb),
 
-    ('OPS', 1, 'Lean Ops I', 'Small reductions in variable costs.', 800,
-      '{"variableCostMultiplier":0.97}'::jsonb),
-    ('OPS', 2, 'Lean Ops II', 'Better cost structure and processes.', 2000,
-      '{"variableCostMultiplier":0.94}'::jsonb),
-    ('OPS', 3, 'Lean Ops III', 'Top-tier operational efficiency.', 5000,
-      '{"variableCostMultiplier":0.90}'::jsonb),
+    ('SERVICE','LOCAL_MARKETING', 1, 'Local visibility I', 'Improve local awareness.', 50000,
+      '{"marketingMultiplier":1.08,"reputationMultiplier":1.01}'::jsonb),
+    ('SERVICE','LOCAL_MARKETING', 2, 'Local visibility II', 'Stronger neighborhood presence.', 140000,
+      '{"marketingMultiplier":1.15,"reputationMultiplier":1.03}'::jsonb),
+    ('SERVICE','LOCAL_MARKETING', 3, 'Local visibility III', 'Dominant local brand.', 380000,
+      '{"marketingMultiplier":1.25,"reputationMultiplier":1.05}'::jsonb),
 
-    ('PRODUCT', 1, 'Quality Edge I', 'Slight quality improvement.', 700,
-      '{"qualityMultiplier":1.05}'::jsonb),
-    ('PRODUCT', 2, 'Quality Edge II', 'Clear quality advantage.', 1800,
-      '{"qualityMultiplier":1.10}'::jsonb),
-    ('PRODUCT', 3, 'Quality Edge III', 'Premium quality reputation.', 4500,
-      '{"qualityMultiplier":1.18}'::jsonb)
-  ) as t(tree_key, tier, name, description, cost, effects)
+    ('SERVICE','PROCESS', 1, 'Process discipline I', 'Lower waste and rework.', 70000,
+      '{"variableCostMultiplier":0.97,"labourCostMultiplier":0.99}'::jsonb),
+    ('SERVICE','PROCESS', 2, 'Process discipline II', 'Tighter cost controls.', 180000,
+      '{"variableCostMultiplier":0.94,"labourCostMultiplier":0.96}'::jsonb),
+    ('SERVICE','PROCESS', 3, 'Process discipline III', 'Best-in-class efficiency.', 420000,
+      '{"variableCostMultiplier":0.90,"labourCostMultiplier":0.93}'::jsonb),
+
+    -- DIGITAL (TECH/ECOM)
+    ('DIGITAL','GROWTH', 1, 'Growth engine I', 'Stronger acquisition engine.', 120000,
+      '{"marketingMultiplier":1.10,"reputationMultiplier":1.01}'::jsonb),
+    ('DIGITAL','GROWTH', 2, 'Growth engine II', 'Scaled acquisition.', 320000,
+      '{"marketingMultiplier":1.20,"reputationMultiplier":1.03}'::jsonb),
+    ('DIGITAL','GROWTH', 3, 'Growth engine III', 'Category-level growth.', 850000,
+      '{"marketingMultiplier":1.35,"reputationMultiplier":1.06}'::jsonb),
+
+    ('DIGITAL','PRODUCT', 1, 'Product polish I', 'Incremental product quality.', 110000,
+      '{"qualityMultiplier":1.06}'::jsonb),
+    ('DIGITAL','PRODUCT', 2, 'Product polish II', 'Clear quality edge.', 280000,
+      '{"qualityMultiplier":1.12}'::jsonb),
+    ('DIGITAL','PRODUCT', 3, 'Product polish III', 'Premium product experience.', 760000,
+      '{"qualityMultiplier":1.20}'::jsonb),
+
+    ('DIGITAL','AUTOMATION', 1, 'Automation I', 'Light automation for ops.', 150000,
+      '{"labourCostMultiplier":0.95,"variableCostMultiplier":0.97}'::jsonb),
+    ('DIGITAL','AUTOMATION', 2, 'Automation II', 'Heavy automation rollout.', 420000,
+      '{"labourCostMultiplier":0.90,"variableCostMultiplier":0.93}'::jsonb),
+    ('DIGITAL','AUTOMATION', 3, 'Automation III', 'Lean machine-led ops.', 1100000,
+      '{"labourCostMultiplier":0.85,"variableCostMultiplier":0.88}'::jsonb),
+
+    -- INDUSTRIAL (BUILD/MANU/LOGI/AGRI/RECY)
+    ('INDUSTRIAL','THROUGHPUT', 1, 'Throughput I', 'Increase capacity reliability.', 200000,
+      '{"capacityMultiplier":1.08}'::jsonb),
+    ('INDUSTRIAL','THROUGHPUT', 2, 'Throughput II', 'Expanded output.', 600000,
+      '{"capacityMultiplier":1.16}'::jsonb),
+    ('INDUSTRIAL','THROUGHPUT', 3, 'Throughput III', 'High-volume readiness.', 1500000,
+      '{"capacityMultiplier":1.28}'::jsonb),
+
+    ('INDUSTRIAL','EFFICIENCY', 1, 'Efficiency I', 'Cut waste in production.', 180000,
+      '{"variableCostMultiplier":0.96}'::jsonb),
+    ('INDUSTRIAL','EFFICIENCY', 2, 'Efficiency II', 'Lean operating model.', 520000,
+      '{"variableCostMultiplier":0.92}'::jsonb),
+    ('INDUSTRIAL','EFFICIENCY', 3, 'Efficiency III', 'Best-in-class cost curve.', 1250000,
+      '{"variableCostMultiplier":0.88}'::jsonb),
+
+    ('INDUSTRIAL','SAFETY', 1, 'Safety systems I', 'Reduce incidents.', 140000,
+      '{"qualityMultiplier":1.04,"reputationMultiplier":1.02}'::jsonb),
+    ('INDUSTRIAL','SAFETY', 2, 'Safety systems II', 'Compliance edge.', 360000,
+      '{"qualityMultiplier":1.08,"reputationMultiplier":1.04}'::jsonb),
+    ('INDUSTRIAL','SAFETY', 3, 'Safety systems III', 'Best-in-class standards.', 900000,
+      '{"qualityMultiplier":1.15,"reputationMultiplier":1.06}'::jsonb),
+
+    -- REGULATED (ENER/HEAL/FIN/PROP)
+    ('REGULATED','COMPLIANCE', 1, 'Compliance I', 'Baseline compliance upgrades.', 250000,
+      '{"qualityMultiplier":1.03,"reputationMultiplier":1.04}'::jsonb),
+    ('REGULATED','COMPLIANCE', 2, 'Compliance II', 'Stronger audit readiness.', 700000,
+      '{"qualityMultiplier":1.06,"reputationMultiplier":1.08}'::jsonb),
+    ('REGULATED','COMPLIANCE', 3, 'Compliance III', 'Industry-leading trust.', 1800000,
+      '{"qualityMultiplier":1.10,"reputationMultiplier":1.12}'::jsonb),
+
+    ('REGULATED','RELIABILITY', 1, 'Reliability I', 'Improve uptime and quality.', 220000,
+      '{"capacityMultiplier":1.05,"qualityMultiplier":1.02}'::jsonb),
+    ('REGULATED','RELIABILITY', 2, 'Reliability II', 'Increase uptime resilience.', 650000,
+      '{"capacityMultiplier":1.12,"qualityMultiplier":1.05}'::jsonb),
+    ('REGULATED','RELIABILITY', 3, 'Reliability III', 'Best-in-class stability.', 1600000,
+      '{"capacityMultiplier":1.22,"qualityMultiplier":1.08}'::jsonb),
+
+    ('REGULATED','COST_CONTROL', 1, 'Cost control I', 'Reduce overhead leakage.', 200000,
+      '{"variableCostMultiplier":0.97,"labourCostMultiplier":0.98}'::jsonb),
+    ('REGULATED','COST_CONTROL', 2, 'Cost control II', 'Stronger cost governance.', 580000,
+      '{"variableCostMultiplier":0.94,"labourCostMultiplier":0.95}'::jsonb),
+    ('REGULATED','COST_CONTROL', 3, 'Cost control III', 'Optimized cost base.', 1400000,
+      '{"variableCostMultiplier":0.90,"labourCostMultiplier":0.92}'::jsonb)
+  ) as t(profile_key, tree_key, tier, name, description, cost, effects)
+),
+niche_profiles as (
+  select
+    n.id as niche_id,
+    case
+      when n.config->>'upgradeProfile' in ('SERVICE','DIGITAL','INDUSTRIAL','REGULATED')
+        then n.config->>'upgradeProfile'
+      else 'SERVICE'
+    end as profile_key
+  from public.niches n
 )
 insert into public.niche_upgrades (niche_id, code, tree_key, name, description, tier, cost, duration_weeks, effects)
 select
-  n.id,
+  np.niche_id,
   t.tree_key || '_T' || t.tier,
   t.tree_key,
   t.name,
@@ -902,8 +1000,8 @@ select
   t.cost,
   0,
   t.effects
-from public.niches n
-cross join upgrade_templates t
+from niche_profiles np
+join upgrade_templates t on t.profile_key = np.profile_key
 on conflict (niche_id, code) do update set
   name = excluded.name,
   description = excluded.description,

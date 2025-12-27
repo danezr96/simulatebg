@@ -19,7 +19,7 @@ import { useStartupListings } from "../hooks/useStartupListings";
 import type { StartupListing } from "../hooks/useStartupListings";
 
 import { companyService } from "../../core/services/companyService";
-import { asHoldingId, asSectorId, asNicheId } from "../../core/domain";
+import { asHoldingId, asNicheId, asSectorId, asWorldId } from "../../core/domain";
 
 export const CompaniesPanel: React.FC = () => {
   const { companies, refetch, isLoading, holdingId } = useCompanies();

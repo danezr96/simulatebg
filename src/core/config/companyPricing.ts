@@ -17,43 +17,49 @@ export type StartupPricing = {
 };
 
 const TICKET_PRICE_BASE: Record<string, number> = {
-  LOW: 18,
-  MEDIUM: 75,
-  HIGH: 260,
+  LOW: 20,
+  MEDIUM: 85,
+  HIGH: 320,
 };
 
-const CAPEX_MULTIPLIER: Record<string, number> = {
-  LOW: 0.85,
-  MEDIUM: 1.0,
-  HIGH: 1.35,
+const CAPEX_REVENUE_MULTIPLIER: Record<string, number> = {
+  LOW: 0.2,
+  MEDIUM: 0.5,
+  HIGH: 1.1,
+};
+
+const PAYBACK_MULTIPLIER: Record<string, number> = {
+  LOW: 3.0,
+  MEDIUM: 4.5,
+  HIGH: 8.0,
 };
 
 const COMPETITION_MULTIPLIER: Record<string, number> = {
   FRAGMENTED: 0.95,
-  OLIGOPOLY: 1.1,
-  MONOPOLY_LIKE: 1.25,
+  OLIGOPOLY: 1.0,
+  MONOPOLY_LIKE: 1.1,
 };
 
 const SECTOR_MULTIPLIER: Record<string, number> = {
   HORECA: 0.85,
   RETAIL: 0.9,
-  ECOM: 0.95,
-  TECH: 1.35,
-  BUILD: 1.25,
-  LOGI: 1.15,
-  PROP: 1.5,
-  MANU: 1.4,
+  ECOM: 0.9,
+  TECH: 1.05,
+  BUILD: 1.1,
+  LOGI: 1.0,
+  PROP: 1.25,
+  MANU: 1.1,
   AGRI: 0.9,
-  ENER: 1.7,
-  HEAL: 1.6,
-  MEDIA: 1.05,
-  FIN: 1.45,
-  AUTO: 1.2,
-  RECY: 1.25,
+  ENER: 1.3,
+  HEAL: 1.15,
+  MEDIA: 0.95,
+  FIN: 1.1,
+  AUTO: 1.05,
+  RECY: 1.0,
 };
 
-const STARTUP_COST_MIN = 25_000;
-const STARTUP_COST_MAX = 8_000_000;
+const STARTUP_COST_MIN = 150_000;
+const STARTUP_COST_MAX = 50_000_000;
 
 function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value));
@@ -85,24 +91,26 @@ export function getStartupPricing(sector: Sector, niche: Niche): StartupPricing 
     max: annualRevenue * marginMax,
   };
 
-  const capexMultiplier = CAPEX_MULTIPLIER[config.capexIntensity ?? "MEDIUM"] ?? 1;
+  const capexMultiplier = CAPEX_REVENUE_MULTIPLIER[config.capexIntensity ?? "MEDIUM"] ?? 0.5;
+  const paybackMultiplier = PAYBACK_MULTIPLIER[config.capexIntensity ?? "MEDIUM"] ?? 4.5;
   const sectorMultiplier = SECTOR_MULTIPLIER[sector.code] ?? 1;
   const competitionMultiplier = COMPETITION_MULTIPLIER[config.competitionType ?? "FRAGMENTED"] ?? 1;
 
   const regulation = clamp(Number(config.regulationRisk ?? 0), 0, 1);
   const labour = clamp(Number(config.labourIntensity ?? 0), 0, 1);
+  const volatility = clamp(Number(config.demandVolatility ?? 0), 0, 1);
 
-  const baseCost = annualRevenue * 0.22;
-  const riskMultiplier = 1 + regulation * 0.35 + labour * 0.2;
+  const revenueCapex = annualRevenue * capexMultiplier;
+  const profitPayback = annualProfit * paybackMultiplier;
+  const baseCost = Math.max(revenueCapex, profitPayback);
+  const riskMultiplier = 1 + regulation * 0.25 + labour * 0.12 + volatility * 0.1;
 
-  const rawCost =
-    baseCost * capexMultiplier * sectorMultiplier * competitionMultiplier * riskMultiplier;
+  const rawCost = baseCost * sectorMultiplier * competitionMultiplier * riskMultiplier;
   const startupCost = roundMoney(clamp(rawCost, STARTUP_COST_MIN, STARTUP_COST_MAX));
 
   const roi = annualProfit > 0 ? annualProfit / startupCost : 0;
   const paybackYears = annualProfit > 0 ? startupCost / annualProfit : 99;
 
-  const volatility = clamp(Number(config.demandVolatility ?? 0), 0, 1);
   const elasticity = clamp(Number(config.priceElasticity ?? 0), 0, 1.5) / 1.5;
   const riskScore = clamp(volatility * 0.45 + regulation * 0.35 + elasticity * 0.2, 0, 1);
 

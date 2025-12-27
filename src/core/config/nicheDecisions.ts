@@ -256,7 +256,17 @@ export const decisionProfiles: Record<string, DecisionModule[]> = {
   ],
 };
 
+function resolveProfileKey(niche: Niche | null | undefined): string {
+  const explicit = String((niche as any)?.config?.decisionProfile ?? "").trim();
+  if (explicit) return explicit;
+
+  const nicheCode = String(niche?.code ?? "");
+  const sectorCode = nicheCode.includes("_") ? nicheCode.split("_")[0] : "";
+  const sectorKey = `SECTOR_${sectorCode}`;
+  return decisionProfiles[sectorKey] ? sectorKey : "DEFAULT";
+}
+
 export function getDecisionModulesForNiche(niche: Niche | null | undefined): DecisionModule[] {
-  const profile = String((niche as any)?.config?.decisionProfile ?? "DEFAULT");
+  const profile = resolveProfileKey(niche);
   return decisionProfiles[profile] ?? decisionProfiles.DEFAULT;
 }

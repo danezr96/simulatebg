@@ -1,5 +1,4 @@
 // src/ui/components/Sparkline.tsx
-import * as React from "react";
 import { cn } from "../../utils/format";
 
 export type SparklineProps = {

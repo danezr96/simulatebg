@@ -11,7 +11,7 @@ import Card from "../components/Card";
 import Button from "../components/Button";
 import Table, { TBody, TD, TH, THead, TR } from "../components/Table";
 import Modal from "../components/Modal";
-import { cn } from "../../utils/format";
+import { cn, formatNumber } from "../../utils/format";
 import { money } from "../../utils/money";
 import { useCompanies, useCompany } from "../hooks/useCompany";
 import { useWorld } from "../hooks/useWorld";
@@ -20,24 +20,19 @@ import { programService } from "../../core/services/programService";
 import { upgradeService } from "../../core/services/upgradeService";
 import { sectorRepo } from "../../core/persistence/sectorRepo";
 import { getDecisionModulesForNiche } from "../../core/config/nicheDecisions";
+import { getDecisionFieldsForNiche } from "../../core/config/nicheDecisionFields";
 import { getDecisionGuidance } from "../../core/config/decisionGuidance";
-import type { CompanyDecisionPayload, CompanyProgram, NicheUpgrade, CompanyUpgrade } from "../../core/domain";
+import type { CompanyDecisionPayload, CompanyProgram, NicheUpgrade, CompanyUpgrade, CompanyState } from "../../core/domain";
+import type { DecisionField } from "../../core/config/nicheDecisionFields";
 import { asWorldId, asCompanyId, asNicheId, asSectorId } from "../../core/domain";
 
 /**
  * DecisionsPanel (v0)
  * - Select a company
- * - Edit weekly knobs (price/marketing/staffing/operations)
+ * - Edit weekly levers (price/marketing/staffing/operations)
  * - Save decisions for the current world week (company_decisions)
  * - Show queued decisions this week
  */
-
-type Knobs = {
-  priceLevel: number;
-  marketingLevel: number;
-  employeesDelta: number; // + hire / - fire
-  capacityDelta: number; // + invest capacity (placeholder)
-};
 
 const clamp = (v: number, min: number, max: number) => Math.min(max, Math.max(min, v));
 const formatRange = (min: number, max: number, decimals = 0) => {
@@ -46,11 +41,66 @@ const formatRange = (min: number, max: number, decimals = 0) => {
   return `${formatValue(min)} - ${formatValue(max)}`;
 };
 
-const defaultKnobs: Knobs = {
-  priceLevel: 1.0,
-  marketingLevel: 0.0,
-  employeesDelta: 0,
-  capacityDelta: 0,
+const TREE_LABELS: Record<string, string> = {
+  EXPERIENCE: "Guest experience",
+  LOCAL_MARKETING: "Local visibility",
+  PROCESS: "Process discipline",
+  GROWTH: "Growth engine",
+  PRODUCT: "Product polish",
+  AUTOMATION: "Automation",
+  THROUGHPUT: "Throughput",
+  EFFICIENCY: "Efficiency",
+  SAFETY: "Safety systems",
+  COMPLIANCE: "Compliance",
+  RELIABILITY: "Reliability",
+  COST_CONTROL: "Cost control",
+};
+
+const formatTreeLabel = (treeKey: string) => {
+  if (TREE_LABELS[treeKey]) return TREE_LABELS[treeKey];
+  return treeKey.replace(/_/g, " ").toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase());
+};
+
+const fieldDecimals = (field: DecisionField) =>
+  field.kind === "PRICE" || field.kind === "QUALITY" ? 2 : 0;
+
+const getCurrentValueForField = (
+  field: DecisionField,
+  state: CompanyState | null | undefined
+): number | null => {
+  if (!state) return null;
+  switch (field.kind) {
+    case "PRICE":
+      return Number(state.priceLevel ?? 1);
+    case "MARKETING":
+      return Number(state.marketingLevel ?? 0);
+    case "STAFFING":
+      return Number(state.employees ?? 0);
+    case "CAPACITY":
+      return Number(state.capacity ?? 0);
+    case "QUALITY":
+      return Number(state.qualityScore ?? 1);
+    default:
+      return null;
+  }
+};
+
+const getDefaultValueForField = (
+  field: DecisionField,
+  state: CompanyState | null | undefined
+): number => {
+  const current = getCurrentValueForField(field, state);
+  switch (field.kind) {
+    case "PRICE":
+    case "MARKETING":
+      return current ?? 0;
+    case "STAFFING":
+    case "CAPACITY":
+    case "QUALITY":
+      return 0;
+    default:
+      return current ?? 0;
+  }
 };
 
 const formatSeconds = (totalSeconds: number | null | undefined) => {
@@ -114,6 +164,7 @@ export const DecisionsPanel: React.FC = () => {
   const niche = nicheQuery.data ?? null;
   const sector = sectorQuery.data ?? null;
   const decisionModules = React.useMemo(() => getDecisionModulesForNiche(niche), [niche]);
+  const decisionFields = React.useMemo(() => getDecisionFieldsForNiche(niche), [niche]);
   const guidance = React.useMemo(() => getDecisionGuidance(niche, sector, state), [niche, sector, state]);
 
   const programsQuery = useQuery({
@@ -149,23 +200,28 @@ export const DecisionsPanel: React.FC = () => {
   const [open, setOpen] = React.useState(false);
   const [saving, setSaving] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
-  const [knobs, setKnobs] = React.useState<Knobs>(defaultKnobs);
+  const [fieldValues, setFieldValues] = React.useState<Record<string, number>>({});
   const [moduleSelections, setModuleSelections] = React.useState<Record<string, string>>({});
   const [selectedUpgradeIds, setSelectedUpgradeIds] = React.useState<string[]>([]);
 
   const [queued, setQueued] = React.useState<Array<{ type: string; payload: any; createdAt?: string }>>([]);
   const [queuedLoading, setQueuedLoading] = React.useState(false);
 
-  // Initialize knobs from latest state
+  // Initialize decision fields from latest state
   React.useEffect(() => {
-    if (!state) return;
-    setKnobs({
-      priceLevel: state.priceLevel ?? 1.0,
-      marketingLevel: state.marketingLevel ?? 0.0,
-      employeesDelta: 0,
-      capacityDelta: 0,
+    if (!decisionFields.length) {
+      setFieldValues({});
+      return;
+    }
+
+    setFieldValues(() => {
+      const next: Record<string, number> = {};
+      for (const field of decisionFields) {
+        next[field.id] = getDefaultValueForField(field, state);
+      }
+      return next;
     });
-  }, [state?.companyId]);
+  }, [decisionFields, state?.companyId]);
 
   React.useEffect(() => {
     setModuleSelections({});
@@ -180,6 +236,10 @@ export const DecisionsPanel: React.FC = () => {
   const currentWeek = economy?.currentWeek ?? 1;
   const tickStatus = isTicking ? "Tick running" : "Waiting for next tick";
   const canEdit = !!selectedCompanyId && !!worldId && !isTicking;
+  const currentLeversEmpty = !state || decisionFields.length === 0;
+  const currentLeversEmptyMessage = !state
+    ? "No state found yet (create a company and run a tick)."
+    : "No levers available for this niche.";
   const editDisabledReason = !selectedCompanyId
     ? "Select a company first."
     : !worldId
@@ -199,6 +259,72 @@ export const DecisionsPanel: React.FC = () => {
   const ownedUpgradeIds = React.useMemo(() => {
     return new Set(companyUpgrades.map((u) => String(u.upgradeId)));
   }, [companyUpgrades]);
+
+  const upgradeById = React.useMemo(() => {
+    const map = new Map<string, NicheUpgrade>();
+    for (const upgrade of nicheUpgrades) {
+      map.set(String(upgrade.id), upgrade);
+    }
+    return map;
+  }, [nicheUpgrades]);
+
+  const upgradesByTree = React.useMemo(() => {
+    const map = new Map<string, NicheUpgrade[]>();
+    for (const upgrade of nicheUpgrades) {
+      const key = upgrade.treeKey ?? "GENERAL";
+      const list = map.get(key) ?? [];
+      list.push(upgrade);
+      map.set(key, list);
+    }
+    for (const [, list] of map) {
+      list.sort((a, b) => Number(a.tier ?? 0) - Number(b.tier ?? 0));
+    }
+    return Array.from(map.entries()).map(([treeKey, upgrades]) => ({ treeKey, upgrades }));
+  }, [nicheUpgrades]);
+
+  const ownedTierByTree = React.useMemo(() => {
+    const map = new Map<string, number>();
+    for (const upgrade of companyUpgrades) {
+      const def = upgradeById.get(String(upgrade.upgradeId));
+      if (!def) continue;
+      const current = map.get(def.treeKey) ?? 0;
+      map.set(def.treeKey, Math.max(current, Number(def.tier ?? 0)));
+    }
+    return map;
+  }, [companyUpgrades, upgradeById]);
+
+  const queuedTierByTree = React.useMemo(() => {
+    const map = new Map<string, string>();
+    for (const upgradeId of selectedUpgradeIds) {
+      const def = upgradeById.get(String(upgradeId));
+      if (!def) continue;
+      map.set(def.treeKey, String(upgradeId));
+    }
+    return map;
+  }, [selectedUpgradeIds, upgradeById]);
+
+  const resolveRangeForField = React.useCallback(
+    (field: DecisionField) => {
+      const guidanceRange = field.guidanceKey ? guidance?.ranges[field.guidanceKey] : undefined;
+      const min = Number(guidanceRange?.min ?? field.min ?? 0);
+      const max = Number(guidanceRange?.max ?? field.max ?? min + 1);
+      const step = Number(field.step ?? (field.kind === "PRICE" ? 0.05 : 1));
+      const unit = field.unit ?? guidanceRange?.unit ?? "";
+      const note = guidanceRange?.note ?? field.description ?? "";
+      return {
+        min,
+        max: Math.max(min, max),
+        step,
+        unit,
+        note,
+      };
+    },
+    [guidance]
+  );
+
+  const setFieldValue = React.useCallback((fieldId: string, value: number) => {
+    setFieldValues((prev) => ({ ...prev, [fieldId]: value }));
+  }, []);
 
   const loadQueued = React.useCallback(async () => {
     setError(null);
@@ -255,23 +381,40 @@ export const DecisionsPanel: React.FC = () => {
 
     setSaving(true);
     try {
-      const payloads: CompanyDecisionPayload[] = [
-        { type: "SET_PRICE", priceLevel: clamp(knobs.priceLevel, 0.5, 3.0) } as any,
-        { type: "SET_MARKETING", marketingLevel: clamp(knobs.marketingLevel, 0, 10_000) } as any,
-      ];
+      const payloads: CompanyDecisionPayload[] = [];
 
-      if (knobs.employeesDelta !== 0) {
-        const baseEmployees = state?.employees ?? 0;
-        const targetEmployees = Math.max(
-          0,
-          Math.floor(baseEmployees + Math.trunc(clamp(knobs.employeesDelta, -50, 50)))
-        );
+      for (const field of decisionFields) {
+        const raw = Number(fieldValues[field.id] ?? 0);
+        const range = resolveRangeForField(field);
+        const value = clamp(raw, range.min, range.max);
 
-        payloads.push({ type: "SET_STAFFING", targetEmployees } as any);
-      }
-
-      if (knobs.capacityDelta !== 0) {
-        payloads.push({ type: "INVEST_CAPACITY", addCapacity: clamp(knobs.capacityDelta, -1_000, 10_000) } as any);
+        switch (field.kind) {
+          case "PRICE":
+            payloads.push({ type: "SET_PRICE", priceLevel: value } as any);
+            break;
+          case "MARKETING":
+            payloads.push({ type: "SET_MARKETING", marketingLevel: value } as any);
+            break;
+          case "STAFFING": {
+            if (value === 0) break;
+            const baseEmployees = state?.employees ?? 0;
+            const targetEmployees = Math.max(0, Math.floor(baseEmployees + Math.trunc(value)));
+            payloads.push({ type: "SET_STAFFING", targetEmployees } as any);
+            break;
+          }
+          case "CAPACITY":
+            if (value !== 0) {
+              payloads.push({ type: "INVEST_CAPACITY", addCapacity: value } as any);
+            }
+            break;
+          case "QUALITY":
+            if (value !== 0) {
+              payloads.push({ type: "INVEST_QUALITY", addQuality: value } as any);
+            }
+            break;
+          default:
+            break;
+        }
       }
 
       for (const module of decisionModules) {
@@ -387,9 +530,9 @@ export const DecisionsPanel: React.FC = () => {
 
       {/* Current state summary */}
       <Table
-        caption="Current knobs (from latest company state)"
-        isEmpty={!state}
-        emptyMessage="No state found yet (create a company and run a tick)."
+        caption="Current levers (from latest company state)"
+        isEmpty={currentLeversEmpty}
+        emptyMessage={currentLeversEmptyMessage}
       >
         <THead>
           <TR>
@@ -398,30 +541,17 @@ export const DecisionsPanel: React.FC = () => {
           </TR>
         </THead>
         <TBody>
-          <TR>
-            <TD>Price level</TD>
-            <TD className="text-right" mono>
-              {state ? (Math.round(state.priceLevel * 100) / 100).toFixed(2) : "—"}
-            </TD>
-          </TR>
-          <TR>
-            <TD>Marketing level</TD>
-            <TD className="text-right" mono>
-              {state ? (Math.round(state.marketingLevel * 100) / 100).toFixed(2) : "—"}
-            </TD>
-          </TR>
-          <TR>
-            <TD>Employees</TD>
-            <TD className="text-right" mono>
-              {state ? state.employees : "—"}
-            </TD>
-          </TR>
-          <TR>
-            <TD>Capacity</TD>
-            <TD className="text-right" mono>
-              {state ? (Math.round(state.capacity * 100) / 100).toFixed(2) : "—"}
-            </TD>
-          </TR>
+          {decisionFields.map((field) => {
+            const value = getCurrentValueForField(field, state);
+            return (
+              <TR key={field.id}>
+                <TD>{field.label}</TD>
+                <TD className="text-right" mono>
+                  {value == null ? "—" : formatNumber(value, "nl-NL", fieldDecimals(field))}
+                </TD>
+              </TR>
+            );
+          })}
         </TBody>
       </Table>
 
@@ -502,7 +632,9 @@ export const DecisionsPanel: React.FC = () => {
             return (
               <TR key={String(u.id)}>
                 <TD className="font-semibold">{def?.name ?? "Upgrade"}</TD>
-                <TD className="text-xs text-[var(--text-muted)]">{def?.treeKey ?? "--"}</TD>
+                <TD className="text-xs text-[var(--text-muted)]">
+                  {def?.treeKey ? formatTreeLabel(def.treeKey) : "--"}
+                </TD>
                 <TD className="text-right text-xs text-[var(--text-muted)]">
                   {def?.tier ?? "--"}
                 </TD>
@@ -589,56 +721,117 @@ export const DecisionsPanel: React.FC = () => {
           <div className="rounded-2xl border border-[var(--border)] bg-[var(--card-2)] p-4">
             <div className="flex items-center gap-2 text-[var(--text-muted)]">
               <SlidersHorizontal className="h-4 w-4" />
-              <div className="text-sm font-semibold text-[var(--text)]">Knobs</div>
+              <div className="text-sm font-semibold text-[var(--text)]">Decision levers</div>
+            </div>
+            <div className="mt-1 text-xs text-[var(--text-muted)]">
+              Levers are tailored to this niche. Suggested ranges update with market guidance.
             </div>
 
-            <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-3">
-              <div>
-                <label className="text-xs font-medium text-[var(--text-muted)]">Price level (0.5–3.0)</label>
-                <input
-                  type="number"
-                  step="0.05"
-                  min={0.5}
-                  max={3}
-                  className="mt-1 w-full rounded-2xl border border-[var(--border)] bg-[var(--bg)] px-3 py-2 text-sm outline-none"
-                  value={knobs.priceLevel}
-                  onChange={(e) => setKnobs((k) => ({ ...k, priceLevel: Number(e.target.value) }))}
-                />
-              </div>
+            <div className="mt-4 grid grid-cols-1 gap-3">
+              {decisionFields.length === 0 ? (
+                <div className="text-sm text-[var(--text-muted)]">No decision levers available.</div>
+              ) : (
+                decisionFields.map((field) => {
+                  const range = resolveRangeForField(field);
+                  const decimals = fieldDecimals(field);
+                  const rawValue = Number(fieldValues[field.id] ?? getDefaultValueForField(field, state));
+                  const value = Number.isFinite(rawValue) ? rawValue : 0;
+                  const currentValue = getCurrentValueForField(field, state);
+                  const isDelta = field.kind === "STAFFING" || field.kind === "CAPACITY" || field.kind === "QUALITY";
+                  const targetValue =
+                    isDelta && currentValue != null
+                      ? currentValue + value
+                      : null;
+                  const mid = (range.min + range.max) / 2;
+                  const snap = (v: number) => {
+                    const stepped = Math.round(v / range.step) * range.step;
+                    return Number(stepped.toFixed(decimals));
+                  };
 
-              <div>
-                <label className="text-xs font-medium text-[var(--text-muted)]">Marketing level (budget-ish)</label>
-                <input
-                  type="number"
-                  step="10"
-                  min={0}
-                  className="mt-1 w-full rounded-2xl border border-[var(--border)] bg-[var(--bg)] px-3 py-2 text-sm outline-none"
-                  value={knobs.marketingLevel}
-                  onChange={(e) => setKnobs((k) => ({ ...k, marketingLevel: Number(e.target.value) }))}
-                />
-              </div>
+                  const quickSets = [
+                    ...(isDelta ? [{ label: "Zero", value: 0 }] : []),
+                    ...(currentValue != null && !isDelta ? [{ label: "Current", value: currentValue }] : []),
+                    { label: "Min", value: range.min },
+                    { label: "Mid", value: mid },
+                    { label: "Max", value: range.max },
+                  ];
 
-              <div>
-                <label className="text-xs font-medium text-[var(--text-muted)]">Employees Δ (-50..+50)</label>
-                <input
-                  type="number"
-                  step="1"
-                  className="mt-1 w-full rounded-2xl border border-[var(--border)] bg-[var(--bg)] px-3 py-2 text-sm outline-none"
-                  value={knobs.employeesDelta}
-                  onChange={(e) => setKnobs((k) => ({ ...k, employeesDelta: Number(e.target.value) }))}
-                />
-              </div>
+                  return (
+                    <div
+                      key={field.id}
+                      className="rounded-2xl border border-[var(--border)] bg-[var(--bg)] p-3"
+                    >
+                      <div className="flex flex-col gap-1 md:flex-row md:items-center md:justify-between">
+                        <div>
+                          <div className="text-sm font-semibold text-[var(--text)]">{field.label}</div>
+                          <div className="text-xs text-[var(--text-muted)]">
+                            {field.description}
+                          </div>
+                        </div>
+                        <div className="text-xs text-[var(--text-muted)]">
+                          Suggested: {formatRange(range.min, range.max, decimals)} {range.unit}
+                        </div>
+                      </div>
 
-              <div>
-                <label className="text-xs font-medium text-[var(--text-muted)]">Capacity Δ (placeholder)</label>
-                <input
-                  type="number"
-                  step="10"
-                  className="mt-1 w-full rounded-2xl border border-[var(--border)] bg-[var(--bg)] px-3 py-2 text-sm outline-none"
-                  value={knobs.capacityDelta}
-                  onChange={(e) => setKnobs((k) => ({ ...k, capacityDelta: Number(e.target.value) }))}
-                />
-              </div>
+                      <div className="mt-3 grid grid-cols-1 gap-2 md:grid-cols-[1fr_140px] md:items-center">
+                        <input
+                          type="range"
+                          min={range.min}
+                          max={range.max}
+                          step={range.step}
+                          value={clamp(value, range.min, range.max)}
+                          onChange={(e) => setFieldValue(field.id, Number(e.target.value))}
+                        />
+                        <input
+                          type="number"
+                          step={range.step}
+                          min={range.min}
+                          max={range.max}
+                          className="w-full rounded-2xl border border-[var(--border)] bg-[var(--bg)] px-3 py-2 text-sm outline-none"
+                          value={value}
+                          onChange={(e) => setFieldValue(field.id, Number(e.target.value))}
+                        />
+                      </div>
+
+                      <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-[var(--text-muted)]">
+                        {currentValue != null ? (
+                          <span>
+                            Current:{" "}
+                            <span className="text-[var(--text)]">
+                              {formatNumber(currentValue, "nl-NL", decimals)}
+                            </span>
+                          </span>
+                        ) : null}
+                        {targetValue != null ? (
+                          <span>
+                            Target:{" "}
+                            <span className="text-[var(--text)]">
+                              {formatNumber(targetValue, "nl-NL", decimals)}
+                            </span>
+                          </span>
+                        ) : null}
+                      </div>
+
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        {quickSets.map((item) => (
+                          <button
+                            key={`${field.id}-${item.label}`}
+                            type="button"
+                            className="rounded-xl border border-[var(--border)] bg-[var(--card-2)] px-2 py-1 text-xs text-[var(--text)] hover:bg-[var(--card)]"
+                            onClick={() => setFieldValue(field.id, snap(item.value))}
+                          >
+                            {item.label}
+                          </button>
+                        ))}
+                      </div>
+
+                      {range.note ? (
+                        <div className="mt-2 text-xs text-[var(--text-muted)]">{range.note}</div>
+                      ) : null}
+                    </div>
+                  );
+                })
+              )}
             </div>
           </div>
 
@@ -683,50 +876,101 @@ export const DecisionsPanel: React.FC = () => {
             </div>
           ) : null}
 
-          {nicheUpgrades.length > 0 ? (
+          {upgradesByTree.length > 0 ? (
             <div className="rounded-2xl border border-[var(--border)] bg-[var(--card-2)] p-4">
               <div className="text-sm font-semibold text-[var(--text)]">Upgrades</div>
               <div className="mt-1 text-xs text-[var(--text-muted)]">
-                Purchased upgrades are permanent and apply every tick.
+                Purchased upgrades are permanent and apply every tick. Each tree unlocks in order.
               </div>
 
-              <div className="mt-4 space-y-2">
-                {nicheUpgrades.map((u) => {
-                  const upgradeId = String(u.id);
-                  const owned = ownedUpgradeIds.has(upgradeId);
-                  const queued = selectedUpgradeIds.includes(upgradeId);
+              <div className="mt-4 space-y-4">
+                {upgradesByTree.map(({ treeKey, upgrades }) => {
+                  const ownedTier = ownedTierByTree.get(treeKey) ?? 0;
+                  const queuedId = queuedTierByTree.get(treeKey);
                   return (
                     <div
-                      key={upgradeId}
-                      className="flex flex-col gap-2 rounded-2xl border border-[var(--border)] bg-[var(--bg)] p-3 md:flex-row md:items-center md:justify-between"
+                      key={treeKey}
+                      className="rounded-2xl border border-[var(--border)] bg-[var(--bg)] p-4"
                     >
-                      <div>
-                        <div className="text-sm font-semibold text-[var(--text)]">
-                          {u.name} <span className="text-xs text-[var(--text-muted)]">({u.treeKey} T{u.tier})</span>
+                      <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                        <div>
+                          <div className="text-sm font-semibold text-[var(--text)]">
+                            {formatTreeLabel(treeKey)}
+                          </div>
+                          <div className="text-xs text-[var(--text-muted)]">
+                            Tier {ownedTier} of {upgrades.length} unlocked
+                          </div>
                         </div>
-                        <div className="text-xs text-[var(--text-muted)]">
-                          {u.description ?? "Upgrade effect applied each tick."}
-                        </div>
+                        {queuedId ? (
+                          <div className="text-xs text-[var(--text-muted)]">
+                            Upgrade queued this week
+                          </div>
+                        ) : null}
                       </div>
 
-                      <div className="flex items-center gap-2">
-                        <div className="text-xs text-[var(--text-muted)]">
-                          Cost {money.format(Number(u.cost ?? 0))}
-                        </div>
-                        <Button
-                          variant={queued ? "primary" : "secondary"}
-                          size="sm"
-                          disabled={owned || isTicking}
-                          onClick={() =>
-                            setSelectedUpgradeIds((prev) =>
-                              prev.includes(upgradeId)
-                                ? prev.filter((id) => id !== upgradeId)
-                                : [...prev, upgradeId]
-                            )
-                          }
-                        >
-                          {owned ? "Owned" : queued ? "Queued" : "Queue"}
-                        </Button>
+                      <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-3">
+                        {upgrades.map((u) => {
+                          const upgradeId = String(u.id);
+                          const owned = ownedUpgradeIds.has(upgradeId);
+                          const queued = selectedUpgradeIds.includes(upgradeId);
+                          const isUnlocked = Number(u.tier ?? 0) === 1 || ownedTier >= Number(u.tier ?? 1) - 1;
+                          const blockedByQueue = !!queuedId && queuedId !== upgradeId;
+                          const locked = !isUnlocked || blockedByQueue;
+                          const status = owned
+                            ? "Owned"
+                            : queued
+                            ? "Queued"
+                            : locked
+                            ? "Locked"
+                            : "Available";
+                          const lockReason = !isUnlocked
+                            ? `Requires T${Number(u.tier ?? 1) - 1}`
+                            : blockedByQueue
+                            ? "Queued in this tree"
+                            : null;
+
+                          return (
+                            <div
+                              key={upgradeId}
+                              className="flex flex-col justify-between gap-3 rounded-2xl border border-[var(--border)] bg-[var(--card-2)] p-3"
+                            >
+                              <div>
+                                <div className="text-sm font-semibold text-[var(--text)]">
+                                  {u.name}
+                                </div>
+                                <div className="text-xs text-[var(--text-muted)]">
+                                  {u.description ?? "Upgrade effect applied each tick."}
+                                </div>
+                                <div className="mt-2 text-xs text-[var(--text-muted)]">
+                                  Tier {u.tier} · {status}
+                                </div>
+                                {lockReason ? (
+                                  <div className="mt-1 text-xs text-[var(--text-muted)]">{lockReason}</div>
+                                ) : null}
+                              </div>
+
+                              <div className="flex items-center justify-between gap-2">
+                                <div className="text-xs text-[var(--text-muted)]">
+                                  Cost {money.format(Number(u.cost ?? 0))}
+                                </div>
+                                <Button
+                                  variant={queued ? "primary" : "secondary"}
+                                  size="sm"
+                                  disabled={owned || isTicking || locked}
+                                  onClick={() =>
+                                    setSelectedUpgradeIds((prev) =>
+                                      prev.includes(upgradeId)
+                                        ? prev.filter((id) => id !== upgradeId)
+                                        : [...prev, upgradeId]
+                                    )
+                                  }
+                                >
+                                  {owned ? "Owned" : queued ? "Queued" : locked ? "Locked" : "Queue"}
+                                </Button>
+                              </div>
+                            </div>
+                          );
+                        })}
                       </div>
                     </div>
                   );

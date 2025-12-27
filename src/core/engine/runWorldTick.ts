@@ -761,6 +761,14 @@ async function runWorldTickInternal(
           next.capacity = (safeNumber(next.capacity, 0) + safeNumber(payload.addCapacity, 0)) as any;
           break;
 
+        case "INVEST_QUALITY": {
+          const current = safeNumber(next.qualityScore, 1);
+          const delta = safeNumber(payload.addQuality, 0);
+          const nextQuality = Math.max(0.2, Math.min(3, current + delta));
+          next.qualityScore = nextQuality as any;
+          break;
+        }
+
         case "START_PROGRAM": {
           const programType = String((payload as any)?.programType ?? "");
           if (!programType) break;
