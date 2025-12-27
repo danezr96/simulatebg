@@ -35,6 +35,22 @@ function getPollIntervalMs(input?: number): number {
   return Math.max(1_000, Math.floor(input ?? fallback));
 }
 
+function getStaleTickMs(intervalSec: number): number {
+  const envMs = Number(process.env.WORKER_TICK_STALE_MS);
+  if (Number.isFinite(envMs) && envMs > 0) return Math.floor(envMs);
+  if (!Number.isFinite(intervalSec) || intervalSec <= 0) return 10 * 60 * 1000;
+  return Math.max(intervalSec * 2 * 1000, 5 * 60 * 1000);
+}
+
+function isStaleTick(snapshot: WorldTickSnapshot, nowMs: number): boolean {
+  if (!snapshot.economy.isTicking) return false;
+  const startedAtRaw = snapshot.economy.lastTickStartedAt;
+  const startedAtMs = startedAtRaw ? Date.parse(startedAtRaw) : NaN;
+  if (!Number.isFinite(startedAtMs)) return true;
+  const intervalSec = Number((snapshot.world as any).baseRoundIntervalSeconds ?? 0);
+  return nowMs - startedAtMs >= getStaleTickMs(intervalSec);
+}
+
 function isWorldDue(snapshot: WorldTickSnapshot, nowMs: number): boolean {
   const intervalSec = Number((snapshot.world as any).baseRoundIntervalSeconds ?? 0);
   if (!Number.isFinite(intervalSec) || intervalSec <= 0) return false;
@@ -64,13 +80,30 @@ async function tickWorldsOnce(): Promise<void> {
   const snapshots = await loadWorldSnapshots();
 
   for (const snapshot of snapshots) {
-    if (!isWorldDue(snapshot, nowMs)) continue;
+    let economy = snapshot.economy;
+    if (isStaleTick(snapshot, nowMs)) {
+      console.warn("[worker] stale tick detected, resetting lock", {
+        worldId: String(snapshot.world.id),
+        lastTickStartedAt: snapshot.economy.lastTickStartedAt ?? null,
+      });
+      try {
+        economy = await worldRepo.updateEconomyState(snapshot.world.id, {
+          isTicking: false,
+          lastTickStartedAt: null,
+        });
+      } catch (error) {
+        logSchedulerError("stale tick reset failed", error);
+        continue;
+      }
+    }
+    const updatedSnapshot = { ...snapshot, economy };
+    if (!isWorldDue(updatedSnapshot, nowMs)) continue;
     try {
-      await runWorldTick(snapshot.world.id);
+      await runWorldTick(updatedSnapshot.world.id);
     } catch (error) {
       // eslint-disable-next-line no-console
       console.error("[worker] tick failed", {
-        worldId: String(snapshot.world.id),
+        worldId: String(updatedSnapshot.world.id),
         error,
       });
     }
