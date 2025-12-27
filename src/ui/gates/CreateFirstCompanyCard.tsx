@@ -5,7 +5,9 @@ import Button from "../components/Button";
 
 import type { WorldId, HoldingId } from "../../core/domain";
 import { sectorRepo } from "../../core/persistence/sectorRepo";
-import { companyRepo } from "../../core/persistence/companyRepo";
+import { companyService } from "../../core/services/companyService";
+import { economyConfig } from "../../config/economy";
+import { formatMoney } from "../../utils/money";
 
 type Props = {
   worldId: string;
@@ -47,6 +49,10 @@ export default function CreateFirstCompanyCard({
   const [region, setRegion] = React.useState(initialRegion ?? "EU-WEST");
   const [sectorId, setSectorId] = React.useState("");
   const [nicheId, setNicheId] = React.useState("");
+
+  const holdingCash = Number((holding as any)?.cashBalance ?? 0);
+  const creationCost = Number(economyConfig.company.creationCost ?? 0);
+  const canAffordSetup = creationCost <= 0 || holdingCash >= creationCost;
 
   React.useEffect(() => {
     let alive = true;
@@ -126,14 +132,17 @@ export default function CreateFirstCompanyCard({
     if (!trimmed) return setError("Enter a company name.");
     if (!sectorId) return setError("Pick a sector.");
     if (!nicheId) return setError("Pick a niche.");
+    if (!canAffordSetup) {
+      return setError(`Not enough cash to cover the startup cost (${formatMoney(creationCost)}).`);
+    }
 
     setBusy(true);
     try {
-      await companyRepo.create({
+      await companyService.createCompany({
         holdingId: holdingIdStr as unknown as HoldingId,
         worldId: worldId as unknown as WorldId,
-        sectorId,
-        nicheId,
+        sectorId: sectorId as any,
+        nicheId: nicheId as any,
         name: trimmed,
         region,
         foundedYear: 1, // game-year; can be replaced later (economy.currentYear)
@@ -154,7 +163,8 @@ export default function CreateFirstCompanyCard({
     !!holdingIdStr &&
     name.trim().length > 0 &&
     !!sectorId &&
-    !!nicheId;
+    !!nicheId &&
+    canAffordSetup;
 
   return (
     <Card className="rounded-3xl p-6">
@@ -162,6 +172,11 @@ export default function CreateFirstCompanyCard({
       <div className="mt-1 text-sm text-[var(--text-muted)]">
         Choose a sector and niche. This determines your market segment.
       </div>
+      {creationCost > 0 ? (
+        <div className="mt-2 text-xs text-[var(--text-muted)]">
+          Startup cost: {formatMoney(creationCost)} | Available cash: {formatMoney(holdingCash)}
+        </div>
+      ) : null}
 
       <div className="mt-5 grid gap-4">
         <div>

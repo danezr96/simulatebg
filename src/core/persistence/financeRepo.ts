@@ -243,6 +243,33 @@ export const financeRepo = {
     lenderName?: string;
     status?: string;
   }): Promise<Loan> {
+    return this.createHoldingLoan({
+      worldId: input.worldId,
+      holdingId: input.holdingId,
+      principal: input.principal,
+      interestRate: input.interestRate,
+      termWeeks: input.termWeeks,
+      lenderName: input.lenderName ?? "Starter Bank",
+      status: input.status ?? "ACTIVE",
+    });
+  },
+
+  /**
+   * Holding loan helper (mid-game).
+   * - creates holding-level loan (company_id stays NULL)
+   * - updates holdings totals (cash_balance + total_debt)
+   */
+  async createHoldingLoan(input: {
+    worldId: WorldId;
+    holdingId: HoldingId;
+
+    principal: number;
+    interestRate: number;
+    termWeeks: number;
+
+    lenderName?: string;
+    status?: string;
+  }): Promise<Loan> {
     const loan = await this.createLoan({
       worldId: input.worldId,
       holdingId: input.holdingId,
@@ -251,7 +278,7 @@ export const financeRepo = {
       principal: input.principal,
       interestRate: input.interestRate,
       termWeeks: input.termWeeks,
-      lenderName: input.lenderName ?? "Starter Bank",
+      lenderName: input.lenderName ?? "Holding Bank",
       status: input.status ?? "ACTIVE",
     });
 

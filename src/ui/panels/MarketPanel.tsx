@@ -41,6 +41,40 @@ export const MarketPanel: React.FC = () => {
   const [loading, setLoading] = React.useState(false);
   const [err, setErr] = React.useState<string | null>(null);
 
+  const currentYear = economy?.currentYear ?? 1;
+  const currentWeek = economy?.currentWeek ?? 1;
+
+  const nextRound = React.useMemo(() => {
+    if (!economy) return null;
+    const nextWeek = economy.currentWeek + 1;
+    if (nextWeek > 52) {
+      return { year: economy.currentYear + 1, week: 1 };
+    }
+    return { year: economy.currentYear, week: nextWeek };
+  }, [economy?.currentYear, economy?.currentWeek]);
+
+  const currentEvents = React.useMemo(
+    () => events.filter((e) => Number(e.year ?? 0) === currentYear && Number(e.week ?? 0) === currentWeek),
+    [events, currentYear, currentWeek]
+  );
+
+  const outlookRows = React.useMemo(() => {
+    const rows = sectorRows.map((row) => {
+      const delta = Number(row.trendFactor ?? 1) - 1;
+      const direction = delta >= 0.03 ? "Tailwind" : delta <= -0.03 ? "Headwind" : "Stable";
+      const volatility = Number(row.volatility ?? 0);
+      const volatilityLabel = volatility >= 0.12 ? "High" : volatility >= 0.06 ? "Medium" : "Low";
+      return {
+        ...row,
+        delta,
+        direction,
+        volatilityLabel,
+      };
+    });
+
+    return rows.sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta)).slice(0, 5);
+  }, [sectorRows]);
+
   const loadAll = React.useCallback(async () => {
     if (!world) return;
 
@@ -182,6 +216,69 @@ export const MarketPanel: React.FC = () => {
           </div>
         </Card>
       ) : null}
+
+      {/* Current round events */}
+      <Table
+        caption={`Events this round (${currentEvents.length})`}
+        isEmpty={!loading && currentEvents.length === 0}
+        emptyMessage="No events recorded for the current round."
+      >
+        <THead>
+          <TR>
+            <TH>Scope</TH>
+            <TH>Type</TH>
+            <TH>Target</TH>
+            <TH className="text-right">Severity</TH>
+          </TR>
+        </THead>
+        <TBody>
+          {currentEvents.map((e) => (
+            <TR key={`round-${String(e.id)}`}>
+              <TD>{e.scope}</TD>
+              <TD className="font-semibold">{e.type}</TD>
+              <TD className="text-xs text-[var(--text-muted)]">
+                {e.company_id ?? e.sector_id ?? e.holding_id ?? "ƒ?""}
+              </TD>
+              <TD className="text-right" mono>
+                {Math.round((Number(e.severity ?? 1) * 100)) / 100}
+              </TD>
+            </TR>
+          ))}
+        </TBody>
+      </Table>
+
+      {/* Next round outlook */}
+      <Card className="rounded-3xl p-5">
+        <div className="flex items-center gap-2 text-[var(--text-muted)]">
+          <Activity className="h-4 w-4" />
+          <div className="text-sm font-semibold text-[var(--text)]">
+            Outlook for next round
+          </div>
+        </div>
+        <div className="mt-2 text-sm text-[var(--text-muted)]">
+          {nextRound ? `Year ${nextRound.year} Week ${nextRound.week}` : "Next round"}
+        </div>
+
+        <div className="mt-4 space-y-2">
+          {outlookRows.length === 0 ? (
+            <div className="text-sm text-[var(--text-muted)]">No sector outlook yet.</div>
+          ) : (
+            outlookRows.map((row) => (
+              <div
+                key={`outlook-${row.sectorId}`}
+                className="flex items-center justify-between rounded-2xl border border-[var(--border)] bg-[var(--card-2)] px-3 py-2 text-sm"
+              >
+                <div className="font-medium text-[var(--text)]">
+                  {row.sectorName ?? row.sectorId}
+                </div>
+                <div className="text-xs text-[var(--text-muted)]">
+                  {row.direction} · {row.volatilityLabel}
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      </Card>
 
       {/* Sector state table */}
       <Table

@@ -104,6 +104,8 @@ export const Modal: React.FC<ModalProps> = ({
             className={cn(
               "relative z-10 w-full",
               sizeClass[size],
+              "max-h-[calc(100vh-2rem)]",
+              "flex flex-col",
               "rounded-3xl border border-[var(--border)]",
               "bg-[var(--card)] shadow-xl"
             )}
@@ -113,7 +115,7 @@ export const Modal: React.FC<ModalProps> = ({
           >
             {/* Header */}
             {(title || description) && (
-              <div className="px-5 pt-5 pb-3 border-b border-[var(--border)]">
+              <div className="px-5 pt-5 pb-3 border-b border-[var(--border)] shrink-0">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
                     {title ? (
@@ -142,11 +144,11 @@ export const Modal: React.FC<ModalProps> = ({
             )}
 
             {/* Body */}
-            <div className="px-5 py-4">{children}</div>
+            <div className="px-5 py-4 overflow-y-auto min-h-0">{children}</div>
 
             {/* Footer */}
             {footer ? (
-              <div className="px-5 pb-5 pt-3 border-t border-[var(--border)]">
+              <div className="px-5 pb-5 pt-3 border-t border-[var(--border)] shrink-0">
                 {footer}
               </div>
             ) : null}

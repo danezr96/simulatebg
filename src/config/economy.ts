@@ -106,6 +106,10 @@ export type LoanConfig = {
   defaultMaxLeverageRatio: number; // totalDebt / totalAssets (holding policy default)
 };
 
+export type CompanyConfig = {
+  creationCost: number;
+};
+
 export type EventConfig = {
   // Baseline probabilities per week, can be overridden by seasons.
   globalCrisisChance: number; // 0..1
@@ -173,6 +177,8 @@ export type EconomyConfig = {
   reputation: ReputationConfig;
 
   loans: LoanConfig;
+
+  company: CompanyConfig;
 
   events: EventConfig;
 
@@ -269,6 +275,10 @@ export const ECONOMY: EconomyConfig = {
     termWeeks: { min: 12, max: 260 },
     spread: { min: 0.01, max: 0.16 },
     defaultMaxLeverageRatio: 0.65,
+  },
+
+  company: {
+    creationCost: 10_000,
   },
 
   events: {

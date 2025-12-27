@@ -219,6 +219,7 @@ export type HoldingDecisionType =
   | "BUY_INVESTMENT"
   | "SELL_INVESTMENT"
   | "START_COMPANY"
+  | "BUY_COMPANY"
   | "SELL_COMPANY"
   | "SET_HOLDING_POLICY";
 
@@ -284,6 +285,12 @@ export type StartCompanyDecision = {
   seedCapital?: Money;
 };
 
+export type BuyCompanyDecision = {
+  type: "BUY_COMPANY";
+  companyId: CompanyId;
+  offerPrice: Money;
+};
+
 export type SellCompanyDecision = {
   type: "SELL_COMPANY";
   companyId: CompanyId;
@@ -306,6 +313,7 @@ export type HoldingDecisionPayload =
   | BuyInvestmentDecision
   | SellInvestmentDecision
   | StartCompanyDecision
+  | BuyCompanyDecision
   | SellCompanyDecision
   | SetHoldingPolicyDecision;
 

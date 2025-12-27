@@ -13,9 +13,11 @@ import type {
 } from "../domain";
 
 import { companyRepo, type CompanyStateInput } from "../persistence/companyRepo";
+import { holdingRepo } from "../persistence/holdingRepo";
 import { financeRepo } from "../persistence/financeRepo";
 import { decisionRepo } from "../persistence/decisionRepo";
 import { sectorRepo } from "../persistence/sectorRepo";
+import { economyConfig } from "../../config/economy";
 
 /**
  * CompanyService responsibilities:
@@ -48,15 +50,43 @@ export const companyService = {
     region: string;
     foundedYear: number;
   }): Promise<Company> {
-    return companyRepo.create({
-      holdingId: input.holdingId,
-      worldId: input.worldId,
-      sectorId: input.sectorId as unknown as string,
-      nicheId: input.nicheId as unknown as string,
-      name: input.name,
-      region: input.region,
-      foundedYear: input.foundedYear,
-    });
+    const creationCost = Number(economyConfig.company.creationCost ?? 0);
+    let charged = false;
+    let currentCash = 0;
+
+    if (creationCost > 0) {
+      const holding = await holdingRepo.getById(input.holdingId);
+      if (!holding) throw new Error("Holding not found.");
+
+      currentCash = Number(holding.cashBalance ?? 0);
+      if (currentCash < creationCost) {
+        throw new Error(`Not enough cash to start a company (need ${creationCost}).`);
+      }
+
+      await holdingRepo.update(input.holdingId, {
+        cashBalance: currentCash - creationCost,
+      });
+      charged = true;
+    }
+
+    try {
+      return await companyRepo.create({
+        holdingId: input.holdingId,
+        worldId: input.worldId,
+        sectorId: input.sectorId as unknown as string,
+        nicheId: input.nicheId as unknown as string,
+        name: input.name,
+        region: input.region,
+        foundedYear: input.foundedYear,
+      });
+    } catch (error) {
+      if (charged) {
+        await holdingRepo.update(input.holdingId, {
+          cashBalance: currentCash,
+        });
+      }
+      throw error;
+    }
   },
 
   async updateCompany(

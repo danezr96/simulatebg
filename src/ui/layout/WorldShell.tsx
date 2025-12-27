@@ -2,7 +2,7 @@
 import * as React from "react";
 import { Outlet, NavLink } from "react-router-dom";
 import { AnimatePresence, motion } from "framer-motion";
-import { Home, Building2, SlidersHorizontal, LineChart, User2 } from "lucide-react";
+import { Home, Building2, SlidersHorizontal, LineChart, User2, Users, Wallet } from "lucide-react";
 
 import { cn } from "../../utils/format";
 import { MOTION } from "../../config/motion";
@@ -34,6 +34,8 @@ const tabs: Tab[] = [
   { to: "/game/companies", label: "Companies", icon: <Building2 className="h-4 w-4" /> },
   { to: "/game/decisions", label: "Decisions", icon: <SlidersHorizontal className="h-4 w-4" /> },
   { to: "/game/market", label: "Market", icon: <LineChart className="h-4 w-4" /> },
+  { to: "/game/finance", label: "Finance", icon: <Wallet className="h-4 w-4" /> },
+  { to: "/game/social", label: "Social", icon: <Users className="h-4 w-4" /> },
   { to: "/game/profile", label: "Profile", icon: <User2 className="h-4 w-4" /> },
 ];
 
@@ -110,14 +112,14 @@ export default function WorldShell() {
       </div>
 
       {/* Nested route content */}
-      <div className="pb-24">
+      <div className="pb-32">
         <Outlet />
       </div>
 
       {/* Bottom nav */}
       <div className="fixed bottom-0 left-0 right-0 z-40 border-t border-[var(--border)] bg-[color:var(--bg)]/90 backdrop-blur">
         <div className="mx-auto max-w-7xl px-3 py-2">
-          <nav className="grid grid-cols-6 gap-2">
+          <nav className="grid grid-cols-4 sm:grid-cols-7 gap-2">
             {tabs.map((t) => (
               <NavLink
                 key={t.to}

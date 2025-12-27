@@ -12,6 +12,7 @@ import CompaniesPanel from "./ui/panels/CompaniesPanel";
 import CompanyDetailPanel from "./ui/panels/CompanyDetailPanel";
 import DecisionsPanel from "./ui/panels/DecisionsPanel";
 import MarketPanel from "./ui/panels/MarketPanel";
+import FinancePanel from "./ui/panels/FinancePanel";
 import SocialPanel from "./ui/panels/SocialPanel";
 import ProfilePanel from "./ui/panels/ProfilePanel";
 
@@ -62,6 +63,7 @@ export default function App() {
           <Route path="companies/:companyId" element={<CompanyDetailPanel />} />
           <Route path="decisions" element={<DecisionsPanel />} />
           <Route path="market" element={<MarketPanel />} />
+          <Route path="finance" element={<FinancePanel />} />
           <Route path="social" element={<SocialPanel />} />
           <Route path="profile" element={<ProfilePanel />} />
         </Route>

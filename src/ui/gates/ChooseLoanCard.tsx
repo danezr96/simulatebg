@@ -5,8 +5,10 @@ import Button from "../components/Button";
 
 import type { WorldId, HoldingId } from "../../core/domain";
 import { sectorRepo } from "../../core/persistence/sectorRepo";
-import { companyRepo } from "../../core/persistence/companyRepo";
 import { financeRepo } from "../../core/persistence/financeRepo";
+import { companyService } from "../../core/services/companyService";
+import { economyConfig } from "../../config/economy";
+import { formatMoney } from "../../utils/money";
 
 type Props = {
   worldId: string;
@@ -87,6 +89,11 @@ export default function ChooseLoanCard({ worldId, holding, onDone }: Props) {
     () => LOAN_PRESETS.find((p) => p.id === loanPresetId) ?? LOAN_PRESETS[0],
     [loanPresetId]
   );
+
+  const holdingCash = Number((holding as any)?.cashBalance ?? 0);
+  const creationCost = Number(economyConfig.company.creationCost ?? 0);
+  const projectedCash = holdingCash + Number(preset.principal ?? 0);
+  const canAffordSetup = projectedCash >= creationCost;
 
   // load sectors + niches
   React.useEffect(() => {
@@ -172,13 +179,15 @@ export default function ChooseLoanCard({ worldId, holding, onDone }: Props) {
     if (!trimmed) return setError("Enter a company name.");
     if (!sectorId) return setError("Pick a sector.");
     if (!nicheId) return setError("Pick a niche.");
+    if (!canAffordSetup) {
+      return setError(`Not enough cash to cover the startup cost (${formatMoney(creationCost)}).`);
+    }
 
     setBusy(true);
     try {
       // 1) Create holding-level starter loan (optional)
       if (preset.principal > 0) {
-        // NOTE: implement this method in financeRepo if it doesn't exist yet
-        await (financeRepo as any).createStarterHoldingLoan({
+        await financeRepo.createStarterHoldingLoan({
           worldId: worldId as unknown as WorldId,
           holdingId: holdingIdStr as unknown as HoldingId,
           principal: preset.principal,
@@ -189,15 +198,15 @@ export default function ChooseLoanCard({ worldId, holding, onDone }: Props) {
       }
 
       // 2) Create first company
-      await companyRepo.create({
+      await companyService.createCompany({
         holdingId: holdingIdStr as unknown as HoldingId,
         worldId: worldId as unknown as WorldId,
-        sectorId,
-        nicheId,
+        sectorId: sectorId as any,
+        nicheId: nicheId as any,
         name: trimmed,
         region,
         foundedYear: 1, // keep consistent with your game-year model
-      } as any);
+      });
 
       setSuccess("Setup complete! Entering the game…");
       await Promise.resolve(onDone());
@@ -215,7 +224,8 @@ export default function ChooseLoanCard({ worldId, holding, onDone }: Props) {
     !!worldId &&
     !!companyName.trim() &&
     !!sectorId &&
-    !!nicheId;
+    !!nicheId &&
+    canAffordSetup;
 
   return (
     <Card className="rounded-3xl p-6">
@@ -248,6 +258,12 @@ export default function ChooseLoanCard({ worldId, holding, onDone }: Props) {
             <div className="mt-1 text-xs text-[var(--text-muted)]">
               Principal: {preset.principal.toLocaleString()} • Interest:{" "}
               {Math.round(preset.interestRate * 1000) / 10}% • Term: {preset.termWeeks} weeks
+            </div>
+          ) : null}
+
+          {creationCost > 0 ? (
+            <div className="mt-2 text-xs text-[var(--text-muted)]">
+              Startup cost: {formatMoney(creationCost)} | Available after loan: {formatMoney(projectedCash)}
             </div>
           ) : null}
         </div>

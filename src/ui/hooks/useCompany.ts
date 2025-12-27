@@ -27,6 +27,7 @@ export function useCompanies() {
     },
     enabled: !!holdingId,
     staleTime: 5_000,
+    refetchInterval: 5_000,
   });
 
   const refresh = useMutation({

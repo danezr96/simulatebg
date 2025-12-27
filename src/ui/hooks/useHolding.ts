@@ -34,6 +34,7 @@ export function useHolding() {
     },
     enabled: !!playerId && !!worldId,
     staleTime: 5_000,
+    refetchInterval: 5_000,
   });
 
   const refresh = useMutation({

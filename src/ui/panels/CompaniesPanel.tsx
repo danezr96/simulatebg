@@ -12,10 +12,13 @@ import Table, { TBody, TD, TH, THead, TR } from "../components/Table";
 import { cn } from "../../utils/format";
 
 import { useCompanies } from "../hooks/useCompany";
+import { useHolding } from "../hooks/useHolding";
 import { useWorld } from "../hooks/useWorld";
 
 import { companyService } from "../../core/services/companyService";
 import { sectorRepo } from "../../core/persistence/sectorRepo";
+import { economyConfig } from "../../config/economy";
+import { formatMoney } from "../../utils/money";
 
 import {
   asHoldingId,
@@ -43,6 +46,7 @@ const defaultForm: CreateCompanyForm = {
 
 export const CompaniesPanel: React.FC = () => {
   const { companies, refetch, isLoading, holdingId } = useCompanies();
+  const { holding } = useHolding();
   const { world, economy } = useWorld();
 
   const worldId = world?.id ? String(world.id) : undefined;
@@ -54,6 +58,10 @@ export const CompaniesPanel: React.FC = () => {
   const [creating, setCreating] = React.useState(false);
   const [form, setForm] = React.useState<CreateCompanyForm>(defaultForm);
   const [error, setError] = React.useState<string | null>(null);
+
+  const creationCost = Number(economyConfig.company.creationCost ?? 0);
+  const holdingCash = Number(holding?.cashBalance ?? 0);
+  const canAffordSetup = creationCost <= 0 || holdingCash >= creationCost;
 
   // --- load sectors/niches (real DB lists) ---
   const [sectors, setSectors] = React.useState<SectorOption[]>([]);
@@ -150,6 +158,10 @@ export const CompaniesPanel: React.FC = () => {
     }
     if (!form.nicheId) {
       setError("Niche is required.");
+      return;
+    }
+    if (!canAffordSetup) {
+      setError(`Not enough cash to cover the startup cost (${formatMoney(creationCost)}).`);
       return;
     }
 
@@ -300,13 +312,24 @@ export const CompaniesPanel: React.FC = () => {
             <Button variant="ghost" onClick={() => setOpenCreate(false)}>
               Cancel
             </Button>
-            <Button variant="primary" loading={creating} onClick={onCreate}>
+            <Button
+              variant="primary"
+              loading={creating}
+              onClick={onCreate}
+              disabled={!canAffordSetup || creating}
+              title={!canAffordSetup ? "Not enough cash for the startup cost." : undefined}
+            >
               Create
             </Button>
           </div>
         }
       >
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          {creationCost > 0 ? (
+            <div className="md:col-span-2 text-xs text-[var(--text-muted)]">
+              Startup cost: {formatMoney(creationCost)} | Available cash: {formatMoney(holdingCash)}
+            </div>
+          ) : null}
           <div className="md:col-span-2">
             <label className="text-xs font-medium text-[var(--text-muted)]">
               Company name
