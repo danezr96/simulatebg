@@ -233,19 +233,34 @@ export const worldRepo = {
   },
 
   async tryLockEconomyTick(worldId: WorldId): Promise<WorldEconomyState | null> {
+    const tickStartedAt = nowIso();
     const { data, error } = await supabase
       .from("world_economy_state")
       .update({
         is_ticking: true,
-        last_tick_started_at: nowIso(),
+        last_tick_started_at: tickStartedAt,
       })
       .eq("world_id", worldId as unknown as string)
-      .or("is_ticking.is.null,is_ticking.eq.false")
+      .eq("is_ticking", false)
       .select("*")
       .maybeSingle();
 
     if (error) throw error;
-    return data ? mapEconomy(data as WorldEconomyRow) : null;
+    if (data) return mapEconomy(data as WorldEconomyRow);
+
+    const { data: legacyData, error: legacyError } = await supabase
+      .from("world_economy_state")
+      .update({
+        is_ticking: true,
+        last_tick_started_at: tickStartedAt,
+      })
+      .eq("world_id", worldId as unknown as string)
+      .is("is_ticking", null)
+      .select("*")
+      .maybeSingle();
+
+    if (legacyError) throw legacyError;
+    return legacyData ? mapEconomy(legacyData as WorldEconomyRow) : null;
   },
 
   async unlockEconomyTick(worldId: WorldId): Promise<void> {
