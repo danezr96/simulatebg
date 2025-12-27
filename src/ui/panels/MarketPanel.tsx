@@ -237,7 +237,7 @@ export const MarketPanel: React.FC = () => {
               <TD>{e.scope}</TD>
               <TD className="font-semibold">{e.type}</TD>
               <TD className="text-xs text-[var(--text-muted)]">
-                {e.company_id ?? e.sector_id ?? e.holding_id ?? "ƒ?""}
+                {e.company_id ?? e.sector_id ?? e.holding_id ?? "-"}
               </TD>
               <TD className="text-right" mono>
                 {Math.round((Number(e.severity ?? 1) * 100)) / 100}
@@ -326,7 +326,7 @@ export const MarketPanel: React.FC = () => {
               <TD>{e.scope}</TD>
               <TD className="font-semibold">{e.type}</TD>
               <TD className="text-xs text-[var(--text-muted)]">
-                {e.company_id ?? e.sector_id ?? e.holding_id ?? "—"}
+                {e.company_id ?? e.sector_id ?? e.holding_id ?? "-"}
               </TD>
               <TD className="text-right" mono>
                 {Math.round((Number(e.severity ?? 1) * 100)) / 100}
