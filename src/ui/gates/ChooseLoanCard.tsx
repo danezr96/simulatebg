@@ -11,7 +11,7 @@ import { companyService } from "../../core/services/companyService";
 import { useStartupListings } from "../hooks/useStartupListings";
 import type { StartupListing } from "../hooks/useStartupListings";
 import { formatMoney } from "../../utils/money";
-import { formatPercent } from "../../utils/format";
+import { cn, formatPercent } from "../../utils/format";
 
 // Loan presets remain a simple onboarding choice.
 
@@ -178,26 +178,50 @@ export default function ChooseLoanCard({ worldId, holding, onDone }: Props) {
       <div className="mt-6 grid gap-4">
         <div>
           <label className="block text-xs font-semibold text-[var(--text-muted)]">Starter loan</label>
-          <select
-            className="mt-2 w-full rounded-2xl border border-[var(--border)] bg-[var(--card-2)] px-4 py-3 text-sm outline-none"
-            value={loanPresetId}
-            onChange={(e) => setLoanPresetId(e.target.value)}
-            disabled={busy}
-          >
-            {LOAN_PRESETS.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.label}
-              </option>
-            ))}
-          </select>
+          <div className="mt-3 grid gap-3 md:grid-cols-2">
+            {LOAN_PRESETS.map((p) => {
+              const selected = p.id === loanPresetId;
+              const principalLabel = p.principal > 0 ? formatMoney(p.principal) : "No debt";
+              const interestLabel = p.principal > 0 ? formatPercent(p.interestRate) : "0%";
+              const termLabel = p.principal > 0 ? `${p.termWeeks} weeks` : "None";
 
-          <div className="mt-2 text-xs text-[var(--text-muted)]">{preset.description}</div>
+              return (
+                <button
+                  key={p.id}
+                  type="button"
+                  onClick={() => setLoanPresetId(p.id)}
+                  disabled={busy}
+                  className={cn(
+                    "rounded-3xl border p-4 text-left transition-colors",
+                    selected ? "border-[color:var(--accent)] bg-[var(--card-2)]" : "border-[var(--border)]"
+                  )}
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <div className="text-sm font-semibold text-[var(--text)]">{p.label}</div>
+                      <div className="mt-1 text-xs text-[var(--text-muted)]">{p.description}</div>
+                    </div>
+                    <div className="text-[11px] text-[var(--text-muted)]">{p.lenderName}</div>
+                  </div>
 
-          {preset.principal > 0 ? (
-            <div className="mt-1 text-xs text-[var(--text-muted)]">
-              Principal: {preset.principal.toLocaleString()} | Interest: {Math.round(preset.interestRate * 1000) / 10}% | Term: {preset.termWeeks} weeks
-            </div>
-          ) : null}
+                  <div className="mt-3 grid grid-cols-3 gap-2 text-xs text-[var(--text-muted)]">
+                    <div>
+                      <div>Principal</div>
+                      <div className="text-sm font-semibold text-[var(--text)]">{principalLabel}</div>
+                    </div>
+                    <div>
+                      <div>Interest</div>
+                      <div className="text-sm font-semibold text-[var(--text)]">{interestLabel}</div>
+                    </div>
+                    <div>
+                      <div>Term</div>
+                      <div className="text-sm font-semibold text-[var(--text)]">{termLabel}</div>
+                    </div>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
         </div>
 
         <div>

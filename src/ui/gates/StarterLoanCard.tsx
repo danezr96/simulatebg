@@ -2,6 +2,7 @@
 import * as React from "react";
 import { Card } from "../components/Card";
 import Button from "../components/Button";
+import { useQueryClient } from "@tanstack/react-query";
 
 import type { WorldId, PlayerId } from "../../core/domain";
 import { holdingRepo } from "../../core/persistence/holdingRepo";
@@ -27,6 +28,7 @@ function readErrMessage(e: unknown): string {
 }
 
 export default function StarterLoanCard({ worldId, player, onDone }: Props) {
+  const qc = useQueryClient();
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const [success, setSuccess] = React.useState<string | null>(null);
@@ -53,16 +55,17 @@ export default function StarterLoanCard({ worldId, player, onDone }: Props) {
 
     setBusy(true);
     try {
-      await holdingRepo.create({
+      const created = await holdingRepo.create({
         worldId: worldId as unknown as WorldId,
         playerId: playerIdStr as unknown as PlayerId,
         name,
         baseCurrency: "EUR",
       });
 
-      setSuccess("Holding created! Refreshing…");
+      setSuccess("Holding created! Refreshing...");
+      qc.setQueryData(["holding", playerIdStr, worldId], created);
 
-      // ✅ hard & reliable: wait until the state is actually refreshed
+      // hard & reliable: wait until the state is actually refreshed
       await onDone();
     } catch (e) {
       setError(readErrMessage(e));

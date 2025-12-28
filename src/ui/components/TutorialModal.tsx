@@ -62,11 +62,8 @@ export default function TutorialModal({ open, onComplete }: Props) {
       closeOnOverlayClick={false}
       footer={
         <div className="flex items-center justify-between gap-2">
-          <Button
-            variant="ghost"
-            onClick={onComplete}
-          >
-            Skip tutorial
+          <Button variant="ghost" onClick={onComplete}>
+            Don't show again
           </Button>
           <div className="flex items-center gap-2">
             <Button

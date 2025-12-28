@@ -50,12 +50,32 @@ export default function WorldShell() {
   const [showKpis, setShowKpis] = React.useState(true);
   const [tutorialOpen, setTutorialOpen] = React.useState(false);
 
-  const tutorialKey = player?.id ? `simulatebg:tutorial:v1:${player.id}` : null;
+  const tutorialKey = player?.userId ? `simulatebg:tutorial:v1:${player.userId}` : null;
+
+  const hasSeenTutorial = React.useCallback(() => {
+    if (!tutorialKey) return false;
+    try {
+      if (localStorage.getItem(tutorialKey)) return true;
+    } catch {
+      // ignore
+    }
+    try {
+      if (sessionStorage.getItem(tutorialKey)) return true;
+    } catch {
+      // ignore
+    }
+    return false;
+  }, [tutorialKey]);
 
   const markTutorialSeen = React.useCallback(() => {
     if (tutorialKey) {
       try {
         localStorage.setItem(tutorialKey, "1");
+      } catch {
+        // ignore localStorage errors
+      }
+      try {
+        sessionStorage.setItem(tutorialKey, "1");
       } catch {
         // ignore localStorage errors
       }
@@ -66,13 +86,9 @@ export default function WorldShell() {
   React.useEffect(() => {
     if (!tutorialKey) return;
     if (!companies || companies.length === 0) return;
-    try {
-      if (localStorage.getItem(tutorialKey)) return;
-    } catch {
-      // ignore localStorage errors
-    }
+    if (hasSeenTutorial()) return;
     setTutorialOpen(true);
-  }, [tutorialKey, companies?.length, companies]);
+  }, [tutorialKey, companies?.length, companies, hasSeenTutorial]);
 
   const cash = Number(holding?.cashBalance ?? 0);
   const debt = Number(holding?.totalDebt ?? 0);
