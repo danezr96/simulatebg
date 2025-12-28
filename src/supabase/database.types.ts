@@ -402,6 +402,10 @@ export type Database = {
           name: string;
           description: string | null;
           is_active: boolean;
+          startup_cost_min_eur: number | null;
+          startup_cost_max_eur: number | null;
+          startup_cost_avg_eur: number | null;
+          startup_cost_median_eur: number | null;
           created_at: string;
         };
         Insert: {
@@ -410,6 +414,10 @@ export type Database = {
           name: string;
           description?: string | null;
           is_active?: boolean;
+          startup_cost_min_eur?: number | null;
+          startup_cost_max_eur?: number | null;
+          startup_cost_avg_eur?: number | null;
+          startup_cost_median_eur?: number | null;
           created_at?: string;
         };
         Update: {
@@ -417,6 +425,10 @@ export type Database = {
           name?: string;
           description?: string | null;
           is_active?: boolean;
+          startup_cost_min_eur?: number | null;
+          startup_cost_max_eur?: number | null;
+          startup_cost_avg_eur?: number | null;
+          startup_cost_median_eur?: number | null;
         };
         Relationships: [];
       };
@@ -429,6 +441,27 @@ export type Database = {
           name: string;
           description: string | null;
           config: Json;
+          startup_cost_eur: number | null;
+          roi_pct: number | null;
+          payback_years: number | null;
+          risk: string | null;
+          capex: string | null;
+          margin_pct_min: number | null;
+          margin_pct_max: number | null;
+          base_demand_index: number | null;
+          ticket_level: string | null;
+          competition: string | null;
+          decision_profile: string | null;
+          upgrade_profile: string | null;
+          pricing_model: string | null;
+          volume_baseline_week_min: number | null;
+          volume_baseline_week_max: number | null;
+          volume_unit: string | null;
+          fixed_costs_month_min_eur: number | null;
+          fixed_costs_month_max_eur: number | null;
+          working_capital_days: Json | null;
+          maintenance_pct_of_capex_per_year_min: number | null;
+          maintenance_pct_of_capex_per_year_max: number | null;
           created_at: string;
         };
         Insert: {
@@ -438,6 +471,27 @@ export type Database = {
           name: string;
           description?: string | null;
           config: Json;
+          startup_cost_eur?: number | null;
+          roi_pct?: number | null;
+          payback_years?: number | null;
+          risk?: string | null;
+          capex?: string | null;
+          margin_pct_min?: number | null;
+          margin_pct_max?: number | null;
+          base_demand_index?: number | null;
+          ticket_level?: string | null;
+          competition?: string | null;
+          decision_profile?: string | null;
+          upgrade_profile?: string | null;
+          pricing_model?: string | null;
+          volume_baseline_week_min?: number | null;
+          volume_baseline_week_max?: number | null;
+          volume_unit?: string | null;
+          fixed_costs_month_min_eur?: number | null;
+          fixed_costs_month_max_eur?: number | null;
+          working_capital_days?: Json | null;
+          maintenance_pct_of_capex_per_year_min?: number | null;
+          maintenance_pct_of_capex_per_year_max?: number | null;
           created_at?: string;
         };
         Update: {
@@ -446,12 +500,104 @@ export type Database = {
           name?: string;
           description?: string | null;
           config?: Json;
+          startup_cost_eur?: number | null;
+          roi_pct?: number | null;
+          payback_years?: number | null;
+          risk?: string | null;
+          capex?: string | null;
+          margin_pct_min?: number | null;
+          margin_pct_max?: number | null;
+          base_demand_index?: number | null;
+          ticket_level?: string | null;
+          competition?: string | null;
+          decision_profile?: string | null;
+          upgrade_profile?: string | null;
+          pricing_model?: string | null;
+          volume_baseline_week_min?: number | null;
+          volume_baseline_week_max?: number | null;
+          volume_unit?: string | null;
+          fixed_costs_month_min_eur?: number | null;
+          fixed_costs_month_max_eur?: number | null;
+          working_capital_days?: Json | null;
+          maintenance_pct_of_capex_per_year_min?: number | null;
+          maintenance_pct_of_capex_per_year_max?: number | null;
         };
         Relationships: [
           {
             foreignKeyName: "niches_sector_id_fkey";
             columns: ["sector_id"];
             referencedRelation: "sectors";
+            referencedColumns: ["id"];
+          }
+        ];
+      };
+
+      catalog_meta: {
+        Row: {
+          id: string;
+          generated_at: string;
+          assumptions: Json;
+          upgrade_templates: Json;
+        };
+        Insert: {
+          id?: string;
+          generated_at: string;
+          assumptions: Json;
+          upgrade_templates: Json;
+        };
+        Update: {
+          generated_at?: string;
+          assumptions?: Json;
+          upgrade_templates?: Json;
+        };
+        Relationships: [];
+      };
+
+      niche_products: {
+        Row: {
+          id: string;
+          niche_id: string;
+          sku: string;
+          name: string;
+          unit: string;
+          price_min_eur: number;
+          price_max_eur: number;
+          cogs_pct_min: number;
+          cogs_pct_max: number;
+          capacity_driver: string;
+          notes: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          niche_id: string;
+          sku: string;
+          name: string;
+          unit: string;
+          price_min_eur: number;
+          price_max_eur: number;
+          cogs_pct_min: number;
+          cogs_pct_max: number;
+          capacity_driver: string;
+          notes: string;
+          created_at?: string;
+        };
+        Update: {
+          sku?: string;
+          name?: string;
+          unit?: string;
+          price_min_eur?: number;
+          price_max_eur?: number;
+          cogs_pct_min?: number;
+          cogs_pct_max?: number;
+          capacity_driver?: string;
+          notes?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "niche_products_niche_id_fkey";
+            columns: ["niche_id"];
+            referencedRelation: "niches";
             referencedColumns: ["id"];
           }
         ];
@@ -870,6 +1016,15 @@ export type Database = {
           cost: number;
           duration_weeks: number;
           effects: Json;
+          capex_pct_min: number | null;
+          capex_pct_max: number | null;
+          opex_pct_min: number | null;
+          opex_pct_max: number | null;
+          capex_formula: string | null;
+          opex_formula: string | null;
+          delay_weeks_min: number | null;
+          delay_weeks_max: number | null;
+          risk: Json | null;
           created_at: string;
         };
         Insert: {
@@ -883,6 +1038,15 @@ export type Database = {
           cost?: number;
           duration_weeks?: number;
           effects?: Json;
+          capex_pct_min?: number | null;
+          capex_pct_max?: number | null;
+          opex_pct_min?: number | null;
+          opex_pct_max?: number | null;
+          capex_formula?: string | null;
+          opex_formula?: string | null;
+          delay_weeks_min?: number | null;
+          delay_weeks_max?: number | null;
+          risk?: Json | null;
           created_at?: string;
         };
         Update: {
@@ -894,6 +1058,15 @@ export type Database = {
           cost?: number;
           duration_weeks?: number;
           effects?: Json;
+          capex_pct_min?: number | null;
+          capex_pct_max?: number | null;
+          opex_pct_min?: number | null;
+          opex_pct_max?: number | null;
+          capex_formula?: string | null;
+          opex_formula?: string | null;
+          delay_weeks_min?: number | null;
+          delay_weeks_max?: number | null;
+          risk?: Json | null;
         };
         Relationships: [
           {

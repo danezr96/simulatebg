@@ -151,6 +151,26 @@ function safeNumber(x: unknown, fallback = 0): number {
   return Number.isFinite(n) ? n : fallback;
 }
 
+const WEEKS_PER_MONTH = 52 / 12;
+
+function pickRange(seedKey: string, min: unknown, max: unknown, fallback = 0): number {
+  const lo = safeNumber(min, NaN);
+  const hi = safeNumber(max, NaN);
+  if (!Number.isFinite(lo) || !Number.isFinite(hi)) return fallback;
+  if (lo === hi) return lo;
+  const rng = mulberry32(fnv1a32(seedKey));
+  return lo + (hi - lo) * rng();
+}
+
+function pickIntRange(seedKey: string, min: unknown, max: unknown, fallback = 0): number {
+  const lo = Math.floor(safeNumber(min, NaN));
+  const hi = Math.floor(safeNumber(max, NaN));
+  if (!Number.isFinite(lo) || !Number.isFinite(hi)) return fallback;
+  if (lo >= hi) return lo;
+  const rng = mulberry32(fnv1a32(seedKey));
+  return lo + Math.floor(rng() * (hi - lo + 1));
+}
+
 function weekIndex(year: number, week: number): number {
   return (year - 1) * 52 + week;
 }
@@ -184,6 +204,122 @@ function mergeModifiers(target: CompanyEffectModifiers, add?: CompanyEffectModif
   if (add.capacityMultiplier != null) target.capacityMultiplier = mul(target.capacityMultiplier, add.capacityMultiplier) as any;
   if (add.variableCostMultiplier != null) target.variableCostMultiplier = mul(target.variableCostMultiplier, add.variableCostMultiplier) as any;
   if (add.labourCostMultiplier != null) target.labourCostMultiplier = mul(target.labourCostMultiplier, add.labourCostMultiplier) as any;
+}
+
+function computeUpgradeCapex(upgrade: NicheUpgrade, startupCost: number, seedKey: string): number {
+  const min = (upgrade as any)?.capexPctRange?.min;
+  const max = (upgrade as any)?.capexPctRange?.max;
+  if (Number.isFinite(startupCost) && startupCost > 0 && min != null && max != null) {
+    const pct = pickRange(`${seedKey}:capex`, min, max, min);
+    return startupCost * pct;
+  }
+  return safeNumber((upgrade as any)?.cost, 0);
+}
+
+function computeUpgradeOpexWeekly(upgrade: NicheUpgrade, monthlyRevenue: number, seedKey: string): number {
+  const min = (upgrade as any)?.opexPctRange?.min;
+  const max = (upgrade as any)?.opexPctRange?.max;
+  if (!Number.isFinite(monthlyRevenue) || monthlyRevenue <= 0) return 0;
+  if (min == null || max == null) return 0;
+  const pct = pickRange(`${seedKey}:opex`, min, max, min);
+  return (monthlyRevenue * pct) / WEEKS_PER_MONTH;
+}
+
+function resolveUpgradeDelayWeeks(upgrade: NicheUpgrade, seedKey: string): number {
+  const delay = (upgrade as any)?.delayWeeks;
+  if (!delay || delay.min == null || delay.max == null) return 0;
+  return pickIntRange(`${seedKey}:delay`, delay.min, delay.max, 0);
+}
+
+function applyUpgradeEffect(params: {
+  effect: any;
+  seedKey: string;
+  state?: CompanyState | null;
+  financials?: CompanyFinancials | null;
+  modifiers: CompanyEffectModifiers;
+}): number {
+  const { effect, seedKey, state, financials, modifiers } = params;
+  const variable = String(effect?.variable ?? "");
+  if (!variable) return 0;
+  const op = String(effect?.op ?? "mul");
+  const range = Array.isArray(effect?.range) ? effect.range : [];
+  const value = pickRange(`${seedKey}:${variable}`, range[0], range[1], 0);
+  if (!Number.isFinite(value)) return 0;
+
+  const applyMultiplier = (key: keyof CompanyEffectModifiers, mult: number) => {
+    if (!Number.isFinite(mult)) return;
+    const current = Number((modifiers as any)[key] ?? 1);
+    (modifiers as any)[key] = (current * mult) as any;
+  };
+
+  const fixedCosts = safeNumber(state?.fixedCosts, 0);
+  const baseOpex = safeNumber(financials?.opex, fixedCosts);
+  const baseCapacity = safeNumber(state?.capacity, 0);
+
+  // Approximate catalog effect variables onto engine modifiers.
+  switch (variable) {
+    case "capacity": {
+      if (op === "add" && baseCapacity > 0) {
+        applyMultiplier("capacityMultiplier", (baseCapacity + value) / baseCapacity);
+      } else if (op === "mul") {
+        applyMultiplier("capacityMultiplier", value);
+      }
+      return 0;
+    }
+    case "errorRate":
+    case "unitCost":
+      applyMultiplier("variableCostMultiplier", value);
+      return 0;
+    case "incidentRate":
+    case "insuranceCost":
+    case "supportTicketsPerCustomer":
+      applyMultiplier("labourCostMultiplier", value);
+      return 0;
+    case "avgTicket":
+      applyMultiplier("priceLevelMultiplier", value);
+      return 0;
+    case "conversionRate":
+    case "baseDemand":
+      applyMultiplier("marketingMultiplier", value);
+      return 0;
+    case "repeatRate":
+      applyMultiplier("reputationMultiplier", value);
+      return 0;
+    case "churnRate": {
+      const boost = 1 + (1 - value) * 0.5;
+      applyMultiplier("reputationMultiplier", boost);
+      return 0;
+    }
+    case "downtimeRate": {
+      const boost = 1 + (1 - value) * 0.5;
+      applyMultiplier("capacityMultiplier", boost);
+      return 0;
+    }
+    case "fineChance": {
+      const boost = 1 + (1 - value) * 0.1;
+      applyMultiplier("reputationMultiplier", boost);
+      return 0;
+    }
+    case "reputation": {
+      const boost = op === "add" ? 1 + value / 100 : value;
+      applyMultiplier("reputationMultiplier", boost);
+      return 0;
+    }
+    case "fixedCosts": {
+      if (op === "mul") {
+        return fixedCosts * (value - 1);
+      }
+      return 0;
+    }
+    case "opex": {
+      if (op === "mul") {
+        return baseOpex * (value - 1);
+      }
+      return 0;
+    }
+    default:
+      return 0;
+  }
 }
 
 function nowIso(): Timestamp {
@@ -648,6 +784,7 @@ async function runWorldTickInternal(
 
   // 6) Load latest company states + decisions
   const latestStateByCompanyId: Record<string, CompanyState | null> = {};
+  const latestFinancialsByCompanyId: Record<string, CompanyFinancials | null> = {};
   const decisionsByCompanyId: Record<string, CompanyDecision[]> = {};
   const decisionsByHoldingId: Record<string, HoldingDecision[]> = {};
 
@@ -656,6 +793,7 @@ async function runWorldTickInternal(
     const cid = String(c.id);
 
     latestStateByCompanyId[cid] = await getLatestCompanyState(c.id);
+    latestFinancialsByCompanyId[cid] = await financeRepo.getLatestCompanyFinancials(c.id);
     const holdingId = String((c as any)?.holdingId ?? "");
     const isEligible = holdingId ? eligibleHoldingIds.has(holdingId) : false;
     decisionsByCompanyId[cid] = isEligible
@@ -828,7 +966,11 @@ async function runWorldTickInternal(
           owned.add(upgradeId);
           ownedUpgradeIdsByCompanyId[cid] = owned;
 
-          oneTimeOpexByCompanyId[cid] = (oneTimeOpexByCompanyId[cid] ?? 0) + safeNumber((upgrade as any)?.cost, 0);
+          const niche = nicheById[String((c as any)?.nicheId ?? "")];
+          const startupCost = safeNumber((niche as any)?.startupCostEur, safeNumber((niche as any)?.startup_cost_eur, 0));
+          const seedKey = `${cid}:${upgradeId}`;
+          const capex = computeUpgradeCapex(upgrade, startupCost, seedKey);
+          oneTimeOpexByCompanyId[cid] = (oneTimeOpexByCompanyId[cid] ?? 0) + capex;
           break;
         }
 
@@ -869,9 +1011,37 @@ async function runWorldTickInternal(
     for (const cu of companyUpgradesForCompany) {
       const upgrade = upgradeById[String(cu.upgradeId)];
       if (!upgrade) continue;
-      mergeModifiers(mods, upgrade.effects as any);
+      const seedKey = `${cid}:${String(cu.upgradeId)}`;
+      const delayWeeks = resolveUpgradeDelayWeeks(upgrade, seedKey);
+      const purchaseIdx = weekIndex(Number(cu.purchasedYear), Number(cu.purchasedWeek));
+      const effectsActive = weekIndex(yearNum, weekNum) >= purchaseIdx + delayWeeks;
+      if (effectsActive) {
+        const effectsPayload = upgrade.effects;
+        if (Array.isArray(effectsPayload)) {
+          for (const effect of effectsPayload) {
+            const extraOpexDelta = applyUpgradeEffect({
+              effect,
+              seedKey,
+              state: latestStateByCompanyId[cid],
+              financials: latestFinancialsByCompanyId[cid],
+              modifiers: mods,
+            });
+            if (extraOpexDelta) {
+              extraOpexByCompanyId[cid] = (extraOpexByCompanyId[cid] ?? 0) + extraOpexDelta;
+            }
+          }
+        } else if (effectsPayload && typeof effectsPayload === "object") {
+          mergeModifiers(mods, effectsPayload as any);
+          const recurring = safeNumber((effectsPayload as any)?.extraOpex, 0);
+          if (recurring) {
+            extraOpexByCompanyId[cid] = (extraOpexByCompanyId[cid] ?? 0) + recurring;
+          }
+        }
+      }
 
-      const recurring = safeNumber((upgrade.effects as any)?.extraOpex, 0);
+      const weeklyRevenue = safeNumber(latestFinancialsByCompanyId[cid]?.revenue, 0);
+      const monthlyRevenue = weeklyRevenue * WEEKS_PER_MONTH;
+      const recurring = computeUpgradeOpexWeekly(upgrade, monthlyRevenue, seedKey);
       if (recurring) {
         extraOpexByCompanyId[cid] = (extraOpexByCompanyId[cid] ?? 0) + recurring;
       }

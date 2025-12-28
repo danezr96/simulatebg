@@ -17,6 +17,12 @@ type CompanyUpgradeRow = Database["public"]["Tables"]["company_upgrades"]["Row"]
 type CompanyUpgradeInsert = Database["public"]["Tables"]["company_upgrades"]["Insert"];
 
 function mapNicheUpgrade(row: NicheUpgradeRow): NicheUpgrade {
+  const capexMin = (row as any).capex_pct_min;
+  const capexMax = (row as any).capex_pct_max;
+  const opexMin = (row as any).opex_pct_min;
+  const opexMax = (row as any).opex_pct_max;
+  const delayMin = (row as any).delay_weeks_min;
+  const delayMax = (row as any).delay_weeks_max;
   return {
     id: row.id as any,
     nicheId: row.niche_id as any,
@@ -27,7 +33,16 @@ function mapNicheUpgrade(row: NicheUpgradeRow): NicheUpgrade {
     tier: row.tier,
     cost: row.cost as any,
     durationWeeks: row.duration_weeks,
-    effects: (row.effects ?? {}) as any,
+    effects: (row.effects ?? []) as any,
+    capexPctRange:
+      capexMin != null && capexMax != null ? { min: capexMin, max: capexMax } : undefined,
+    opexPctRange:
+      opexMin != null && opexMax != null ? { min: opexMin, max: opexMax } : undefined,
+    capexFormula: (row as any).capex_formula ?? undefined,
+    opexFormula: (row as any).opex_formula ?? undefined,
+    delayWeeks:
+      delayMin != null && delayMax != null ? { min: delayMin, max: delayMax } : undefined,
+    risk: (row as any).risk ?? undefined,
     createdAt: row.created_at as unknown as Timestamp,
   };
 }

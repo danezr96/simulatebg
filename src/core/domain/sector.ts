@@ -96,6 +96,22 @@ export type Niche = {
   name: string;
   description?: string;
   config: NicheConfig;
+  startupCostEur?: Decimal;
+  roiPct?: Decimal;
+  paybackYears?: Decimal;
+  risk?: string;
+  capex?: CapexIntensity;
+  marginPctRange?: { min: Decimal; max: Decimal };
+  baseDemandIndex?: number;
+  ticketLevel?: TicketSize;
+  competition?: CompetitionType;
+  decisionProfile?: string;
+  upgradeProfile?: string;
+  pricingModel?: string;
+  volumeBaselineWeek?: { min: Decimal; max: Decimal; unit: string };
+  fixedCostsMonthEurRange?: { min: Decimal; max: Decimal };
+  workingCapitalDays?: { ar: number; ap: number; inventory: number };
+  maintenancePctOfCapexPerYear?: { min: Decimal; max: Decimal };
 };
 
 /* =========================

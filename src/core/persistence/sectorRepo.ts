@@ -37,6 +37,45 @@ function mapNiche(row: NicheRow): Niche {
     name: row.name,
     description: row.description ?? undefined,
     config: row.config as any, // jsonb -> domain config shape
+    startupCostEur: (row as any).startup_cost_eur ?? undefined,
+    roiPct: (row as any).roi_pct ?? undefined,
+    paybackYears: (row as any).payback_years ?? undefined,
+    risk: (row as any).risk ?? undefined,
+    capex: (row as any).capex ?? undefined,
+    marginPctRange:
+      (row as any).margin_pct_min != null && (row as any).margin_pct_max != null
+        ? { min: (row as any).margin_pct_min, max: (row as any).margin_pct_max }
+        : undefined,
+    baseDemandIndex: (row as any).base_demand_index ?? undefined,
+    ticketLevel: (row as any).ticket_level ?? undefined,
+    competition: (row as any).competition ?? undefined,
+    decisionProfile: (row as any).decision_profile ?? undefined,
+    upgradeProfile: (row as any).upgrade_profile ?? undefined,
+    pricingModel: (row as any).pricing_model ?? undefined,
+    volumeBaselineWeek:
+      (row as any).volume_baseline_week_min != null && (row as any).volume_baseline_week_max != null
+        ? {
+            min: (row as any).volume_baseline_week_min,
+            max: (row as any).volume_baseline_week_max,
+            unit: (row as any).volume_unit ?? "",
+          }
+        : undefined,
+    fixedCostsMonthEurRange:
+      (row as any).fixed_costs_month_min_eur != null && (row as any).fixed_costs_month_max_eur != null
+        ? {
+            min: (row as any).fixed_costs_month_min_eur,
+            max: (row as any).fixed_costs_month_max_eur,
+          }
+        : undefined,
+    workingCapitalDays: (row as any).working_capital_days ?? undefined,
+    maintenancePctOfCapexPerYear:
+      (row as any).maintenance_pct_of_capex_per_year_min != null &&
+      (row as any).maintenance_pct_of_capex_per_year_max != null
+        ? {
+            min: (row as any).maintenance_pct_of_capex_per_year_min,
+            max: (row as any).maintenance_pct_of_capex_per_year_max,
+          }
+        : undefined,
   };
 }
 

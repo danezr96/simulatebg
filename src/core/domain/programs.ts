@@ -12,6 +12,7 @@ import type {
   Money,
   Decimal,
   JsonObject,
+  JsonValue,
 } from "./common";
 
 export type CompanyEffectModifiers = {
@@ -52,7 +53,13 @@ export type NicheUpgrade = {
   tier: number;
   cost: Money;
   durationWeeks: number;
-  effects: CompanyEffectModifiers;
+  effects: JsonValue;
+  capexPctRange?: { min: Decimal; max: Decimal };
+  opexPctRange?: { min: Decimal; max: Decimal };
+  capexFormula?: string;
+  opexFormula?: string;
+  delayWeeks?: { min: number; max: number };
+  risk?: JsonObject;
   createdAt: Timestamp;
 };
 

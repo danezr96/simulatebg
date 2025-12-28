@@ -44,7 +44,16 @@ const formatRange = (min: number, max: number, decimals = 0) => {
     decimals > 0 ? value.toFixed(decimals) : Math.round(value).toString();
   return `${formatValue(min)} - ${formatValue(max)}`;
 };
+const formatMoneyRange = (min: number, max: number, compact = false) => {
+  const fmt = compact ? money.compact : money.format;
+  return `${fmt(min)} - ${fmt(max)}`;
+};
 const trendFromValue = (value: number) => (value > 0 ? "up" : value < 0 ? "down" : "neutral");
+const toNumber = (value: unknown, fallback = 0) => {
+  const n = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(n) ? n : fallback;
+};
+const WEEKS_PER_MONTH = 52 / 12;
 
 const TREE_LABELS: Record<string, string> = {
   EXPERIENCE: "Guest experience",
@@ -132,6 +141,46 @@ const programRemainingWeeks = (program: CompanyProgram, year: number, week: numb
   const duration = Math.max(1, Number(program.durationWeeks ?? 1));
   const remaining = start + duration - current;
   return Math.max(0, remaining);
+};
+
+const resolveUpgradeCosts = (
+  upgrade: NicheUpgrade | null | undefined,
+  startupCost: number,
+  monthlyRevenue: number
+) => {
+  const capexPctMin = toNumber((upgrade as any)?.capexPctRange?.min, NaN);
+  const capexPctMax = toNumber((upgrade as any)?.capexPctRange?.max, NaN);
+  const opexPctMin = toNumber((upgrade as any)?.opexPctRange?.min, NaN);
+  const opexPctMax = toNumber((upgrade as any)?.opexPctRange?.max, NaN);
+
+  let capexMin = 0;
+  let capexMax = 0;
+  if (Number.isFinite(startupCost) && startupCost > 0 && Number.isFinite(capexPctMin) && Number.isFinite(capexPctMax)) {
+    capexMin = startupCost * Math.min(capexPctMin, capexPctMax);
+    capexMax = startupCost * Math.max(capexPctMin, capexPctMax);
+  } else if (upgrade) {
+    const fallback = toNumber(upgrade.cost, 0);
+    capexMin = fallback;
+    capexMax = fallback;
+  }
+
+  let opexWeeklyMin = 0;
+  let opexWeeklyMax = 0;
+  if (Number.isFinite(monthlyRevenue) && Number.isFinite(opexPctMin) && Number.isFinite(opexPctMax)) {
+    const lo = Math.min(opexPctMin, opexPctMax);
+    const hi = Math.max(opexPctMin, opexPctMax);
+    opexWeeklyMin = (monthlyRevenue * lo) / WEEKS_PER_MONTH;
+    opexWeeklyMax = (monthlyRevenue * hi) / WEEKS_PER_MONTH;
+  }
+
+  return {
+    capexMin,
+    capexMax,
+    capexMid: (capexMin + capexMax) / 2,
+    opexWeeklyMin,
+    opexWeeklyMax,
+    opexWeeklyMid: (opexWeeklyMin + opexWeeklyMax) / 2,
+  };
 };
 
 type SectorMetricRow = {
@@ -291,6 +340,16 @@ export const DecisionsPanel: React.FC = () => {
     [companies]
   );
 
+  const portfolioNichesQuery = useQuery({
+    queryKey: ["portfolioNiches", portfolioNicheIds.join("|")],
+    queryFn: async () => {
+      if (!portfolioNicheIds.length) return [];
+      return Promise.all(portfolioNicheIds.map((id) => sectorRepo.getNicheById(asNicheId(id))));
+    },
+    enabled: portfolioNicheIds.length > 0,
+    staleTime: 60_000,
+  });
+
   const portfolioUpgradesQuery = useQuery({
     queryKey: ["portfolioUpgrades", portfolioNicheIds.join("|")],
     queryFn: async () => {
@@ -306,6 +365,14 @@ export const DecisionsPanel: React.FC = () => {
 
   const niche = nicheQuery.data ?? null;
   const sector = sectorQuery.data ?? null;
+  const portfolioNicheById = React.useMemo(() => {
+    const map = new Map<string, any>();
+    for (const row of portfolioNichesQuery.data ?? []) {
+      if (!row) continue;
+      map.set(String((row as any).id), row);
+    }
+    return map;
+  }, [portfolioNichesQuery.data]);
   const decisionModules = React.useMemo(() => getDecisionModulesForNiche(niche), [niche]);
   const decisionFields = React.useMemo(() => getDecisionFieldsForNiche(niche), [niche]);
   const guidance = React.useMemo(() => getDecisionGuidance(niche, sector, state), [niche, sector, state]);
@@ -367,17 +434,15 @@ export const DecisionsPanel: React.FC = () => {
     return rows;
   }, [queuedByCompany]);
   const upgradeByIdForPortfolio = React.useMemo(() => {
-    const map = new Map<string, { name: string; cost: number }>();
+    const map = new Map<string, NicheUpgrade>();
     for (const upgrade of portfolioUpgradesQuery.data ?? []) {
-      map.set(String(upgrade.id), {
-        name: String(upgrade.name ?? "Upgrade"),
-        cost: Number(upgrade.cost ?? 0),
-      });
+      map.set(String(upgrade.id), upgrade);
     }
     return map;
   }, [portfolioUpgradesQuery.data]);
   const budgetSummary = React.useMemo(() => {
-    let upgradeSpend = 0;
+    let upgradeCapexEstimate = 0;
+    let upgradeOpexWeeklyEstimate = 0;
     let unknownUpgradeCount = 0;
     let programWeeklySpend = 0;
     let programCommitSpend = 0;
@@ -388,9 +453,13 @@ export const DecisionsPanel: React.FC = () => {
       switch (payload.type) {
         case "BUY_UPGRADE": {
           const upgradeId = String(payload.upgradeId ?? "");
-          const upgrade = upgradeByIdForPortfolio.get(upgradeId);
-          if (upgrade) upgradeSpend += upgrade.cost;
-          else unknownUpgradeCount += 1;
+          const costs = resolveUpgradeCostForCompany(upgradeId, row.companyId);
+          if (costs) {
+            upgradeCapexEstimate += costs.capexMid;
+            upgradeOpexWeeklyEstimate += costs.opexWeeklyMid;
+          } else {
+            unknownUpgradeCount += 1;
+          }
           break;
         }
         case "START_PROGRAM": {
@@ -410,20 +479,38 @@ export const DecisionsPanel: React.FC = () => {
     }
 
     return {
-      upgradeSpend,
+      upgradeCapexEstimate,
+      upgradeOpexWeeklyEstimate,
       unknownUpgradeCount,
       programWeeklySpend,
       programCommitSpend,
       marketingIndexTotal,
     };
-  }, [queuedDecisionsAll, upgradeByIdForPortfolio]);
+  }, [queuedDecisionsAll, resolveUpgradeCostForCompany]);
   const companyById = React.useMemo(() => {
-    const map = new Map<string, { name: string; region?: string }>();
+    const map = new Map<string, { name: string; region?: string; nicheId?: string }>();
     for (const c of companies) {
-      map.set(String(c.id), { name: String(c.name ?? "Company"), region: String(c.region ?? "") });
+      map.set(String(c.id), {
+        name: String(c.name ?? "Company"),
+        region: String(c.region ?? ""),
+        nicheId: String((c as any).nicheId ?? ""),
+      });
     }
     return map;
   }, [companies]);
+  const resolveUpgradeCostForCompany = React.useCallback(
+    (upgradeId: string, companyId: string) => {
+      const upgrade = upgradeByIdForPortfolio.get(upgradeId);
+      if (!upgrade) return null;
+      const company = companyById.get(companyId);
+      const niche = company?.nicheId ? portfolioNicheById.get(company.nicheId) : null;
+      const startupCost = toNumber((niche as any)?.startupCostEur, 0);
+      const weeklyRevenue = toNumber(companyFinancialsMap.get(companyId)?.revenue, 0);
+      const monthlyRevenue = weeklyRevenue * WEEKS_PER_MONTH;
+      return resolveUpgradeCosts(upgrade, startupCost, monthlyRevenue);
+    },
+    [upgradeByIdForPortfolio, companyById, portfolioNicheById, companyFinancialsMap]
+  );
   const formatDecisionSummary = React.useCallback(
     (payload: any) => {
       if (!payload || typeof payload !== "object") return "Decision";
@@ -451,12 +538,25 @@ export const DecisionsPanel: React.FC = () => {
     [upgradeByIdForPortfolio]
   );
   const formatDecisionCost = React.useCallback(
-    (payload: any) => {
+    (payload: any, companyId?: string) => {
       if (!payload || typeof payload !== "object") return "--";
       switch (payload.type) {
         case "BUY_UPGRADE": {
-          const upgrade = upgradeByIdForPortfolio.get(String(payload.upgradeId ?? ""));
-          return upgrade ? money.format(upgrade.cost) : "Unknown";
+          const upgradeId = String(payload.upgradeId ?? "");
+          if (!companyId || !upgradeId) return "Unknown";
+          const costs = resolveUpgradeCostForCompany(upgradeId, companyId);
+          if (!costs) return "Unknown";
+          const capexLabel =
+            costs.capexMin === costs.capexMax
+              ? money.format(costs.capexMin)
+              : formatMoneyRange(costs.capexMin, costs.capexMax, true);
+          const opexLabel =
+            costs.opexWeeklyMin === 0 && costs.opexWeeklyMax === 0
+              ? "--"
+              : costs.opexWeeklyMin === costs.opexWeeklyMax
+              ? money.format(costs.opexWeeklyMin)
+              : formatMoneyRange(costs.opexWeeklyMin, costs.opexWeeklyMax, true);
+          return `Capex ${capexLabel} | Opex ${opexLabel}/wk`;
         }
         case "START_PROGRAM": {
           const weekly = Number(payload.weeklyCost ?? 0);
@@ -466,9 +566,11 @@ export const DecisionsPanel: React.FC = () => {
           return "--";
       }
     },
-    [upgradeByIdForPortfolio]
+    [resolveUpgradeCostForCompany]
   );
   const selectedFinancials = selectedCompanyId ? companyFinancialsMap.get(selectedCompanyId) : null;
+  const selectedStartupCost = toNumber((niche as any)?.startupCostEur, 0);
+  const selectedMonthlyRevenue = toNumber(selectedFinancials?.revenue, 0) * WEEKS_PER_MONTH;
   const selectedQueueCount = selectedCompanyId ? queueCountByCompanyId.get(selectedCompanyId) ?? 0 : 0;
 
   const programsQuery = useQuery({
@@ -542,7 +644,7 @@ export const DecisionsPanel: React.FC = () => {
   const debt = Number(holding?.totalDebt ?? 0);
   const equity = Number(holding?.totalEquity ?? 0);
   const netWorth = cash + equity - debt;
-  const totalCommitSpend = budgetSummary.upgradeSpend + budgetSummary.programCommitSpend;
+  const totalCommitSpend = budgetSummary.upgradeCapexEstimate + budgetSummary.programCommitSpend;
   const budgetOverCash = totalCommitSpend > cash;
   const remainingCash = cash - totalCommitSpend;
   const currentLeversEmpty = !state || decisionFields.length === 0;
@@ -1017,13 +1119,21 @@ export const DecisionsPanel: React.FC = () => {
                   <div className="mt-1 text-base font-semibold">{queuedDecisionsAll.length}</div>
                 </div>
                 <div className="rounded-2xl border border-[var(--border)] bg-[var(--card-2)] px-3 py-2">
-                  <div className="text-xs text-[var(--text-muted)]">Upgrade spend</div>
-                  <div className="mt-1 text-base font-semibold">{money.format(budgetSummary.upgradeSpend)}</div>
+                  <div className="text-xs text-[var(--text-muted)]">Upgrade capex (est.)</div>
+                  <div className="mt-1 text-base font-semibold">
+                    {money.format(budgetSummary.upgradeCapexEstimate)}
+                  </div>
                 </div>
                 <div className="rounded-2xl border border-[var(--border)] bg-[var(--card-2)] px-3 py-2">
                   <div className="text-xs text-[var(--text-muted)]">Program weekly</div>
                   <div className="mt-1 text-base font-semibold">
                     {money.format(budgetSummary.programWeeklySpend)}
+                  </div>
+                </div>
+                <div className="rounded-2xl border border-[var(--border)] bg-[var(--card-2)] px-3 py-2">
+                  <div className="text-xs text-[var(--text-muted)]">Upgrade opex / wk (est.)</div>
+                  <div className="mt-1 text-base font-semibold">
+                    {money.format(budgetSummary.upgradeOpexWeeklyEstimate)}
                   </div>
                 </div>
               </div>
@@ -1305,7 +1415,9 @@ export const DecisionsPanel: React.FC = () => {
                       {queued.map((q, idx) => (
                         <TR key={`${q.type}-${idx}`}>
                           <TD className="font-semibold">{formatDecisionSummary(q.payload)}</TD>
-                          <TD className="text-xs text-[var(--text-muted)]">{formatDecisionCost(q.payload)}</TD>
+                          <TD className="text-xs text-[var(--text-muted)]">
+                            {formatDecisionCost(q.payload, String(activeCompany.id))}
+                          </TD>
                           <TD className="text-right text-xs text-[var(--text-muted)]">
                             {q.createdAt ? new Date(q.createdAt).toLocaleString() : "--"}
                           </TD>
@@ -1343,9 +1455,15 @@ export const DecisionsPanel: React.FC = () => {
             <div className="mt-4 flex flex-wrap gap-2">
               <KPIChip label="Cash" value={money.format(cash)} trend="neutral" subtle />
               <KPIChip
-                label="Upgrade spend"
-                value={money.format(budgetSummary.upgradeSpend)}
-                trend={budgetSummary.upgradeSpend > 0 ? "down" : "neutral"}
+                label="Upgrade capex (est.)"
+                value={money.format(budgetSummary.upgradeCapexEstimate)}
+                trend={budgetSummary.upgradeCapexEstimate > 0 ? "down" : "neutral"}
+                subtle
+              />
+              <KPIChip
+                label="Upgrade opex / wk (est.)"
+                value={money.format(budgetSummary.upgradeOpexWeeklyEstimate)}
+                trend={budgetSummary.upgradeOpexWeeklyEstimate > 0 ? "down" : "neutral"}
                 subtle
               />
               <KPIChip
@@ -1393,7 +1511,9 @@ export const DecisionsPanel: React.FC = () => {
                   <TR key={`${companyId}-${idx}`}>
                     <TD className="font-semibold">{companyLabel}</TD>
                     <TD>{formatDecisionSummary(payload)}</TD>
-                    <TD className="text-xs text-[var(--text-muted)]">{formatDecisionCost(payload)}</TD>
+                    <TD className="text-xs text-[var(--text-muted)]">
+                      {formatDecisionCost(payload, companyId)}
+                    </TD>
                     <TD className="text-right text-xs text-[var(--text-muted)]">
                       {createdAt ? new Date(createdAt).toLocaleString() : "--"}
                     </TD>
@@ -1680,6 +1800,21 @@ export const DecisionsPanel: React.FC = () => {
                       <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-3">
                         {upgrades.map((u) => {
                           const upgradeId = String(u.id);
+                          const cost = resolveUpgradeCosts(u, selectedStartupCost, selectedMonthlyRevenue);
+                          const capexLabel =
+                            cost.capexMin === cost.capexMax
+                              ? money.format(cost.capexMin)
+                              : formatMoneyRange(cost.capexMin, cost.capexMax, true);
+                          const opexLabel =
+                            cost.opexWeeklyMin === 0 && cost.opexWeeklyMax === 0
+                              ? "--"
+                              : cost.opexWeeklyMin === cost.opexWeeklyMax
+                              ? money.format(cost.opexWeeklyMin)
+                              : formatMoneyRange(cost.opexWeeklyMin, cost.opexWeeklyMax, true);
+                          const delay =
+                            (u as any).delayWeeks?.min != null && (u as any).delayWeeks?.max != null
+                              ? `${(u as any).delayWeeks.min}-${(u as any).delayWeeks.max} w`
+                              : null;
                           const owned = ownedUpgradeIds.has(upgradeId);
                           const queued = selectedUpgradeIds.includes(upgradeId);
                           const isUnlocked = Number(u.tier ?? 0) === 1 || ownedTier >= Number(u.tier ?? 1) - 1;
@@ -1720,7 +1855,7 @@ export const DecisionsPanel: React.FC = () => {
 
                               <div className="flex items-center justify-between gap-2">
                                 <div className="text-xs text-[var(--text-muted)]">
-                                  Cost {money.format(Number(u.cost ?? 0))}
+                                  Capex {capexLabel} | Opex {opexLabel}/wk{delay ? ` | Delay ${delay}` : ""}
                                 </div>
                                 <Button
                                   variant={queued ? "primary" : "secondary"}

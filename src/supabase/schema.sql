@@ -204,8 +204,18 @@ create table if not exists public.sectors (
   name text not null,
   description text,
   is_active boolean not null default true,
+  startup_cost_min_eur numeric(14,2),
+  startup_cost_max_eur numeric(14,2),
+  startup_cost_avg_eur numeric(14,2),
+  startup_cost_median_eur numeric(14,2),
   created_at timestamptz not null default now()
 );
+
+alter table if exists public.sectors
+  add column if not exists startup_cost_min_eur numeric(14,2),
+  add column if not exists startup_cost_max_eur numeric(14,2),
+  add column if not exists startup_cost_avg_eur numeric(14,2),
+  add column if not exists startup_cost_median_eur numeric(14,2);
 
 create table if not exists public.niches (
   id uuid primary key default gen_random_uuid(),
@@ -214,11 +224,77 @@ create table if not exists public.niches (
   name text not null,
   description text,
   config jsonb not null,
+  startup_cost_eur numeric(14,2),
+  roi_pct numeric(5,2),
+  payback_years numeric(6,2),
+  risk text,
+  capex text,
+  margin_pct_min numeric(5,2),
+  margin_pct_max numeric(5,2),
+  base_demand_index int,
+  ticket_level text,
+  competition text,
+  decision_profile text,
+  upgrade_profile text,
+  pricing_model text,
+  volume_baseline_week_min numeric(14,2),
+  volume_baseline_week_max numeric(14,2),
+  volume_unit text,
+  fixed_costs_month_min_eur numeric(14,2),
+  fixed_costs_month_max_eur numeric(14,2),
+  working_capital_days jsonb,
+  maintenance_pct_of_capex_per_year_min numeric(5,2),
+  maintenance_pct_of_capex_per_year_max numeric(5,2),
   created_at timestamptz not null default now()
 );
 
+alter table if exists public.niches
+  add column if not exists startup_cost_eur numeric(14,2),
+  add column if not exists roi_pct numeric(5,2),
+  add column if not exists payback_years numeric(6,2),
+  add column if not exists risk text,
+  add column if not exists capex text,
+  add column if not exists margin_pct_min numeric(5,2),
+  add column if not exists margin_pct_max numeric(5,2),
+  add column if not exists base_demand_index int,
+  add column if not exists ticket_level text,
+  add column if not exists competition text,
+  add column if not exists decision_profile text,
+  add column if not exists upgrade_profile text,
+  add column if not exists pricing_model text,
+  add column if not exists volume_baseline_week_min numeric(14,2),
+  add column if not exists volume_baseline_week_max numeric(14,2),
+  add column if not exists volume_unit text,
+  add column if not exists fixed_costs_month_min_eur numeric(14,2),
+  add column if not exists fixed_costs_month_max_eur numeric(14,2),
+  add column if not exists working_capital_days jsonb,
+  add column if not exists maintenance_pct_of_capex_per_year_min numeric(5,2),
+  add column if not exists maintenance_pct_of_capex_per_year_max numeric(5,2);
+
 create unique index if not exists uq_niches_sector_code
 on public.niches(sector_id, code);
+
+create table if not exists public.catalog_meta (
+  id uuid primary key default gen_random_uuid(),
+  generated_at timestamptz not null,
+  assumptions jsonb not null,
+  upgrade_templates jsonb not null
+);
+
+create table if not exists public.niche_products (
+  id uuid primary key default gen_random_uuid(),
+  niche_id uuid not null references public.niches(id) on delete cascade,
+  sku text not null,
+  name text not null,
+  unit text not null,
+  price_min_eur numeric(14,2) not null,
+  price_max_eur numeric(14,2) not null,
+  cogs_pct_min numeric(5,2) not null,
+  cogs_pct_max numeric(5,2) not null,
+  capacity_driver text not null,
+  notes text not null,
+  created_at timestamptz not null default now()
+);
 
 create table if not exists public.world_sector_state (
   id uuid primary key default gen_random_uuid(),
@@ -369,8 +445,28 @@ create table if not exists public.niche_upgrades (
   cost numeric(18,2) not null default 0,
   duration_weeks int not null default 0,
   effects jsonb not null default '{}'::jsonb,
+  capex_pct_min numeric(6,4),
+  capex_pct_max numeric(6,4),
+  opex_pct_min numeric(6,4),
+  opex_pct_max numeric(6,4),
+  capex_formula text,
+  opex_formula text,
+  delay_weeks_min int,
+  delay_weeks_max int,
+  risk jsonb,
   created_at timestamptz not null default now()
 );
+
+alter table if exists public.niche_upgrades
+  add column if not exists capex_pct_min numeric(6,4),
+  add column if not exists capex_pct_max numeric(6,4),
+  add column if not exists opex_pct_min numeric(6,4),
+  add column if not exists opex_pct_max numeric(6,4),
+  add column if not exists capex_formula text,
+  add column if not exists opex_formula text,
+  add column if not exists delay_weeks_min int,
+  add column if not exists delay_weeks_max int,
+  add column if not exists risk jsonb;
 
 create unique index if not exists uq_niche_upgrades_code
 on public.niche_upgrades(niche_id, code);

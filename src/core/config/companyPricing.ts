@@ -78,14 +78,35 @@ function getRiskLabel(score: number): RiskLabel {
 export function getStartupPricing(sector: Sector, niche: Niche): StartupPricing {
   const config = niche.config ?? ({} as any);
 
-  const baseDemand = Math.max(1, Number(config.baseDemandLevel ?? 1));
-  const ticketPrice = TICKET_PRICE_BASE[config.ticketSize ?? "MEDIUM"] ?? TICKET_PRICE_BASE.MEDIUM;
-  const annualRevenue = baseDemand * ticketPrice * 52;
+  const baseDemand = Math.max(1, Number(niche.baseDemandIndex ?? config.baseDemandLevel ?? 1));
+  const ticketLevel = niche.ticketLevel ?? config.ticketSize ?? "MEDIUM";
+  const ticketPrice = TICKET_PRICE_BASE[ticketLevel] ?? TICKET_PRICE_BASE.MEDIUM;
 
-  const marginMin = clamp(Number(config.marginRange?.min ?? 0.05), 0.02, 0.6);
-  const marginMax = clamp(Number(config.marginRange?.max ?? 0.18), marginMin, 0.6);
+  const marginMinRaw = niche.marginPctRange?.min ?? config.marginRange?.min ?? 0.05;
+  const marginMaxRaw = niche.marginPctRange?.max ?? config.marginRange?.max ?? 0.18;
+  const marginMin = clamp(Number(marginMinRaw) > 1 ? Number(marginMinRaw) / 100 : Number(marginMinRaw), 0.02, 0.6);
+  const marginMax = clamp(
+    Number(marginMaxRaw) > 1 ? Number(marginMaxRaw) / 100 : Number(marginMaxRaw),
+    marginMin,
+    0.6
+  );
   const marginMid = (marginMin + marginMax) / 2;
-  const annualProfit = annualRevenue * marginMid;
+
+  const roiPct = niche.roiPct != null ? Number(niche.roiPct) / 100 : null;
+  const paybackYearsProvided = niche.paybackYears != null ? Number(niche.paybackYears) : null;
+
+  let annualProfit = baseDemand * ticketPrice * 52 * marginMid;
+  if (roiPct != null && niche.startupCostEur != null) {
+    annualProfit = Number(niche.startupCostEur) * roiPct;
+  } else if (paybackYearsProvided && niche.startupCostEur != null) {
+    annualProfit = Number(niche.startupCostEur) / Math.max(0.1, paybackYearsProvided);
+  }
+
+  let annualRevenue = baseDemand * ticketPrice * 52;
+  if (annualProfit > 0 && marginMid > 0) {
+    annualRevenue = annualProfit / marginMid;
+  }
+
   const annualProfitRange = {
     min: annualRevenue * marginMin,
     max: annualRevenue * marginMax,
@@ -106,13 +127,15 @@ export function getStartupPricing(sector: Sector, niche: Niche): StartupPricing 
   const riskMultiplier = 1 + regulation * 0.25 + labour * 0.12 + volatility * 0.1;
 
   const rawCost = baseCost * sectorMultiplier * competitionMultiplier * riskMultiplier;
-  const startupCost = roundMoney(clamp(rawCost, STARTUP_COST_MIN, STARTUP_COST_MAX));
+  const computedStartupCost = roundMoney(clamp(rawCost, STARTUP_COST_MIN, STARTUP_COST_MAX));
+  const startupCost = Number(niche.startupCostEur ?? computedStartupCost);
 
-  const roi = annualProfit > 0 ? annualProfit / startupCost : 0;
-  const paybackYears = annualProfit > 0 ? startupCost / annualProfit : 99;
+  const roi = roiPct != null ? roiPct : annualProfit > 0 ? annualProfit / startupCost : 0;
+  const paybackYears = paybackYearsProvided ?? (annualProfit > 0 ? startupCost / annualProfit : 99);
 
   const elasticity = clamp(Number(config.priceElasticity ?? 0), 0, 1.5) / 1.5;
   const riskScore = clamp(volatility * 0.45 + regulation * 0.35 + elasticity * 0.2, 0, 1);
+  const riskLabel = (niche.risk as RiskLabel | undefined) ?? getRiskLabel(riskScore);
 
   return {
     startupCost,
@@ -124,6 +147,6 @@ export function getStartupPricing(sector: Sector, niche: Niche): StartupPricing 
     paybackYears,
     ticketPrice,
     riskScore,
-    riskLabel: getRiskLabel(riskScore),
+    riskLabel,
   };
 }

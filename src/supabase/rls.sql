@@ -17,6 +17,8 @@ begin
         'world_rounds',
         'sectors',
         'niches',
+        'catalog_meta',
+        'niche_products',
         'world_sector_state',
         'bot_profiles',
         'skills',
@@ -114,6 +116,8 @@ alter table world_rounds enable row level security;
 
 alter table sectors enable row level security;
 alter table niches enable row level security;
+alter table catalog_meta enable row level security;
+alter table niche_products enable row level security;
 alter table world_sector_state enable row level security;
 
 alter table bot_profiles enable row level security;
@@ -150,6 +154,16 @@ using (true);
 
 create policy "read_niches"
 on niches for select
+to authenticated
+using (true);
+
+create policy "read_catalog_meta"
+on catalog_meta for select
+to authenticated
+using (true);
+
+create policy "read_niche_products"
+on niche_products for select
 to authenticated
 using (true);
 

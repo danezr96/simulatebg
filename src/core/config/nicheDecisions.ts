@@ -257,7 +257,7 @@ export const decisionProfiles: Record<string, DecisionModule[]> = {
 };
 
 function resolveProfileKey(niche: Niche | null | undefined): string {
-  const explicit = String((niche as any)?.config?.decisionProfile ?? "").trim();
+  const explicit = String((niche as any)?.decisionProfile ?? (niche as any)?.config?.decisionProfile ?? "").trim();
   if (explicit) return explicit;
 
   const nicheCode = String(niche?.code ?? "");
