@@ -70,6 +70,8 @@ export const ProfilePanel: React.FC = () => {
     (holding?.cashBalance ?? 0) + (holding?.totalEquity ?? 0) - (holding?.totalDebt ?? 0);
 
   const repOverall = player ? getOverallReputationLevel(player) : null;
+  const avatarUrl = player?.avatarUrl ?? "";
+  const avatarInitial = (player?.name ?? "?").slice(0, 1).toUpperCase();
 
   return (
     <motion.div
@@ -116,12 +118,40 @@ export const ProfilePanel: React.FC = () => {
             <div className="text-sm font-semibold text-[var(--text)]">Player</div>
           </div>
 
-          <div className="mt-4">
-            <div className="text-base font-semibold">{player?.name ?? "—"}</div>
-            <div className="mt-1 text-xs text-[var(--text-muted)]">
-              Prestige:{" "}
+          <div className="mt-4 flex items-center gap-3">
+            <div className="h-12 w-12 rounded-full border border-[var(--border)] bg-[var(--card-2)] overflow-hidden flex items-center justify-center text-sm font-semibold text-[var(--text)]">
+              {avatarUrl ? (
+                <img src={avatarUrl} alt="Player avatar" className="h-full w-full object-cover" />
+              ) : (
+                <span>{avatarInitial}</span>
+              )}
+            </div>
+            <div className="min-w-0">
+              <div className="text-base font-semibold">{player?.name ?? "—"}</div>
+              <div className="mt-1 text-xs text-[var(--text-muted)]">
+                Prestige:{" "}
+                <span className="font-medium text-[var(--text)]">
+                  {player?.prestigeLevel ?? 0}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          <div className="mt-3 text-sm text-[var(--text-muted)]">
+            {player?.bio ?? "No bio yet."}
+          </div>
+
+          <div className="mt-3 space-y-1 text-xs text-[var(--text-muted)]">
+            <div>
+              Play style:{" "}
               <span className="font-medium text-[var(--text)]">
-                {player?.prestigeLevel ?? 0}
+                {player?.playStyle ?? "—"}
+              </span>
+            </div>
+            <div>
+              Focus area:{" "}
+              <span className="font-medium text-[var(--text)]">
+                {player?.focusArea ?? "—"}
               </span>
             </div>
           </div>

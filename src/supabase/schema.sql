@@ -82,6 +82,9 @@ create table if not exists public.players (
   user_id uuid not null,
   name text not null,
   avatar_url text,
+  bio text,
+  play_style text,
+  focus_area text,
   base_currency text not null default 'EUR',
 
   brand_rep_level int not null default 1,
@@ -94,6 +97,13 @@ create table if not exists public.players (
 );
 
 create index if not exists idx_players_user on public.players(user_id);
+
+alter table if exists public.players
+  add column if not exists bio text;
+alter table if exists public.players
+  add column if not exists play_style text;
+alter table if exists public.players
+  add column if not exists focus_area text;
 
 create table if not exists public.player_world_presence (
   player_id uuid not null references public.players(id) on delete cascade,

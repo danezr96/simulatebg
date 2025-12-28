@@ -19,19 +19,32 @@ export const playerService = {
     userId: string;
     name: string;
     avatarUrl?: string;
+    bio?: string;
+    playStyle?: string;
+    focusArea?: string;
     baseCurrency?: string;
   }): Promise<Player> {
     return playerRepo.create({
       userId: input.userId,
       name: input.name,
       avatarUrl: input.avatarUrl,
+      bio: input.bio,
+      playStyle: input.playStyle,
+      focusArea: input.focusArea,
       baseCurrency: input.baseCurrency ?? "EUR",
     });
   },
 
   async updateProfile(
     playerId: PlayerId,
-    patch: { name?: string; avatarUrl?: string | null; baseCurrency?: string }
+    patch: {
+      name?: string;
+      avatarUrl?: string | null;
+      bio?: string | null;
+      playStyle?: string | null;
+      focusArea?: string | null;
+      baseCurrency?: string;
+    }
   ): Promise<Player> {
     return playerRepo.updateProfile(playerId, patch);
   },

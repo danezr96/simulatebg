@@ -39,7 +39,7 @@ export function useHolding() {
 
   const refresh = useMutation({
     mutationFn: async () => {
-      await qc.invalidateQueries({ queryKey: QK.holding(playerId, worldId) });
+      await qc.refetchQueries({ queryKey: QK.holding(playerId, worldId), exact: true });
     },
   });
 

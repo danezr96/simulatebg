@@ -10,10 +10,12 @@ import { MOTION } from "../../config/motion";
 import Card from "../components/Card";
 import Button from "../components/Button";
 import KPIChip from "../components/KPIChip";
+import TutorialModal from "../components/TutorialModal";
 
 import { useWorld } from "../hooks/useWorld";
 import { useHolding } from "../hooks/useHolding";
 import { useCompanies } from "../hooks/useCompany";
+import { useCurrentPlayer } from "../hooks/useCurrentPlayer";
 
 import { formatMoney } from "../../utils/money";
 
@@ -41,10 +43,36 @@ const tabs: Tab[] = [
 
 export default function WorldShell() {
   const { world, economy, isSyncing } = useWorld() as any;
+  const { player } = useCurrentPlayer();
   const { holding } = useHolding();
   const { companies } = useCompanies();
 
   const [showKpis, setShowKpis] = React.useState(true);
+  const [tutorialOpen, setTutorialOpen] = React.useState(false);
+
+  const tutorialKey = player?.id ? `simulatebg:tutorial:v1:${player.id}` : null;
+
+  const markTutorialSeen = React.useCallback(() => {
+    if (tutorialKey) {
+      try {
+        localStorage.setItem(tutorialKey, "1");
+      } catch {
+        // ignore localStorage errors
+      }
+    }
+    setTutorialOpen(false);
+  }, [tutorialKey]);
+
+  React.useEffect(() => {
+    if (!tutorialKey) return;
+    if (!companies || companies.length === 0) return;
+    try {
+      if (localStorage.getItem(tutorialKey)) return;
+    } catch {
+      // ignore localStorage errors
+    }
+    setTutorialOpen(true);
+  }, [tutorialKey, companies?.length, companies]);
 
   const cash = Number(holding?.cashBalance ?? 0);
   const debt = Number(holding?.totalDebt ?? 0);
@@ -67,6 +95,7 @@ export default function WorldShell() {
 
   return (
     <div className="min-h-[calc(100vh-72px)]">
+      <TutorialModal open={tutorialOpen} onComplete={markTutorialSeen} />
       {/* Header */}
       <div className="mb-4">
         <Card className="rounded-3xl px-4 py-4">

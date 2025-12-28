@@ -141,6 +141,9 @@ export type Database = {
           user_id: string;
           name: string;
           avatar_url: string | null;
+          bio: string | null;
+          play_style: string | null;
+          focus_area: string | null;
           base_currency: string;
 
           brand_rep_level: number;
@@ -156,6 +159,9 @@ export type Database = {
           user_id: string;
           name: string;
           avatar_url?: string | null;
+          bio?: string | null;
+          play_style?: string | null;
+          focus_area?: string | null;
           base_currency?: string;
 
           brand_rep_level?: number;
@@ -169,6 +175,9 @@ export type Database = {
         Update: {
           name?: string;
           avatar_url?: string | null;
+          bio?: string | null;
+          play_style?: string | null;
+          focus_area?: string | null;
           base_currency?: string;
 
           brand_rep_level?: number;

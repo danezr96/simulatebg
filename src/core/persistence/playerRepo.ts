@@ -26,6 +26,9 @@ function mapRowToPlayer(row: PlayerRow): Player {
     userId: row.user_id,
     name: row.name,
     avatarUrl: row.avatar_url ?? undefined,
+    bio: row.bio ?? undefined,
+    playStyle: row.play_style ?? undefined,
+    focusArea: row.focus_area ?? undefined,
     baseCurrency: row.base_currency as Player["baseCurrency"],
 
     brandRepLevel: row.brand_rep_level ?? 1,
@@ -68,12 +71,18 @@ export const playerRepo = {
     userId: string;
     name: string;
     avatarUrl?: string;
+    bio?: string;
+    playStyle?: string;
+    focusArea?: string;
     baseCurrency?: string; // default in DB is EUR
   }): Promise<Player> {
     const payload: PlayerInsert = {
       user_id: input.userId,
       name: input.name,
       avatar_url: input.avatarUrl ?? null,
+      bio: input.bio ?? null,
+      play_style: input.playStyle ?? null,
+      focus_area: input.focusArea ?? null,
       base_currency: input.baseCurrency ?? "EUR",
       // brand_rep_level/xp, credit_rep_level/xp, prestige_level have DB defaults
     };
@@ -93,12 +102,18 @@ export const playerRepo = {
     patch: {
       name?: string;
       avatarUrl?: string | null;
+      bio?: string | null;
+      playStyle?: string | null;
+      focusArea?: string | null;
       baseCurrency?: string;
     }
   ): Promise<Player> {
     const payload: PlayerUpdate = {};
     if (patch.name !== undefined) payload.name = patch.name;
     if (patch.avatarUrl !== undefined) payload.avatar_url = patch.avatarUrl;
+    if (patch.bio !== undefined) payload.bio = patch.bio;
+    if (patch.playStyle !== undefined) payload.play_style = patch.playStyle;
+    if (patch.focusArea !== undefined) payload.focus_area = patch.focusArea;
     if (patch.baseCurrency !== undefined) payload.base_currency = patch.baseCurrency;
 
     const { data, error } = await supabase

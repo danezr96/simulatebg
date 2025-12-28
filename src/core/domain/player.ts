@@ -12,6 +12,9 @@ export type Player = {
 
   name: string;
   avatarUrl?: string;
+  bio?: string;
+  playStyle?: string;
+  focusArea?: string;
 
   baseCurrency: CurrencyCode;
 

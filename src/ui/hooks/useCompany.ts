@@ -32,7 +32,7 @@ export function useCompanies() {
 
   const refresh = useMutation({
     mutationFn: async () => {
-      await qc.invalidateQueries({ queryKey: QK.companies(holdingId) });
+      await qc.refetchQueries({ queryKey: QK.companies(holdingId), exact: true });
     },
   });
 
@@ -89,9 +89,9 @@ export function useCompany(companyId?: string) {
 
   const refresh = useMutation({
     mutationFn: async () => {
-      await qc.invalidateQueries({ queryKey: QK.company(companyId) });
-      await qc.invalidateQueries({ queryKey: QK.state(companyId) });
-      await qc.invalidateQueries({ queryKey: QK.financials(companyId) });
+      await qc.refetchQueries({ queryKey: QK.company(companyId), exact: true });
+      await qc.refetchQueries({ queryKey: QK.state(companyId), exact: true });
+      await qc.refetchQueries({ queryKey: QK.financials(companyId), exact: true });
     },
   });
 
