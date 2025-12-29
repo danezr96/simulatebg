@@ -21,6 +21,7 @@ type SectorMetricRow = {
   currentDemand: number;
   trendFactor: number;
   volatility: number;
+  lastRoundMetrics?: any;
 };
 
 function formatMoney(n: number): string {
@@ -60,7 +61,9 @@ export const MarketPanel: React.FC = () => {
 
   const outlookRows = React.useMemo(() => {
     const rows = sectorRows.map((row) => {
-      const delta = Number(row.trendFactor ?? 1) - 1;
+      const metrics = row.lastRoundMetrics as any;
+      const demandDeltaPct = Number(metrics?.demandDeltaPct ?? metrics?.demand_delta_pct ?? NaN);
+      const delta = Number.isFinite(demandDeltaPct) ? demandDeltaPct : Number(row.trendFactor ?? 1) - 1;
       const direction = delta >= 0.03 ? "Tailwind" : delta <= -0.03 ? "Headwind" : "Stable";
       const volatility = Number(row.volatility ?? 0);
       const volatilityLabel = volatility >= 0.12 ? "High" : volatility >= 0.06 ? "Medium" : "Low";
@@ -104,6 +107,7 @@ export const MarketPanel: React.FC = () => {
         currentDemand: Number(ss.currentDemand ?? ss.current_demand ?? 0),
         trendFactor: Number(ss.trendFactor ?? ss.trend_factor ?? 1),
         volatility: Number(ss.volatility ?? 0),
+        lastRoundMetrics: ss.lastRoundMetrics ?? ss.last_round_metrics ?? {},
       }));
 
       setSectorRows(rows);

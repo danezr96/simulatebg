@@ -3,7 +3,7 @@ import * as React from "react";
 import { useSearchParams } from "react-router-dom";
 import { motion } from "framer-motion";
 import { useQuery } from "@tanstack/react-query";
-import { Save, RefreshCw, SlidersHorizontal } from "lucide-react";
+import { Save, RefreshCw, SlidersHorizontal, DollarSign, Megaphone, Users, Factory, Sparkles } from "lucide-react";
 
 import { MOTION } from "../../config/motion";
 
@@ -23,6 +23,7 @@ import { upgradeService } from "../../core/services/upgradeService";
 import { companyService } from "../../core/services/companyService";
 import { eventRepo } from "../../core/persistence/eventRepo";
 import { sectorRepo } from "../../core/persistence/sectorRepo";
+import { getStartupPricing } from "../../core/config/companyPricing";
 import { getDecisionModulesForNiche } from "../../core/config/nicheDecisions";
 import { getDecisionFieldsForNiche } from "../../core/config/nicheDecisionFields";
 import { getDecisionGuidance } from "../../core/config/decisionGuidance";
@@ -54,6 +55,18 @@ const toNumber = (value: unknown, fallback = 0) => {
   return Number.isFinite(n) ? n : fallback;
 };
 const WEEKS_PER_MONTH = 52 / 12;
+const normalizeRatio = (value: number, min: number, max: number) => {
+  if (!Number.isFinite(value) || !Number.isFinite(min) || !Number.isFinite(max) || max === min) return 0;
+  return clamp((value - min) / (max - min), 0, 1);
+};
+
+const FIELD_ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
+  PRICE: DollarSign,
+  MARKETING: Megaphone,
+  STAFFING: Users,
+  CAPACITY: Factory,
+  QUALITY: Sparkles,
+};
 
 const TREE_LABELS: Record<string, string> = {
   EXPERIENCE: "Guest experience",
@@ -189,6 +202,7 @@ type SectorMetricRow = {
   currentDemand: number;
   trendFactor: number;
   volatility: number;
+  lastRoundMetrics?: any;
 };
 
 const getPreviousWeek = (year: number, week: number) => {
@@ -207,7 +221,9 @@ const getNextWeek = (year: number, week: number) => {
 
 const buildOutlookRows = (rows: SectorMetricRow[]) => {
   const enriched = rows.map((row) => {
-    const delta = Number(row.trendFactor ?? 1) - 1;
+    const metrics = row.lastRoundMetrics as any;
+    const demandDeltaPct = Number(metrics?.demandDeltaPct ?? metrics?.demand_delta_pct ?? NaN);
+    const delta = Number.isFinite(demandDeltaPct) ? demandDeltaPct : Number(row.trendFactor ?? 1) - 1;
     const direction = delta >= 0.03 ? "Tailwind" : delta <= -0.03 ? "Headwind" : "Stable";
     const volatility = Number(row.volatility ?? 0);
     const volatilityLabel = volatility >= 0.12 ? "High" : volatility >= 0.06 ? "Medium" : "Low";
@@ -289,6 +305,7 @@ export const DecisionsPanel: React.FC = () => {
         currentDemand: Number(ss.currentDemand ?? ss.current_demand ?? 0),
         trendFactor: Number(ss.trendFactor ?? ss.trend_factor ?? 1),
         volatility: Number(ss.volatility ?? 0),
+        lastRoundMetrics: ss.lastRoundMetrics ?? ss.last_round_metrics ?? {},
       }));
 
       return {
@@ -340,6 +357,12 @@ export const DecisionsPanel: React.FC = () => {
     [companies]
   );
 
+  const portfolioSectorsQuery = useQuery({
+    queryKey: ["portfolioSectors"],
+    queryFn: async () => sectorRepo.listSectors(),
+    staleTime: 60_000,
+  });
+
   const portfolioNichesQuery = useQuery({
     queryKey: ["portfolioNiches", portfolioNicheIds.join("|")],
     queryFn: async () => {
@@ -373,6 +396,14 @@ export const DecisionsPanel: React.FC = () => {
     }
     return map;
   }, [portfolioNichesQuery.data]);
+  const portfolioSectorById = React.useMemo(() => {
+    const map = new Map<string, any>();
+    for (const row of portfolioSectorsQuery.data ?? []) {
+      if (!row) continue;
+      map.set(String((row as any).id), row);
+    }
+    return map;
+  }, [portfolioSectorsQuery.data]);
   const decisionModules = React.useMemo(() => getDecisionModulesForNiche(niche), [niche]);
   const decisionFields = React.useMemo(() => getDecisionFieldsForNiche(niche), [niche]);
   const guidance = React.useMemo(() => getDecisionGuidance(niche, sector, state), [niche, sector, state]);
@@ -440,6 +471,35 @@ export const DecisionsPanel: React.FC = () => {
     }
     return map;
   }, [portfolioUpgradesQuery.data]);
+  const companyById = React.useMemo(() => {
+    const map = new Map<string, { name: string; region?: string; nicheId?: string; sectorId?: string }>();
+    for (const c of companies) {
+      map.set(String(c.id), {
+        name: String(c.name ?? "Company"),
+        region: String(c.region ?? ""),
+        nicheId: String((c as any).nicheId ?? ""),
+        sectorId: String((c as any).sectorId ?? ""),
+      });
+    }
+    return map;
+  }, [companies]);
+  const resolveUpgradeCostForCompany = React.useCallback(
+    (upgradeId: string, companyId: string) => {
+      const upgrade = upgradeByIdForPortfolio.get(upgradeId);
+      if (!upgrade) return null;
+      const company = companyById.get(companyId);
+      const niche = company?.nicheId ? portfolioNicheById.get(company.nicheId) : null;
+      const sector = company?.sectorId ? portfolioSectorById.get(company.sectorId) : null;
+      const pricing = niche && sector ? getStartupPricing(sector, niche) : null;
+      const startupCost = toNumber((niche as any)?.startupCostEur, pricing?.startupCost ?? 0);
+      const weeklyRevenue = toNumber(companyFinancialsMap.get(companyId)?.revenue, 0);
+      const monthlyRevenue = weeklyRevenue
+        ? weeklyRevenue * WEEKS_PER_MONTH
+        : toNumber(pricing?.annualRevenue, 0) / 12;
+      return resolveUpgradeCosts(upgrade, startupCost, monthlyRevenue);
+    },
+    [upgradeByIdForPortfolio, companyById, portfolioNicheById, portfolioSectorById, companyFinancialsMap]
+  );
   const budgetSummary = React.useMemo(() => {
     let upgradeCapexEstimate = 0;
     let upgradeOpexWeeklyEstimate = 0;
@@ -448,12 +508,12 @@ export const DecisionsPanel: React.FC = () => {
     let programCommitSpend = 0;
     let marketingIndexTotal = 0;
 
-    for (const { decision } of queuedDecisionsAll) {
+    for (const { companyId, decision } of queuedDecisionsAll) {
       const payload = (decision as any)?.payload ?? {};
       switch (payload.type) {
         case "BUY_UPGRADE": {
           const upgradeId = String(payload.upgradeId ?? "");
-          const costs = resolveUpgradeCostForCompany(upgradeId, row.companyId);
+          const costs = resolveUpgradeCostForCompany(upgradeId, companyId);
           if (costs) {
             upgradeCapexEstimate += costs.capexMid;
             upgradeOpexWeeklyEstimate += costs.opexWeeklyMid;
@@ -487,30 +547,6 @@ export const DecisionsPanel: React.FC = () => {
       marketingIndexTotal,
     };
   }, [queuedDecisionsAll, resolveUpgradeCostForCompany]);
-  const companyById = React.useMemo(() => {
-    const map = new Map<string, { name: string; region?: string; nicheId?: string }>();
-    for (const c of companies) {
-      map.set(String(c.id), {
-        name: String(c.name ?? "Company"),
-        region: String(c.region ?? ""),
-        nicheId: String((c as any).nicheId ?? ""),
-      });
-    }
-    return map;
-  }, [companies]);
-  const resolveUpgradeCostForCompany = React.useCallback(
-    (upgradeId: string, companyId: string) => {
-      const upgrade = upgradeByIdForPortfolio.get(upgradeId);
-      if (!upgrade) return null;
-      const company = companyById.get(companyId);
-      const niche = company?.nicheId ? portfolioNicheById.get(company.nicheId) : null;
-      const startupCost = toNumber((niche as any)?.startupCostEur, 0);
-      const weeklyRevenue = toNumber(companyFinancialsMap.get(companyId)?.revenue, 0);
-      const monthlyRevenue = weeklyRevenue * WEEKS_PER_MONTH;
-      return resolveUpgradeCosts(upgrade, startupCost, monthlyRevenue);
-    },
-    [upgradeByIdForPortfolio, companyById, portfolioNicheById, companyFinancialsMap]
-  );
   const formatDecisionSummary = React.useCallback(
     (payload: any) => {
       if (!payload || typeof payload !== "object") return "Decision";
@@ -569,8 +605,11 @@ export const DecisionsPanel: React.FC = () => {
     [resolveUpgradeCostForCompany]
   );
   const selectedFinancials = selectedCompanyId ? companyFinancialsMap.get(selectedCompanyId) : null;
-  const selectedStartupCost = toNumber((niche as any)?.startupCostEur, 0);
-  const selectedMonthlyRevenue = toNumber(selectedFinancials?.revenue, 0) * WEEKS_PER_MONTH;
+  const selectedPricing = niche && sector ? getStartupPricing(sector, niche) : null;
+  const selectedStartupCost = toNumber((niche as any)?.startupCostEur, selectedPricing?.startupCost ?? 0);
+  const selectedMonthlyRevenue = selectedFinancials
+    ? toNumber(selectedFinancials?.revenue, 0) * WEEKS_PER_MONTH
+    : toNumber(selectedPricing?.annualRevenue, 0) / 12;
   const selectedQueueCount = selectedCompanyId ? queueCountByCompanyId.get(selectedCompanyId) ?? 0 : 0;
 
   const programsQuery = useQuery({
@@ -609,6 +648,7 @@ export const DecisionsPanel: React.FC = () => {
   const [fieldValues, setFieldValues] = React.useState<Record<string, number>>({});
   const [moduleSelections, setModuleSelections] = React.useState<Record<string, string>>({});
   const [selectedUpgradeIds, setSelectedUpgradeIds] = React.useState<string[]>([]);
+  const [reviewAccepted, setReviewAccepted] = React.useState(false);
 
   const [queued, setQueued] = React.useState<Array<{ type: string; payload: any; createdAt?: string }>>([]);
   const [queuedLoading, setQueuedLoading] = React.useState(false);
@@ -637,6 +677,12 @@ export const DecisionsPanel: React.FC = () => {
   React.useEffect(() => {
     if (fromCompanyId) setSelectedCompanyId(fromCompanyId);
   }, [fromCompanyId]);
+
+  React.useEffect(() => {
+    if (activeStep !== "review") {
+      setReviewAccepted(false);
+    }
+  }, [activeStep]);
 
   const tickStatus = isTicking ? "Tick running" : "Waiting for next tick";
   const canEdit = !!selectedCompanyId && !!worldId && !isTicking;
@@ -993,8 +1039,9 @@ export const DecisionsPanel: React.FC = () => {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
         {steps.map((step, idx) => {
           const isActive = step.key === activeStep;
-          const isDone = idx < activeStepIndex;
-          const statusLabel = isDone ? "Complete" : isActive ? "Active" : "Upcoming";
+          const isAccepted = step.key === "review" && reviewAccepted;
+          const isDone = idx < activeStepIndex || isAccepted;
+          const statusLabel = isAccepted ? "Accepted" : isDone ? "Complete" : isActive ? "Active" : "Upcoming";
           const metaLabel =
             step.key === "briefing"
               ? `${eventsLastWeek.length} event${eventsLastWeek.length === 1 ? "" : "s"}`
@@ -1333,7 +1380,7 @@ export const DecisionsPanel: React.FC = () => {
                     </div>
 
                     <div className="rounded-2xl border border-[var(--border)] bg-[var(--card-2)] p-3">
-                      <div className="text-xs font-semibold text-[var(--text)]">Current levers</div>
+                      <div className="text-xs font-semibold text-[var(--text)]">Last round decisions</div>
                       {currentLeversEmpty ? (
                         <div className="mt-2 text-xs text-[var(--text-muted)]">{currentLeversEmptyMessage}</div>
                       ) : (
@@ -1527,8 +1574,17 @@ export const DecisionsPanel: React.FC = () => {
             <Button variant="ghost" onClick={goPrev}>
               Adjust decisions
             </Button>
-            <div className="text-xs text-[var(--text-muted)]">
-              Decisions apply on the next tick. Review budget before then.
+            <div className="flex items-center gap-2">
+              <div className="text-xs text-[var(--text-muted)]">
+                Decisions apply on the next tick.
+              </div>
+              <Button
+                variant={reviewAccepted ? "secondary" : "primary"}
+                size="sm"
+                onClick={() => setReviewAccepted((prev) => !prev)}
+              >
+                {reviewAccepted ? "Review accepted" : "Accept review"}
+              </Button>
             </div>
           </div>
         </div>
@@ -1631,6 +1687,15 @@ export const DecisionsPanel: React.FC = () => {
                     isDelta && currentValue != null
                       ? currentValue + value
                       : null;
+                  const Icon = FIELD_ICONS[field.kind] ?? SlidersHorizontal;
+                  const absMin =
+                    isDelta && currentValue != null ? currentValue + range.min : range.min;
+                  const absMax =
+                    isDelta && currentValue != null ? currentValue + range.max : range.max;
+                  const currentAbs = currentValue ?? 0;
+                  const targetAbs = targetValue ?? currentAbs;
+                  const currentPct = normalizeRatio(currentAbs, absMin, absMax);
+                  const targetPct = normalizeRatio(targetAbs, absMin, absMax);
                   const mid = (range.min + range.max) / 2;
                   const snap = (v: number) => {
                     const stepped = Math.round(v / range.step) * range.step;
@@ -1652,7 +1717,10 @@ export const DecisionsPanel: React.FC = () => {
                     >
                       <div className="flex flex-col gap-1 md:flex-row md:items-center md:justify-between">
                         <div>
-                          <div className="text-sm font-semibold text-[var(--text)]">{field.label}</div>
+                          <div className="flex items-center gap-2 text-sm font-semibold text-[var(--text)]">
+                            <Icon className="h-4 w-4 text-[var(--text-muted)]" />
+                            <span>{field.label}</span>
+                          </div>
                           <div className="text-xs text-[var(--text-muted)]">
                             {field.description}
                           </div>
@@ -1700,6 +1768,24 @@ export const DecisionsPanel: React.FC = () => {
                           </span>
                         ) : null}
                       </div>
+                      {Number.isFinite(currentAbs) && Number.isFinite(absMin) && Number.isFinite(absMax) ? (
+                        <div className="mt-2">
+                          <div className="relative h-2 w-full overflow-hidden rounded-full bg-[var(--border)]">
+                            <div
+                              className="absolute left-0 top-0 h-full bg-[var(--text-muted)]/60"
+                              style={{ width: `${Math.round(currentPct * 100)}%` }}
+                            />
+                            <div
+                              className="absolute left-0 top-0 h-full bg-[var(--accent)]"
+                              style={{ width: `${Math.round(targetPct * 100)}%` }}
+                            />
+                          </div>
+                          <div className="mt-1 flex justify-between text-[10px] text-[var(--text-muted)]">
+                            <span>Now</span>
+                            <span>Target</span>
+                          </div>
+                        </div>
+                      ) : null}
 
                       <div className="mt-2 flex flex-wrap gap-2">
                         {quickSets.map((item) => (

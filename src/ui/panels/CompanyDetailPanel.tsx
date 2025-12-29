@@ -13,9 +13,12 @@ import KPIChip from "../components/KPIChip";
 import Table, { TBody, TD, TH, THead, TR } from "../components/Table";
 import Sparkline from "../components/Sparkline";
 import { useCompany } from "../hooks/useCompany";
+import { useWorld } from "../hooks/useWorld";
 import { money } from "../../utils/money";
 import { companyService } from "../../core/services/companyService";
-import { asCompanyId } from "../../core/domain";
+import { decisionService } from "../../core/services/decisionService";
+import type { CompanyState } from "../../core/domain";
+import { asCompanyId, asWorldId } from "../../core/domain";
 
 /**
  * CompanyDetailPanel
@@ -23,11 +26,66 @@ import { asCompanyId } from "../../core/domain";
  * - v0: edit knobs will be wired to DecisionsPanel later
  */
 
+const toNumber = (value: unknown, fallback = 0) => {
+  const n = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(n) ? n : fallback;
+};
+
+const applyQueuedDecisionsToState = (state: CompanyState | null, decisions: any[]): CompanyState | null => {
+  if (!state) return null;
+  if (!decisions.length) return state;
+
+  const next: CompanyState = { ...state };
+
+  for (const decision of decisions) {
+    const payload = (decision as any)?.payload ?? {};
+
+    switch (payload.type) {
+      case "SET_PRICE":
+        next.priceLevel = toNumber(payload.priceLevel, toNumber(next.priceLevel, 1)) as any;
+        break;
+      case "SET_MARKETING":
+        next.marketingLevel = toNumber(payload.marketingLevel, toNumber(next.marketingLevel, 0)) as any;
+        break;
+      case "SET_STAFFING":
+        next.employees = Math.max(0, Math.floor(toNumber(payload.targetEmployees, next.employees)));
+        break;
+      case "INVEST_CAPACITY":
+        next.capacity = (toNumber(next.capacity, 0) + toNumber(payload.addCapacity, 0)) as any;
+        break;
+      default:
+        break;
+    }
+  }
+
+  return next;
+};
+
 export const CompanyDetailPanel: React.FC = () => {
   const { companyId } = useParams<{ companyId: string }>();
   const nav = useNavigate();
 
   const { company, state, financials, isLoading, error, refetch } = useCompany(companyId);
+  const { world, economy } = useWorld();
+
+  const worldId = world?.id ? String(world.id) : undefined;
+  const currentYear = Number(economy?.currentYear ?? 1);
+  const currentWeek = Number(economy?.currentWeek ?? 1);
+
+  const queuedDecisionsQuery = useQuery({
+    queryKey: ["companyQueuedDecisions", companyId, worldId, currentYear, currentWeek],
+    queryFn: async () => {
+      if (!companyId || !worldId) return [];
+      return decisionService.listCompanyDecisions({
+        worldId: asWorldId(worldId),
+        companyId: asCompanyId(companyId),
+        year: currentYear as any,
+        week: currentWeek as any,
+      });
+    },
+    enabled: !!companyId && !!worldId,
+    staleTime: 2_500,
+  });
 
   const financialsHistoryQuery = useQuery({
     queryKey: ["companyFinancialsHistory", companyId],
@@ -44,9 +102,16 @@ export const CompanyDetailPanel: React.FC = () => {
   const revenueSeries = orderedHistory.map((row) => Number(row.revenue ?? 0));
   const profitSeries = orderedHistory.map((row) => Number(row.netProfit ?? 0));
   const cashSeries = orderedHistory.map((row) => Number(row.cashChange ?? 0));
+  const queuedDecisions = queuedDecisionsQuery.data ?? [];
+  const operationsState = React.useMemo(
+    () => applyQueuedDecisionsToState(state, queuedDecisions),
+    [state, queuedDecisions]
+  );
+  const hasQueuedDecisions = queuedDecisions.length > 0;
 
   const onRefresh = async () => {
     await refetch();
+    await queuedDecisionsQuery.refetch();
   };
 
   const kpiRevenue = financials?.revenue ?? 0;
@@ -142,27 +207,32 @@ export const CompanyDetailPanel: React.FC = () => {
             <div className="rounded-2xl border border-[var(--border)] bg-[var(--card-2)] px-4 py-3">
               <div className="text-xs text-[var(--text-muted)]">Price level</div>
               <div className="mt-1 text-base font-semibold tabular-nums">
-                {state ? (Math.round(state.priceLevel * 100) / 100).toFixed(2) : "—"}
+                {operationsState ? (Math.round(operationsState.priceLevel * 100) / 100).toFixed(2) : "—"}
               </div>
             </div>
             <div className="rounded-2xl border border-[var(--border)] bg-[var(--card-2)] px-4 py-3">
               <div className="text-xs text-[var(--text-muted)]">Marketing</div>
               <div className="mt-1 text-base font-semibold tabular-nums">
-                {state ? (Math.round(state.marketingLevel * 100) / 100).toFixed(2) : "—"}
+                {operationsState ? (Math.round(operationsState.marketingLevel * 100) / 100).toFixed(2) : "—"}
               </div>
             </div>
             <div className="rounded-2xl border border-[var(--border)] bg-[var(--card-2)] px-4 py-3">
               <div className="text-xs text-[var(--text-muted)]">Capacity</div>
               <div className="mt-1 text-base font-semibold tabular-nums">
-                {state ? (Math.round(state.capacity * 100) / 100).toFixed(2) : "—"}
+                {operationsState ? (Math.round(operationsState.capacity * 100) / 100).toFixed(2) : "—"}
               </div>
             </div>
             <div className="rounded-2xl border border-[var(--border)] bg-[var(--card-2)] px-4 py-3">
               <div className="text-xs text-[var(--text-muted)]">Employees</div>
               <div className="mt-1 text-base font-semibold tabular-nums">
-                {state ? state.employees : "—"}
+                {operationsState ? operationsState.employees : "—"}
               </div>
             </div>
+          </div>
+          <div className="mt-3 text-xs text-[var(--text-muted)]">
+            {hasQueuedDecisions
+              ? "Queued decisions for the next tick."
+              : "Last round values. Voer nieuwe decisions door."}
           </div>
         </Card>
 

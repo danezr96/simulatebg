@@ -38,7 +38,6 @@ import { sectorRepo } from "../persistence/sectorRepo";
 import { decisionRepo } from "../persistence/decisionRepo";
 import { financeRepo } from "../persistence/financeRepo";
 import { playerRepo } from "../persistence/playerRepo";
-import { presenceRepo } from "../persistence/presenceRepo";
 import { programRepo } from "../persistence/programRepo";
 import { upgradeRepo } from "../persistence/upgradeRepo";
 
@@ -750,20 +749,6 @@ async function runWorldTickInternal(
     companyById[String(company.id)] = company;
   }
 
-  const eligiblePlayerIds = new Set(
-    await presenceRepo.listEligiblePlayerIds({
-      worldId,
-      tickStartAt,
-      minMinutes: 4,
-    })
-  );
-
-  const eligibleHoldingIds = new Set(
-    holdings
-      .filter((h) => !!h.playerId && eligiblePlayerIds.has(String(h.playerId)))
-      .map((h) => String(h.id))
-  );
-
   // 4) Load sectors + niches
   const sectors = await sectorRepo.listSectors();
   const allNiches = await sectorRepo.listAllNiches();
@@ -794,20 +779,13 @@ async function runWorldTickInternal(
 
     latestStateByCompanyId[cid] = await getLatestCompanyState(c.id);
     latestFinancialsByCompanyId[cid] = await financeRepo.getLatestCompanyFinancials(c.id);
-    const holdingId = String((c as any)?.holdingId ?? "");
-    const isEligible = holdingId ? eligibleHoldingIds.has(holdingId) : false;
-    decisionsByCompanyId[cid] = isEligible
-      ? await getCompanyDecisionsForWeek(worldId, c.id, yearNum, weekNum, tickStartAt)
-      : [];
+    decisionsByCompanyId[cid] = await getCompanyDecisionsForWeek(worldId, c.id, yearNum, weekNum, tickStartAt);
   }
 
   for (const holding of holdings) {
     if (!holding.id) continue;
     const hid = String(holding.id);
-    const isEligible = eligibleHoldingIds.has(hid);
-    decisionsByHoldingId[hid] = isEligible
-      ? await getHoldingDecisionsForWeek(worldId, holding.id, yearNum, weekNum, tickStartAt)
-      : [];
+    decisionsByHoldingId[hid] = await getHoldingDecisionsForWeek(worldId, holding.id, yearNum, weekNum, tickStartAt);
   }
 
   const activePrograms = (await programRepo.listByWorld({ worldId, status: "ACTIVE" })).filter((p) =>
@@ -1066,6 +1044,7 @@ async function runWorldTickInternal(
 
     const sectorNiches = allNiches.filter((n) => String((n as any)?.sectorId ?? "") === sid);
 
+    const prevState = prevSectorStateBySectorId[sid] ?? null;
     const tick = sectorEngine.tick({
       worldId,
       year,
@@ -1074,9 +1053,22 @@ async function runWorldTickInternal(
       season,
       sector: s as Sector,
       niches: sectorNiches as Niche[],
-      prevState: prevSectorStateBySectorId[sid] ?? null,
+      prevState,
       rng,
     } as unknown as Parameters<typeof sectorEngine.tick>[0]);
+
+    const prevDemand = Number((prevState as any)?.currentDemand ?? 0);
+    const demand = Number(tick.demand ?? 0);
+    const demandDelta = demand - prevDemand;
+    const demandDeltaPct = prevDemand > 0 ? demandDelta / prevDemand : 0;
+
+    (tick.nextState as any).lastRoundMetrics = {
+      year,
+      week,
+      demandDelta,
+      demandDeltaPct,
+      volatilityShock: tick.volatilityShock,
+    };
 
     nextWorldSectorStates.push(tick.nextState);
     sectorDemandBySectorId[sid] = tick.demand;
