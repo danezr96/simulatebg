@@ -58,8 +58,12 @@ const SECTOR_MULTIPLIER: Record<string, number> = {
   RECY: 1.0,
 };
 
-const STARTUP_COST_MIN = 150_000;
 const STARTUP_COST_MAX = 50_000_000;
+const STARTUP_COST_FLOOR_BY_CAPEX: Record<string, number> = {
+  LOW: 80_000,
+  MEDIUM: 200_000,
+  HIGH: 500_000,
+};
 
 function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value));
@@ -79,6 +83,12 @@ export function getStartupPricing(sector: Sector, niche: Niche): StartupPricing 
   const config = niche.config ?? ({} as any);
 
   const baseDemand = Math.max(1, Number(niche.baseDemandIndex ?? config.baseDemandLevel ?? 1));
+  const baselineVolumeMin = Number(niche.volumeBaselineWeek?.min ?? NaN);
+  const baselineVolumeMax = Number(niche.volumeBaselineWeek?.max ?? NaN);
+  const volumeWeekly =
+    Number.isFinite(baselineVolumeMin) && Number.isFinite(baselineVolumeMax)
+      ? Math.max(1, (baselineVolumeMin + baselineVolumeMax) / 2)
+      : baseDemand;
   const ticketLevel = niche.ticketLevel ?? config.ticketSize ?? "MEDIUM";
   const ticketPrice = TICKET_PRICE_BASE[ticketLevel] ?? TICKET_PRICE_BASE.MEDIUM;
 
@@ -94,15 +104,19 @@ export function getStartupPricing(sector: Sector, niche: Niche): StartupPricing 
 
   const roiPct = niche.roiPct != null ? Number(niche.roiPct) / 100 : null;
   const paybackYearsProvided = niche.paybackYears != null ? Number(niche.paybackYears) : null;
+  const explicitStartupCost = Number(
+    niche.startupCostEur ?? (niche as any).startupCost ?? (config as any).startupCost ?? NaN
+  );
+  const hasExplicitStartupCost = Number.isFinite(explicitStartupCost) && explicitStartupCost > 0;
 
-  let annualProfit = baseDemand * ticketPrice * 52 * marginMid;
-  if (roiPct != null && niche.startupCostEur != null) {
-    annualProfit = Number(niche.startupCostEur) * roiPct;
-  } else if (paybackYearsProvided && niche.startupCostEur != null) {
-    annualProfit = Number(niche.startupCostEur) / Math.max(0.1, paybackYearsProvided);
+  let annualProfit = volumeWeekly * ticketPrice * 52 * marginMid;
+  if (roiPct != null && hasExplicitStartupCost) {
+    annualProfit = explicitStartupCost * roiPct;
+  } else if (paybackYearsProvided && hasExplicitStartupCost) {
+    annualProfit = explicitStartupCost / Math.max(0.1, paybackYearsProvided);
   }
 
-  let annualRevenue = baseDemand * ticketPrice * 52;
+  let annualRevenue = volumeWeekly * ticketPrice * 52;
   if (annualProfit > 0 && marginMid > 0) {
     annualRevenue = annualProfit / marginMid;
   }
@@ -112,8 +126,9 @@ export function getStartupPricing(sector: Sector, niche: Niche): StartupPricing 
     max: annualRevenue * marginMax,
   };
 
-  const capexMultiplier = CAPEX_REVENUE_MULTIPLIER[config.capexIntensity ?? "MEDIUM"] ?? 0.5;
-  const paybackMultiplier = PAYBACK_MULTIPLIER[config.capexIntensity ?? "MEDIUM"] ?? 4.5;
+  const capexIntensity = String(config.capexIntensity ?? niche.capex ?? "MEDIUM");
+  const capexMultiplier = CAPEX_REVENUE_MULTIPLIER[capexIntensity] ?? 0.5;
+  const paybackMultiplier = PAYBACK_MULTIPLIER[capexIntensity] ?? 4.5;
   const sectorMultiplier = SECTOR_MULTIPLIER[sector.code] ?? 1;
   const competitionMultiplier = COMPETITION_MULTIPLIER[config.competitionType ?? "FRAGMENTED"] ?? 1;
 
@@ -127,8 +142,9 @@ export function getStartupPricing(sector: Sector, niche: Niche): StartupPricing 
   const riskMultiplier = 1 + regulation * 0.25 + labour * 0.12 + volatility * 0.1;
 
   const rawCost = baseCost * sectorMultiplier * competitionMultiplier * riskMultiplier;
-  const computedStartupCost = roundMoney(clamp(rawCost, STARTUP_COST_MIN, STARTUP_COST_MAX));
-  const startupCost = Number(niche.startupCostEur ?? computedStartupCost);
+  const startupCostFloor = STARTUP_COST_FLOOR_BY_CAPEX[capexIntensity] ?? 200_000;
+  const computedStartupCost = roundMoney(clamp(rawCost, startupCostFloor, STARTUP_COST_MAX));
+  const startupCost = hasExplicitStartupCost ? explicitStartupCost : computedStartupCost;
 
   const roi = roiPct != null ? roiPct : annualProfit > 0 ? annualProfit / startupCost : 0;
   const paybackYears = paybackYearsProvided ?? (annualProfit > 0 ? startupCost / annualProfit : 99);

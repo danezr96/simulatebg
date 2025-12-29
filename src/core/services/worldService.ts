@@ -52,7 +52,7 @@ export const worldService = {
 
     // Create default rows (engine will populate on first tick)
     for (const s of missing) {
-      await sectorRepo.upsertWorldSectorState({
+      await sectorRepo.insertWorldSectorState({
         worldId,
         sectorId: (s as any).id,
         currentDemand: 0,

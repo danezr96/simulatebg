@@ -172,6 +172,16 @@ on world_sector_state for select
 to authenticated
 using (true);
 
+create policy "insert_world_sector_state_defaults"
+on world_sector_state for insert
+to authenticated
+with check (
+  current_demand = 0
+  and trend_factor = 1
+  and volatility = 0.1
+  and last_round_metrics = '{}'::jsonb
+);
+
 create policy "read_bot_profiles"
 on bot_profiles for select
 to authenticated

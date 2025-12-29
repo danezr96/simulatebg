@@ -178,6 +178,31 @@ export const sectorRepo = {
     return (data ?? []).map((r: WorldSectorStateRow) => mapWorldSectorState(r));
   },
 
+  async insertWorldSectorState(input: {
+    worldId: WorldId;
+    sectorId: SectorId;
+    currentDemand: number;
+    trendFactor: number;
+    volatility: number;
+    lastRoundMetrics?: unknown;
+  }): Promise<void> {
+    const payload: WorldSectorStateInsert = {
+      world_id: input.worldId as unknown as string,
+      sector_id: input.sectorId as unknown as string,
+      current_demand: Number(input.currentDemand) as any,
+      trend_factor: Number(input.trendFactor) as any,
+      volatility: Number(input.volatility) as any,
+      last_round_metrics: (input.lastRoundMetrics ?? {}) as unknown as Json,
+    };
+
+    const { error } = await supabase.from("world_sector_state").insert(payload);
+
+    if (error) {
+      if ((error as any).code === "23505") return;
+      throw error;
+    }
+  },
+
   async upsertWorldSectorState(input: {
     worldId: WorldId;
     sectorId: SectorId;
