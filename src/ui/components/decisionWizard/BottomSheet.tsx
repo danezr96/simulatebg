@@ -24,7 +24,7 @@ export function BottomSheet({ open, title, onClose, children, footer }: BottomSh
         role="dialog"
         aria-modal="true"
         className={cn(
-          "relative w-full max-w-2xl rounded-t-3xl border border-[var(--border)] bg-[var(--card)]",
+          "relative flex max-h-[90vh] w-full max-w-2xl flex-col rounded-t-3xl border border-[var(--border)] bg-[var(--card)]",
           "shadow-2xl"
         )}
       >
@@ -38,7 +38,7 @@ export function BottomSheet({ open, title, onClose, children, footer }: BottomSh
             Close
           </button>
         </div>
-        <div className="px-5 pb-5 pt-3">{children}</div>
+        <div className="min-h-0 overflow-y-auto px-5 pb-5 pt-3">{children}</div>
         {footer ? <div className="border-t border-[var(--border)] px-5 py-4">{footer}</div> : null}
       </div>
     </div>
