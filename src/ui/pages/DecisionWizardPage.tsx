@@ -509,7 +509,7 @@ export const DecisionWizardPage: React.FC = () => {
       const upgradeById = new Map(availableUpgrades.map((upgrade) => [String(upgrade.id), upgrade]));
       const ownedUpgrades = ownedUpgradesByCompany.get(companyId) ?? [];
 
-      ownedUpgrades.forEach((owned) => {
+      ownedUpgrades.forEach((owned: any) => {
         const upgrade = upgradeById.get(String(owned.upgradeId));
         const effects = Array.isArray((upgrade as any)?.effects) ? (upgrade as any).effects : [];
         effects.forEach((effect: any) => {
