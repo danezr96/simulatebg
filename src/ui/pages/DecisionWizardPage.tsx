@@ -7,6 +7,7 @@ import type {
   Holding,
   HoldingDecisionPayload,
   Niche,
+  NicheProduct,
   Sector,
   World,
   WorldEconomyState,
@@ -19,6 +20,7 @@ import { companyService } from "../../core/services/companyService";
 import { upgradeService } from "../../core/services/upgradeService";
 import { engineService } from "../../core/services/engineService";
 import { sectorRepo } from "../../core/persistence/sectorRepo";
+import { nicheProductRepo } from "../../core/persistence/nicheProductRepo";
 import { eventRepo } from "../../core/persistence/eventRepo";
 import { buildBaselineProjection } from "../../core/projections/baseline";
 import { buildWhatIfProjection } from "../../core/projections/whatIf";
@@ -269,6 +271,21 @@ export const DecisionWizardPage: React.FC = () => {
     staleTime: 60_000,
   });
 
+  const nicheProductsQuery = useQuery({
+    queryKey: ["wizardNicheProducts", nicheIds.join("|")],
+    queryFn: async () => {
+      if (nicheIds.length === 0) return [] as Array<{ nicheId: string; products: any[] }>;
+      return Promise.all(
+        nicheIds.map(async (id) => ({
+          nicheId: id,
+          products: await nicheProductRepo.listByNiche(asNicheId(id)),
+        }))
+      );
+    },
+    enabled: nicheIds.length > 0,
+    staleTime: 60_000,
+  });
+
   const briefingQuery = useQuery({
     queryKey: ["wizardBriefing", worldId ?? "none"],
     queryFn: async () => {
@@ -357,6 +374,14 @@ export const DecisionWizardPage: React.FC = () => {
     });
     return map;
   }, [nicheUpgradesQuery.data, playableCompanies]);
+
+  const nicheProductsById = React.useMemo(() => {
+    const map = new Map<string, NicheProduct[]>();
+    (nicheProductsQuery.data ?? []).forEach((row) => {
+      map.set(row.nicheId, row.products ?? []);
+    });
+    return map;
+  }, [nicheProductsQuery.data]);
 
   const upgradesById = React.useMemo(() => {
     const map: Record<string, { cost?: number }> = {};
@@ -606,6 +631,7 @@ export const DecisionWizardPage: React.FC = () => {
             companies={playableCompanies as any}
             sectorsById={sectorsById}
             nichesById={nichesById}
+            nicheProductsById={nicheProductsById}
             statesById={stateById}
             baseline={baselineProjection}
             whatIf={compareMode ? whatIfProjection : null}
