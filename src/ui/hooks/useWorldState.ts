@@ -12,7 +12,8 @@ type Phase =
   | "needs_world"
   | "needs_player"
   | "needs_holding"
-  | "needs_loan" // ✅ loan + sector/niche + first company
+  | "needs_loan" // loan + sector/niche + first company
+  | "needs_liquidation"
   | "ready"
   | "error";
 
@@ -127,10 +128,11 @@ export function useWorldState(): WorldStateResult {
     if (!worldId) return "needs_world";
     if (!player) return "needs_player";
     if (!holding) return "needs_holding";
+    const holdingCash = Number((holding as any)?.cashBalance ?? 0);
+    if (holdingCash < 0) return "needs_liquidation";
 
-    // ✅ This is now the combined gate step (ChooseLoanCard creates loan + company)
+    // This is now the combined gate step (ChooseLoanCard creates loan + company)
     if (companiesArr.length === 0) return "needs_loan";
-
     return "ready";
   }, [error, isAuthenticated, worldId, player, holding, companiesArr.length]);
 
@@ -166,3 +168,5 @@ export function useWorldState(): WorldStateResult {
     [phase, worldId, world, economy, player, holding, companiesArr, activeWorlds, isLoading, error, setWorld, refetch]
   );
 }
+
+

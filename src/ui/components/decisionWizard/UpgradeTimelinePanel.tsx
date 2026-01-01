@@ -10,6 +10,7 @@ export type UpgradeTimelinePanelProps = {
   upgradesByCompany: Map<string, NicheUpgrade[]>;
   ownedUpgradesByCompany: Map<string, CompanyUpgrade[]>;
   draftUpgradeQueue: Array<{ companyId: string; upgradeId: string }>;
+  upgradeCostById?: Record<string, number>;
   currentYear: number;
   currentWeek: number;
   onToggleUpgrade: (companyId: string, upgradeId: string) => void;
@@ -59,6 +60,7 @@ export function UpgradeTimelinePanel({
   upgradesByCompany,
   ownedUpgradesByCompany,
   draftUpgradeQueue,
+  upgradeCostById,
   currentYear,
   currentWeek,
   onToggleUpgrade,
@@ -80,7 +82,8 @@ export function UpgradeTimelinePanel({
           .map((upgrade) => {
             const ownedUpgrade = owned.find((o) => String(o.upgradeId) === String(upgrade.id)) ?? null;
             const stage = resolveStage(ownedUpgrade, upgrade, currentYear, currentWeek);
-            return { upgrade, stage, ownedUpgrade };
+            const costEstimate = upgradeCostById?.[String(upgrade.id)];
+            return { upgrade, stage, ownedUpgrade, costEstimate };
           });
 
         const selectable = available.filter(
@@ -98,7 +101,7 @@ export function UpgradeTimelinePanel({
               {timelineItems.length === 0 ? (
                 <div className="text-xs text-[var(--text-muted)]">No upgrades queued yet.</div>
               ) : (
-                timelineItems.map(({ upgrade, stage }) => {
+                timelineItems.map(({ upgrade, stage, costEstimate }) => {
                   const hasRisk =
                     Array.isArray((upgrade as any)?.risk?.failureEffects) &&
                     (upgrade as any)?.risk?.failureEffects.length > 0;
@@ -126,7 +129,7 @@ export function UpgradeTimelinePanel({
                         {stage}
                       </span>
                       <div className="text-xs font-semibold text-[var(--text)]">
-                        {formatCurrencyCompact(Number(upgrade.cost ?? 0))}
+                        {formatCurrencyCompact(Number(costEstimate ?? upgrade.cost ?? 0))}
                       </div>
                     </div>
                   </div>
@@ -142,6 +145,7 @@ export function UpgradeTimelinePanel({
               <div className="mt-2 space-y-2">
                 {selectable.slice(0, 6).map((upgrade) => {
                   const isPlanned = plannedIds.has(String(upgrade.id));
+                  const costEstimate = upgradeCostById?.[String(upgrade.id)];
                   return (
                     <div
                       key={upgrade.id}
@@ -149,7 +153,10 @@ export function UpgradeTimelinePanel({
                     >
                       <div>
                         <div className="text-sm font-semibold text-[var(--text)]">{upgrade.name}</div>
-                        <div className="text-xs text-[var(--text-muted)]">{upgrade.durationWeeks} weeks</div>
+                        <div className="text-xs text-[var(--text-muted)]">
+                          {upgrade.durationWeeks} weeks ·{" "}
+                          {formatCurrencyCompact(Number(costEstimate ?? upgrade.cost ?? 0))}
+                        </div>
                       </div>
                       <Button
                         size="sm"

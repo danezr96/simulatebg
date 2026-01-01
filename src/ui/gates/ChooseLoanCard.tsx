@@ -3,6 +3,7 @@ import * as React from "react";
 import { Card } from "../components/Card";
 import Button from "../components/Button";
 import CompanyMarketplace from "../components/CompanyMarketplace";
+import { useQueryClient } from "@tanstack/react-query";
 
 import type { WorldId, HoldingId } from "../../core/domain";
 import { financeRepo } from "../../core/persistence/financeRepo";
@@ -80,6 +81,7 @@ const LOAN_PRESETS: LoanPreset[] = [
 ];
 
 export default function ChooseLoanCard({ worldId, holding, onDone }: Props) {
+  const qc = useQueryClient();
   const holdingIdStr = readId(holding);
   const holdingCash = Number((holding as any)?.cashBalance ?? 0);
   const { player } = useCurrentPlayer();
@@ -169,6 +171,8 @@ export default function ChooseLoanCard({ worldId, holding, onDone }: Props) {
       });
 
       setSuccess("Setup complete! Entering the game...");
+      qc.invalidateQueries({ queryKey: ["companies", holdingIdStr], exact: true });
+      qc.invalidateQueries({ queryKey: ["holding"], exact: false });
       await Promise.resolve(onDone());
     } catch (e: any) {
       setError(e?.message ?? "Setup failed");

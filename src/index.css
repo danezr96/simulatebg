@@ -105,6 +105,16 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
+body::before {
+  content: "";
+  position: fixed;
+  inset: 8px;
+  border: 1px solid var(--border);
+  border-radius: calc(var(--radius-lg) + 6px);
+  pointer-events: none;
+  z-index: 60;
+}
+
 /* =========================
    TYPOGRAPHY
    ========================= */

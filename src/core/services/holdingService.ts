@@ -9,6 +9,7 @@ import { holdingRepo } from "../persistence/holdingRepo";
 import { financeRepo } from "../persistence/financeRepo";
 // create later
 import { companyRepo } from "../persistence/companyRepo";
+import { estimateCompanyLiquidationValue } from "../../utils/valuation";
 
 /**
  * HoldingService responsibilities:
@@ -44,6 +45,30 @@ export const holdingService = {
     }>
   ): Promise<Holding> {
     return holdingRepo.update(holdingId, patch);
+  },
+
+  async liquidateCompany(input: {
+    holdingId: HoldingId;
+    companyId: string;
+  }): Promise<{ cashBalance: number; saleValue: number }> {
+    const company = await companyRepo.getById(input.companyId as any);
+    if (!company || String(company.holdingId ?? "") !== String(input.holdingId)) {
+      throw new Error("Company not found for holding.");
+    }
+
+    const holding = await holdingRepo.getById(input.holdingId);
+    if (!holding) throw new Error("Holding not found.");
+
+    const financials = await financeRepo.getLatestCompanyFinancials(company.id);
+    const saleValue = estimateCompanyLiquidationValue(financials ?? null);
+    const nextCash = Number(holding.cashBalance ?? 0) + saleValue;
+
+    await holdingRepo.update(input.holdingId, {
+      cashBalance: nextCash,
+    });
+    await companyRepo.delete(company.id);
+
+    return { cashBalance: nextCash, saleValue };
   },
 
   /**

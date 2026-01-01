@@ -25,6 +25,7 @@ export type CompanyDecisionPanelProps = {
   sectorsById: Map<string, Sector>;
   nichesById: Map<string, Niche>;
   nicheProductsById: Map<string, NicheProduct[]>;
+  unlockedProductsByCompany: Map<string, Set<string>>;
   statesById: Map<string, CompanyState | null>;
   baseline: ProjectionSummary | null;
   whatIf: WhatIfProjection | null;
@@ -274,6 +275,7 @@ export function CompanyDecisionPanel({
   sectorsById,
   nichesById,
   nicheProductsById,
+  unlockedProductsByCompany,
   statesById,
   baseline,
   whatIf,
@@ -461,7 +463,13 @@ export function CompanyDecisionPanel({
         const sector = sectorsById.get(String(company.sectorId));
         const decisions = draftDecisions[companyId] ?? [];
         const nicheProducts = nicheProductsById.get(String(niche?.id ?? "")) ?? [];
-        const hasProductPlan = nicheProducts.length > 0;
+        const unlockedSet = unlockedProductsByCompany.get(companyId) ?? new Set<string>();
+        const unlockedProducts =
+          unlockedSet.size > 0
+            ? nicheProducts.filter((product) => unlockedSet.has(product.sku))
+            : nicheProducts.slice(0, 1);
+        const lockedProducts = nicheProducts.filter((product) => !unlockedProducts.includes(product));
+        const hasProductPlan = unlockedProducts.length > 0;
         const decisionModules = getDecisionModulesForNiche(niche ?? null);
         const decisionFields = getDecisionFieldsForNiche(niche ?? null);
         const editableFields = hasProductPlan
@@ -469,10 +477,10 @@ export function CompanyDecisionPanel({
           : decisionFields;
         const guidance = getDecisionGuidance(niche ?? null, sector ?? null, state);
         const planDecision = findDecision(decisions, "SET_PRODUCT_PLAN") as SetProductPlanDecision | null;
-        const defaultPlan = buildDefaultProductPlan(nicheProducts);
-        const productPlan = mergeProductPlan(nicheProducts, planDecision);
-        const planSummary = summarizeProductPlan(nicheProducts, productPlan);
-        const derivedPriceLevel = computePlanPriceLevel(nicheProducts, productPlan);
+        const defaultPlan = buildDefaultProductPlan(unlockedProducts);
+        const productPlan = mergeProductPlan(unlockedProducts, planDecision);
+        const planSummary = summarizeProductPlan(unlockedProducts, productPlan);
+        const derivedPriceLevel = computePlanPriceLevel(unlockedProducts, productPlan);
         const projection = getProjection(companyId);
 
         const resolveRangeForField = (field: DecisionField) => {
@@ -529,7 +537,7 @@ export function CompanyDecisionPanel({
         };
 
         const updateProductPlan = (sku: string, updates: Partial<ProductPlanEntry>) => {
-          const product = nicheProducts.find((item) => item.sku === sku);
+          const product = unlockedProducts.find((item) => item.sku === sku);
           const fallback = defaultPlan[sku];
           if (!product || !fallback) return;
           const { min, max } = getPriceRange(product);
@@ -554,9 +562,9 @@ export function CompanyDecisionPanel({
             [sku]: nextEntry,
           };
 
-          const items = buildProductPlanItems(nicheProducts, nextPlan);
+          const items = buildProductPlanItems(unlockedProducts, nextPlan);
           if (items.length) {
-            const priceLevel = computePlanPriceLevel(nicheProducts, nextPlan);
+            const priceLevel = computePlanPriceLevel(unlockedProducts, nextPlan);
             const preserved = decisions.filter(
               (payload) =>
                 payload.type !== "SET_PRODUCT_PLAN" && payload.type !== "SET_PRICE"
@@ -709,7 +717,7 @@ export function CompanyDecisionPanel({
                     ) : null}
 
                     <div className="mt-3 grid grid-cols-1 gap-3">
-                      {nicheProducts.map((product) => {
+                      {unlockedProducts.map((product) => {
                         const entry = productPlan[product.sku] ?? defaultPlan[product.sku];
                         if (!entry) return null;
                         const { min, max } = getPriceRange(product);
@@ -802,6 +810,14 @@ export function CompanyDecisionPanel({
                         );
                       })}
                     </div>
+                    {lockedProducts.length > 0 ? (
+                      <div className="mt-4 rounded-2xl border border-dashed border-[var(--border)] bg-[var(--card-2)] p-3 text-xs text-[var(--text-muted)]">
+                        <div className="text-[var(--text)]">Locked products</div>
+                        <div className="mt-1">
+                          {lockedProducts.map((product) => product.name).join(", ")}. Unlock via upgrades.
+                        </div>
+                      </div>
+                    ) : null}
                   </div>
                 ) : null}
 

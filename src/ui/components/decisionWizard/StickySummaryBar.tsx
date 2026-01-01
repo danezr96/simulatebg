@@ -10,6 +10,8 @@ export type StickySummaryBarProps = {
   onPrimary?: () => void;
   secondaryLabel?: string;
   onSecondary?: () => void;
+  saveLabel?: string;
+  onSave?: () => void;
   disabled?: boolean;
 };
 
@@ -21,6 +23,8 @@ export function StickySummaryBar({
   onPrimary,
   secondaryLabel,
   onSecondary,
+  saveLabel,
+  onSave,
   disabled,
 }: StickySummaryBarProps) {
   return (
@@ -50,6 +54,11 @@ export function StickySummaryBar({
           {secondaryLabel ? (
             <Button variant="ghost" size="sm" onClick={onSecondary} disabled={disabled}>
               {secondaryLabel}
+            </Button>
+          ) : null}
+          {saveLabel ? (
+            <Button variant="secondary" size="sm" onClick={onSave} disabled={disabled}>
+              {saveLabel}
             </Button>
           ) : null}
           <Button size="md" onClick={onPrimary} disabled={disabled}>

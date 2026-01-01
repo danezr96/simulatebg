@@ -31,7 +31,7 @@ export function ReviewCommitPanel({
   if (!summary) {
     return (
       <Card className="p-5">
-        <div className="text-sm font-semibold text-[var(--text)]">Review & commit</div>
+        <div className="text-sm font-semibold text-[var(--text)]">Review & submit</div>
         <div className="mt-1 text-xs text-[var(--text-muted)]">No projection data yet.</div>
       </Card>
     );
@@ -42,9 +42,9 @@ export function ReviewCommitPanel({
       <Card className="p-5">
         <div className="flex items-start justify-between gap-3">
           <div>
-            <div className="text-sm font-semibold text-[var(--text)]">Review & commit</div>
+            <div className="text-sm font-semibold text-[var(--text)]">Review & submit</div>
             <div className="mt-1 text-xs text-[var(--text-muted)]">
-              Final check before you simulate the round.
+              Final check before you submit the round.
             </div>
           </div>
           <div className="text-xs text-[var(--text-muted)]">{isTicking ? "Tick running" : "Ready"}</div>
@@ -135,7 +135,7 @@ export function ReviewCommitPanel({
           </Button>
         )}
         <Button onClick={onCommit} disabled={disabled || !softCommitted || isTicking}>
-          Commit & Simulate
+          Submit
         </Button>
       </div>
     </div>

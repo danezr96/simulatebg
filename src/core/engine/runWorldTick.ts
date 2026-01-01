@@ -36,6 +36,8 @@ import type {
 } from "../domain";
 
 import { asMoney, yearWeekKey } from "../domain";
+import { parseCapexRange } from "../../utils/upgradeCost";
+import { estimateCompanyLiquidationValue } from "../../utils/valuation";
 
 import { supabase } from "../persistence/supabaseClient";
 
@@ -255,6 +257,14 @@ function computeProductPlanStats(
   };
 }
 
+function readStartingUnlockedProducts(niche?: Niche | null): string[] {
+  const config = (niche as any)?.config ?? {};
+  const unlocked = Array.isArray(config?.startingLoadout?.unlockedProducts)
+    ? config.startingLoadout.unlockedProducts
+    : [];
+  return unlocked.map((sku: unknown) => String(sku)).filter(Boolean);
+}
+
 const ACQUISITION_OFFER_DEFAULT_EXPIRY_WEEKS = 4;
 
 function addWeeks(year: number, week: number, delta: number): { year: number; week: number } {
@@ -268,13 +278,6 @@ function addWeeks(year: number, week: number, delta: number): { year: number; we
 function isOfferExpired(offer: AcquisitionOffer, year: number, week: number): boolean {
   if (!offer.expiresYear || !offer.expiresWeek) return false;
   return yearWeekKey(offer.expiresYear as any, offer.expiresWeek as any) < yearWeekKey(year as any, week as any);
-}
-
-function estimateCompanyValue(financials: CompanyFinancials | null): number {
-  const revenue = safeNumber(financials?.revenue, 0);
-  const netProfit = safeNumber(financials?.netProfit, 0);
-  const equity = safeNumber((financials as any)?.equity, 0);
-  return Math.max(10_000, revenue * 1.1, netProfit * 6, equity * 1.2);
 }
 
 function pickRange(seedKey: string, min: unknown, max: unknown, fallback = 0): number {
@@ -337,7 +340,16 @@ function computeUpgradeCapex(upgrade: NicheUpgrade, startupCost: number, seedKey
     const pct = pickRange(`${seedKey}:capex`, min, max, min);
     return startupCost * pct;
   }
-  return safeNumber((upgrade as any)?.cost, 0);
+  const baseCost = safeNumber((upgrade as any)?.cost, 0);
+  if (baseCost > 0) return baseCost;
+
+  const formula = String((upgrade as any)?.capexFormula ?? "");
+  const range = parseCapexRange(formula, startupCost);
+  if (range) {
+    return pickRange(`${seedKey}:capex_formula`, range.min, range.max, range.min);
+  }
+
+  return baseCost;
 }
 
 function computeUpgradeOpexWeekly(upgrade: NicheUpgrade, monthlyRevenue: number, seedKey: string): number {
@@ -979,6 +991,37 @@ async function runWorldTickInternal(
     ownedUpgradeIdsByCompanyId[cid] = set;
   }
 
+  const unlockedProductsByCompanyId: Record<string, Set<string>> = {};
+  for (const c of companies) {
+    if (!c.id) continue;
+    const cid = String(c.id);
+    const niche = nicheById[String((c as any)?.nicheId ?? "")];
+    const unlocked = new Set<string>(readStartingUnlockedProducts(niche));
+
+    const companyUpgradesForCompany = upgradesByCompanyId[cid] ?? [];
+    for (const cu of companyUpgradesForCompany) {
+      const upgradeId = String(cu.upgradeId);
+      const upgrade = upgradeById[upgradeId];
+      if (!upgrade) continue;
+
+      const seedKey = `${cid}:${upgradeId}`;
+      const delayWeeks = resolveUpgradeDelayWeeks(upgrade, seedKey);
+      const purchaseIdx = weekIndex(Number(cu.purchasedYear), Number(cu.purchasedWeek));
+      const effectsActive = weekIndex(yearNum, weekNum) >= purchaseIdx + delayWeeks;
+      if (!effectsActive) continue;
+
+      const effects = Array.isArray((upgrade as any)?.effects) ? (upgrade as any).effects : [];
+      for (const effect of effects) {
+        if (String(effect?.key ?? "") !== "unlock_products") continue;
+        const value = effect?.value;
+        if (!Array.isArray(value)) continue;
+        value.forEach((sku: unknown) => unlocked.add(String(sku)));
+      }
+    }
+
+    unlockedProductsByCompanyId[cid] = unlocked;
+  }
+
   const oneTimeOpexByCompanyId: Record<string, number> = {};
 
   // 7) Apply decisions -> preSimStates (switch on payload.type)
@@ -1136,8 +1179,13 @@ async function runWorldTickInternal(
     if (!plan) continue;
     const nicheId = String((c as any)?.nicheId ?? "");
     if (!nicheId) continue;
-    const products = nicheProductsByNicheId.get(nicheId) ?? [];
-    const stats = computeProductPlanStats(plan, products);
+      const allProducts = nicheProductsByNicheId.get(nicheId) ?? [];
+      const unlocked = unlockedProductsByCompanyId[cid];
+      const products =
+        unlocked && unlocked.size > 0
+          ? allProducts.filter((product) => unlocked.has(product.sku))
+          : allProducts.slice(0, 1);
+      const stats = computeProductPlanStats(plan, products);
     if (stats) {
       productPlanStatsByCompanyId[cid] = stats;
     }
@@ -1717,7 +1765,7 @@ async function runWorldTickInternal(
     const company = companyById[companyId];
     if (!company) continue;
 
-    const valuation = estimateCompanyValue(latestFinancialsByCompanyId[companyId] ?? null);
+    const valuation = estimateCompanyLiquidationValue(latestFinancialsByCompanyId[companyId] ?? null);
     const price = safeNumber(offer.offerPrice, 0);
     const counters = safeNumber(offer.counterCount, 0);
 

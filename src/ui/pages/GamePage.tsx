@@ -14,6 +14,7 @@ import WorldShell from "../layout/WorldShell";
 import CreatePlayerCard from "../gates/CreatePlayerCard";
 import StarterLoanCard from "../gates/StarterLoanCard";
 import ChooseLoanCard from "../gates/ChooseLoanCard";
+import InsolvencyGateCard from "../gates/InsolvencyGateCard";
 
 export const GamePage: React.FC = () => {
   const ws = useWorldState();
@@ -96,6 +97,19 @@ export const GamePage: React.FC = () => {
     return (
       <div className="mx-auto max-w-5xl px-4 py-10">
         <StarterLoanCard worldId={ws.worldId ?? ""} player={ws.player} onDone={doRefetch} />
+      </div>
+    );
+  }
+
+  if (ws.phase === "needs_liquidation") {
+    return (
+      <div className="mx-auto max-w-5xl px-4 py-10">
+        <InsolvencyGateCard
+          worldId={ws.worldId ?? ""}
+          holding={ws.holding}
+          companies={ws.companies ?? []}
+          onDone={doRefetch}
+        />
       </div>
     );
   }

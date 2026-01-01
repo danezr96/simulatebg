@@ -12,13 +12,14 @@ import type {
   World,
   WorldEconomyState,
 } from "../../core/domain";
-import type { BriefingSeverity, CompetitorSignal } from "../../core/briefing/briefing.types";
+import type { BriefingEventSignal, BriefingMarketShare, BriefingScope } from "../../core/briefing/briefing.types";
 import { asCompanyId, asHoldingId, asNicheId, asWorldId } from "../../core/domain";
 import { isSectorPlayable } from "../../core/config/playableSectors";
 import { decisionService } from "../../core/services/decisionService";
 import { companyService } from "../../core/services/companyService";
 import { upgradeService } from "../../core/services/upgradeService";
 import { engineService } from "../../core/services/engineService";
+import { scoreboardService } from "../../core/services/scoreboardService";
 import { sectorRepo } from "../../core/persistence/sectorRepo";
 import { nicheProductRepo } from "../../core/persistence/nicheProductRepo";
 import { eventRepo } from "../../core/persistence/eventRepo";
@@ -26,6 +27,7 @@ import { buildBaselineProjection } from "../../core/projections/baseline";
 import { buildWhatIfProjection } from "../../core/projections/whatIf";
 import { generateBriefing } from "../../core/briefing/briefing.generator";
 import { formatCurrencyCompact } from "../../utils/format";
+import { estimateUpgradeCapex } from "../../utils/upgradeCost";
 
 import { useWorldState } from "../hooks/useWorldState";
 import { useWorld } from "../hooks/useWorld";
@@ -48,7 +50,7 @@ const STEPS = [
   { key: "companies", label: "Companies", description: "Operations decisions" },
   { key: "holding", label: "Holding", description: "Allocation + policy" },
   { key: "upgrades", label: "Upgrades", description: "Timeline + queue" },
-  { key: "review", label: "Review & Commit", description: "Lock and simulate" },
+  { key: "review", label: "Review & Submit", description: "Lock and submit" },
 ] as const;
 
 type StepKey = (typeof STEPS)[number]["key"];
@@ -68,30 +70,47 @@ function decisionPayloadsFromRows(rows: Array<{ payload: any }>): CompanyDecisio
   return rows.map((row) => row.payload).filter(Boolean);
 }
 
+function previousRound(year: number, week: number): { year: number; week: number } {
+  if (week > 1) return { year, week: week - 1 };
+  return { year: Math.max(1, year - 1), week: 52 };
+}
+
 function deriveBriefing(input: {
   macroModifiers: any;
-  sectorRows: Array<{ sectorId: string; sectorName?: string | null; trendFactor?: number; volatility?: number }>;
-  companies: Array<{ companyId: string; companyName: string; profit?: number; cashChange?: number }>;
-  events: any[];
+  sectorRows: Array<{
+    sectorId: string;
+    sectorName?: string | null;
+    trendFactor?: number;
+    volatility?: number;
+    currentDemand?: number;
+    lastRoundMetrics?: Record<string, unknown> | null;
+  }>;
+  companies: Array<{
+    companyId: string;
+    companyName: string;
+    sectorCode?: string | null;
+    sectorName?: string | null;
+    nicheName?: string | null;
+    revenue?: number;
+    cogs?: number;
+    opex?: number;
+    interestCost?: number;
+    marketingLevel?: number;
+    capacity?: number;
+    utilisationRate?: number;
+    upgradeSpend?: number;
+    profit?: number;
+    cashChange?: number;
+  }>;
+  events: BriefingEventSignal[];
+  marketShares?: BriefingMarketShare[];
 }) {
-  const competitorSignals: CompetitorSignal[] = (input.events ?? [])
-    .filter((event) => event?.scope === "SECTOR" || event?.scope === "COMPANY")
-    .slice(0, 3)
-    .map((event) => {
-      const severity: BriefingSeverity = Number(event?.severity ?? 0) >= 1.2 ? "warning" : "info";
-      return {
-        id: String(event?.id ?? `event-${event?.type}`),
-        title: String(event?.type ?? "Market signal"),
-        body: String(event?.payload?.summary ?? event?.payload?.title ?? "Competitor activity detected."),
-        severity,
-      };
-    });
-
   return generateBriefing({
     macroModifiers: input.macroModifiers ?? null,
     sectorSignals: input.sectorRows,
     companies: input.companies,
-    competitorSignals,
+    events: input.events,
+    marketShares: input.marketShares,
   });
 }
 
@@ -156,6 +175,19 @@ export const DecisionWizardPage: React.FC = () => {
     });
   }, [companies, sectorsById]);
 
+  const playerCompanyIds = React.useMemo(
+    () => new Set(playableCompanies.map((company) => String(company.id))),
+    [playableCompanies]
+  );
+
+  const companyNameById = React.useMemo(() => {
+    const map = new Map<string, string>();
+    playableCompanies.forEach((company) => {
+      map.set(String(company.id), String(company.name ?? "Company"));
+    });
+    return map;
+  }, [playableCompanies]);
+
   const nicheIds = React.useMemo(
     () => Array.from(new Set(playableCompanies.map((c) => String(c.nicheId)).filter(Boolean))),
     [playableCompanies]
@@ -178,6 +210,15 @@ export const DecisionWizardPage: React.FC = () => {
     });
     return map;
   }, [nichesQuery.data]);
+
+  const startupCostByNicheId = React.useMemo(() => {
+    const map = new Map<string, number>();
+    nichesById.forEach((niche, id) => {
+      const startupCost = toNumber((niche as any).startupCostEur, toNumber((niche as any).startup_cost_eur, 0));
+      map.set(id, startupCost);
+    });
+    return map;
+  }, [nichesById]);
 
   const statesQuery = useQuery({
     queryKey: ["wizardStates", companyIdsKey],
@@ -304,13 +345,25 @@ export const DecisionWizardPage: React.FC = () => {
       const sectorRows = (sectorStates ?? []).map((row) => ({
         sectorId: String(row.sectorId),
         sectorName: sectorNameById[String(row.sectorId)],
+        currentDemand: toNumber((row as any).currentDemand, 0),
         trendFactor: toNumber(row.trendFactor, 1),
         volatility: toNumber(row.volatility, 0.2),
+        lastRoundMetrics: (row as any).lastRoundMetrics ?? {},
       }));
 
       return { sectorRows, events };
     },
     enabled: !!worldId,
+    staleTime: 10_000,
+  });
+
+  const marketShareQuery = useQuery({
+    queryKey: ["wizardMarketShare", worldId ?? "none", holdingId ?? "none"],
+    queryFn: async () => {
+      if (!worldId || !holdingId) return [];
+      return scoreboardService.getHoldingMarketShareBySector(asWorldId(worldId), holdingId);
+    },
+    enabled: !!worldId && !!holdingId,
     staleTime: 10_000,
   });
 
@@ -325,6 +378,59 @@ export const DecisionWizardPage: React.FC = () => {
     (financialsQuery.data ?? []).forEach((row) => map.set(row.companyId, row.financials ?? null));
     return map;
   }, [financialsQuery.data]);
+
+  const marketShares = React.useMemo<BriefingMarketShare[]>(() => {
+    return (marketShareQuery.data ?? []).map((row: any) => ({
+      sectorName: String(row.sectorName ?? "Sector"),
+      share: toNumber(row.share, 0),
+      holdingRevenue: toNumber(row.holdingRevenue, 0),
+      sectorRevenue: toNumber(row.sectorRevenue, 0),
+    }));
+  }, [marketShareQuery.data]);
+
+  const eventSignals = React.useMemo<BriefingEventSignal[]>(() => {
+    const events = briefingQuery.data?.events ?? [];
+    return (events ?? []).map((event: any) => {
+      const rawScope = String(event?.scope ?? "WORLD");
+      let briefingScope: BriefingScope = "macro";
+
+      if (rawScope === "SECTOR") {
+        briefingScope = "sector";
+      } else if (rawScope === "COMPANY") {
+        briefingScope = playerCompanyIds.has(String(event?.companyId)) ? "company" : "competitor";
+      } else if (rawScope === "HOLDING") {
+        briefingScope = "company";
+      }
+
+      const payload =
+        event?.payload && typeof event.payload === "object"
+          ? (event.payload as Record<string, unknown>)
+          : {};
+
+      const sectorName = event?.sectorId ? sectorsById.get(String(event.sectorId))?.name : null;
+      const companyName = event?.companyId ? companyNameById.get(String(event.companyId)) : null;
+      const targetLabel =
+        companyName ??
+        sectorName ??
+        (rawScope === "WORLD" ? "Global" : rawScope === "HOLDING" ? "Holding" : "Market");
+
+      return {
+        id: String(event?.id ?? `${rawScope}-${event?.type ?? "event"}-${event?.createdAt ?? "time"}`),
+        scope: rawScope,
+        type: event?.type ? String(event.type) : null,
+        severity: Number(event?.severity ?? 1),
+        title: payload.title != null ? String(payload.title) : null,
+        summary:
+          payload.summary != null ? String(payload.summary) : payload.note != null ? String(payload.note) : null,
+        targetLabel,
+        sectorId: event?.sectorId ? String(event.sectorId) : null,
+        companyId: event?.companyId ? String(event.companyId) : null,
+        holdingId: event?.holdingId ? String(event.holdingId) : null,
+        briefingScope,
+        payload,
+      } as BriefingEventSignal;
+    });
+  }, [briefingQuery.data?.events, playerCompanyIds, sectorsById, companyNameById]);
 
   const decisionPayloadsByCompany = React.useMemo(() => {
     const map = new Map<string, CompanyDecisionPayload[]>();
@@ -383,15 +489,78 @@ export const DecisionWizardPage: React.FC = () => {
     return map;
   }, [nicheProductsQuery.data]);
 
+  const unlockedProductsByCompany = React.useMemo(() => {
+    const map = new Map<string, Set<string>>();
+
+    playableCompanies.forEach((company) => {
+      const companyId = String(company.id);
+      const niche = nichesById.get(String(company.nicheId));
+      const config = (niche as any)?.config ?? {};
+      const starting = Array.isArray(config?.startingLoadout?.unlockedProducts)
+        ? config.startingLoadout.unlockedProducts.map((sku: unknown) => String(sku))
+        : [];
+
+      const unlocked = new Set<string>();
+      if (starting.length > 0) {
+        starting.forEach((sku: string) => unlocked.add(String(sku)));
+      }
+
+      const availableUpgrades = nicheUpgradesByCompany.get(companyId) ?? [];
+      const upgradeById = new Map(availableUpgrades.map((upgrade) => [String(upgrade.id), upgrade]));
+      const ownedUpgrades = ownedUpgradesByCompany.get(companyId) ?? [];
+
+      ownedUpgrades.forEach((owned) => {
+        const upgrade = upgradeById.get(String(owned.upgradeId));
+        const effects = Array.isArray((upgrade as any)?.effects) ? (upgrade as any).effects : [];
+        effects.forEach((effect: any) => {
+          if (String(effect?.key ?? "") !== "unlock_products") return;
+          const value = effect?.value;
+          if (!Array.isArray(value)) return;
+          value.forEach((sku: unknown) => unlocked.add(String(sku)));
+        });
+      });
+
+      map.set(companyId, unlocked);
+    });
+
+    return map;
+  }, [playableCompanies, nichesById, nicheUpgradesByCompany, ownedUpgradesByCompany]);
+
   const upgradesById = React.useMemo(() => {
     const map: Record<string, { cost?: number }> = {};
     (nicheUpgradesQuery.data ?? []).forEach((row) => {
+      const startupCost = startupCostByNicheId.get(String(row.nicheId)) ?? 0;
       (row.upgrades ?? []).forEach((upgrade: any) => {
-        map[String(upgrade.id)] = { cost: toNumber(upgrade.cost, 0) };
+        const estimate = estimateUpgradeCapex({
+          cost: upgrade.cost,
+          capexFormula: upgrade.capexFormula,
+          capexPctRange: upgrade.capexPctRange,
+          startupCost,
+        });
+        map[String(upgrade.id)] = { cost: estimate };
       });
     });
     return map;
-  }, [nicheUpgradesQuery.data]);
+  }, [nicheUpgradesQuery.data, startupCostByNicheId]);
+
+  const upgradeSpendByCompany = React.useMemo(() => {
+    const map = new Map<string, number>();
+    const prev = previousRound(currentYear, currentWeek);
+    ownedUpgradesByCompany.forEach((upgrades, companyId) => {
+      const total = (upgrades ?? [])
+        .filter(
+          (upgrade: any) =>
+            Number(upgrade.purchasedYear ?? 0) === prev.year &&
+            Number(upgrade.purchasedWeek ?? 0) === prev.week
+        )
+        .reduce((sum: number, upgrade: any) => {
+          const upgradeId = String(upgrade.upgradeId ?? "");
+          return sum + toNumber(upgradesById[upgradeId]?.cost, 0);
+        }, 0);
+      map.set(companyId, total);
+    });
+    return map;
+  }, [ownedUpgradesByCompany, upgradesById, currentYear, currentWeek]);
 
   const projectionCompanies = React.useMemo(() => {
     return playableCompanies.map((company) => ({
@@ -461,12 +630,25 @@ export const DecisionWizardPage: React.FC = () => {
 
   const briefingCards = React.useMemo(() => {
     const rows = briefingQuery.data?.sectorRows ?? [];
-    const events = briefingQuery.data?.events ?? [];
     const companyContexts = playableCompanies.map((company) => {
       const fin = financialsById.get(String(company.id));
+      const state = stateById.get(String(company.id));
+      const sector = sectorsById.get(String(company.sectorId));
+      const niche = nichesById.get(String(company.nicheId));
       return {
         companyId: String(company.id),
         companyName: String(company.name),
+        sectorCode: sector?.code ?? null,
+        sectorName: sector?.name ?? null,
+        nicheName: niche?.name ?? null,
+        revenue: toNumber(fin?.revenue, 0),
+        cogs: toNumber(fin?.cogs, 0),
+        opex: toNumber(fin?.opex, 0),
+        interestCost: toNumber(fin?.interestCost, 0),
+        marketingLevel: toNumber(state?.marketingLevel, 0),
+        capacity: toNumber(state?.capacity, 0),
+        utilisationRate: toNumber(state?.utilisationRate, 0),
+        upgradeSpend: toNumber(upgradeSpendByCompany.get(String(company.id)), 0),
         profit: toNumber(fin?.netProfit, 0),
         cashChange: toNumber(fin?.cashChange, 0),
       };
@@ -476,9 +658,21 @@ export const DecisionWizardPage: React.FC = () => {
       macroModifiers: economy?.macroModifiers ?? null,
       sectorRows: rows,
       companies: companyContexts,
-      events,
+      events: eventSignals,
+      marketShares,
     });
-  }, [briefingQuery.data, ws.economy, playableCompanies, financialsById]);
+  }, [
+    briefingQuery.data,
+    ws.economy,
+    playableCompanies,
+    financialsById,
+    stateById,
+    sectorsById,
+    nichesById,
+    eventSignals,
+    marketShares,
+    upgradeSpendByCompany,
+  ]);
 
   const keyRisks = React.useMemo(() => buildKeyRisks(Array.from(nichesById.values())), [nichesById]);
 
@@ -560,6 +754,78 @@ export const DecisionWizardPage: React.FC = () => {
     }
   };
 
+  const onSave = async () => {
+    if (!worldId || !holdingId || !economy) return;
+    setCommitError(null);
+
+    const holdingPayloads: HoldingDecisionPayload[] = [];
+
+    Object.entries(decisionDraft.draftHoldingAllocations).forEach(([companyId, amount]) => {
+      if (!amount) return;
+      if (amount > 0) {
+        holdingPayloads.push({ type: "INJECT_CAPITAL", companyId: companyId as any, amount } as any);
+      } else {
+        holdingPayloads.push({ type: "WITHDRAW_DIVIDEND", companyId: companyId as any, amount: Math.abs(amount) } as any);
+      }
+    });
+
+    if (holdingPolicy) {
+      holdingPayloads.push({
+        type: "SET_HOLDING_POLICY",
+        maxLeverageRatio: holdingPolicy.maxLeverageRatio as any,
+        dividendPreference: holdingPolicy.dividendPreference,
+        riskAppetite: holdingPolicy.riskAppetite,
+      } as any);
+    }
+
+    const year = currentYear as any;
+    const week = currentWeek as any;
+
+    try {
+      await Promise.all(
+        playableCompanies.map(async (company) => {
+          const companyId = String(company.id);
+          const decisions = decisionDraft.draftCompanyDecisions[companyId] ?? [];
+          const upgradePayloads: CompanyDecisionPayload[] = decisionDraft.draftUpgradeQueue
+            .filter((upgrade) => upgrade.companyId === companyId)
+            .map((upgrade) => ({ type: "BUY_UPGRADE", upgradeId: upgrade.upgradeId } as any));
+
+          const payloads = [...decisions, ...upgradePayloads];
+
+          await decisionService.saveCompanyDecisions({
+            companyId: asCompanyId(companyId),
+            worldId: asWorldId(worldId),
+            year,
+            week,
+            source: "PLAYER" as any,
+            payloads,
+          });
+        })
+      );
+
+      if (holdingPayloads.length > 0) {
+        await decisionService.clearHoldingDecisions({
+          worldId: asWorldId(worldId),
+          holdingId: asHoldingId(holdingId),
+          year,
+          week,
+        });
+        for (const payload of holdingPayloads) {
+          await decisionService.submitHoldingDecision({
+            worldId: asWorldId(worldId),
+            holdingId: asHoldingId(holdingId),
+            year,
+            week,
+            source: "PLAYER" as any,
+            payload,
+          });
+        }
+      }
+    } catch (error) {
+      setCommitError(String((error as Error)?.message ?? error ?? "Save failed"));
+    }
+  };
+
   if (ws.isLoading) {
     return (
       <div className="mx-auto max-w-5xl px-4 py-6">
@@ -632,6 +898,7 @@ export const DecisionWizardPage: React.FC = () => {
             sectorsById={sectorsById}
             nichesById={nichesById}
             nicheProductsById={nicheProductsById}
+            unlockedProductsByCompany={unlockedProductsByCompany}
             statesById={stateById}
             baseline={baselineProjection}
             whatIf={compareMode ? whatIfProjection : null}
@@ -660,6 +927,9 @@ export const DecisionWizardPage: React.FC = () => {
             upgradesByCompany={nicheUpgradesByCompany as any}
             ownedUpgradesByCompany={ownedUpgradesByCompany as any}
             draftUpgradeQueue={decisionDraft.draftUpgradeQueue}
+            upgradeCostById={Object.fromEntries(
+              Object.entries(upgradesById).map(([id, value]) => [id, toNumber(value?.cost, 0)])
+            )}
             currentYear={currentYear}
             currentWeek={currentWeek}
             onToggleUpgrade={decisionDraft.toggleUpgrade}
@@ -671,7 +941,7 @@ export const DecisionWizardPage: React.FC = () => {
           <div className="space-y-4">
             {commitError ? (
               <Card className="p-4 border border-rose-200 bg-rose-50">
-                <div className="text-sm font-semibold text-rose-800">Commit failed</div>
+                <div className="text-sm font-semibold text-rose-800">Submit failed</div>
                 <div className="mt-1 text-xs text-rose-700">{commitError}</div>
               </Card>
             ) : null}
@@ -694,9 +964,11 @@ export const DecisionWizardPage: React.FC = () => {
         safeToSpend={safeToSpend}
         expectedEndCash={expectedEndCash}
         worstEndCash={worstEndCash}
-        primaryLabel={activeStep === "review" ? "Commit" : "Next"}
+        primaryLabel={activeStep === "review" ? "Submit" : "Next step"}
         secondaryLabel={canGoBack ? "Back" : undefined}
         onSecondary={() => canGoBack && setActiveStep(STEPS[activeIndex - 1].key)}
+        saveLabel="Save"
+        onSave={() => void onSave()}
         onPrimary={() => {
           if (activeStep === "review") {
             if (decisionDraft.softCommitted) {
