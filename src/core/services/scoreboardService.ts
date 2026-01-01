@@ -27,6 +27,17 @@ export type ProfitEntry = {
   tickCount: number;
 };
 
+export type ReputationEntry = {
+  holdingId: string;
+  holdingName: string;
+  playerId: string;
+  playerName: string;
+  brandRepLevel: number;
+  creditRepLevel: number;
+  prestigeLevel: number;
+  overallRep: number;
+};
+
 export type MarketShareLeader = {
   sectorId: string;
   sectorName: string;
@@ -35,6 +46,16 @@ export type MarketShareLeader = {
   holdingId: string;
   holdingName: string;
   revenue: number;
+  share: number;
+};
+
+export type HoldingSectorShare = {
+  sectorId: string;
+  sectorName: string;
+  holdingId: string;
+  holdingName: string;
+  holdingRevenue: number;
+  sectorRevenue: number;
   share: number;
 };
 
@@ -131,6 +152,33 @@ export const scoreboardService = {
     return sortDesc(rows, (r) => r.totalProfit).slice(0, limit);
   },
 
+  async getReputationLeaderboard(worldId: WorldId, limit = 10): Promise<ReputationEntry[]> {
+    const holdings = await holdingRepo.listByWorld(worldId);
+    if (holdings.length === 0) return [];
+
+    const playerIds = Array.from(new Set(holdings.map((h) => String(h.playerId))));
+    const players = await playerRepo.listByIds(playerIds as any);
+    const playerById = new Map(players.map((p) => [String(p.id), p]));
+    const holdingByPlayerId = new Map(holdings.map((h) => [String(h.playerId), h]));
+
+    const rows = players.map((player) => {
+      const holding = holdingByPlayerId.get(String(player.id));
+      const overallRep = Math.round((player.brandRepLevel + player.creditRepLevel) / 2);
+      return {
+        holdingId: holding ? String(holding.id) : "",
+        holdingName: holding?.name ?? "Holding",
+        playerId: String(player.id),
+        playerName: player.name,
+        brandRepLevel: Number(player.brandRepLevel ?? 0),
+        creditRepLevel: Number(player.creditRepLevel ?? 0),
+        prestigeLevel: Number(player.prestigeLevel ?? 0),
+        overallRep,
+      } as ReputationEntry;
+    });
+
+    return sortDesc(rows, (r) => r.overallRep).slice(0, limit);
+  },
+
   async getMarketShareBySector(worldId: WorldId, limitPerSector = 3): Promise<MarketShareLeader[]> {
     const latest = await worldRoundRepo.getLatestByWorld(worldId);
     if (!latest) return [];
@@ -200,5 +248,64 @@ export const scoreboardService = {
     }
 
     return finalRows;
+  },
+
+  async getHoldingMarketShareBySector(
+    worldId: WorldId,
+    holdingId: string,
+    limit = 6
+  ): Promise<HoldingSectorShare[]> {
+    const latest = await worldRoundRepo.getLatestByWorld(worldId);
+    if (!latest) return [];
+
+    const { data, error } = await supabase
+      .from("company_financials")
+      .select("company_id, revenue")
+      .eq("world_id", worldId as unknown as string)
+      .eq("year", Number(latest.year))
+      .eq("week", Number(latest.week));
+
+    if (error) throw error;
+
+    const companies = await companyRepo.listByWorld(worldId);
+    const companyById = new Map(companies.map((c) => [String(c.id), c]));
+
+    const sectorTotals = new Map<string, number>();
+    const holdingTotals = new Map<string, number>();
+
+    (data ?? []).forEach((row: any) => {
+      const company = companyById.get(String(row.company_id));
+      if (!company) return;
+      const sectorId = String(company.sectorId ?? "");
+      const revenue = safeNumber(row.revenue);
+
+      sectorTotals.set(sectorId, (sectorTotals.get(sectorId) ?? 0) + revenue);
+
+      if (String(company.holdingId ?? "") === String(holdingId)) {
+        holdingTotals.set(sectorId, (holdingTotals.get(sectorId) ?? 0) + revenue);
+      }
+    });
+
+    const sectors = await sectorRepo.listSectors();
+    const sectorById = new Map(sectors.map((s) => [String(s.id), s]));
+    const holding = await holdingRepo.getById(holdingId as any);
+
+    const rows = Array.from(holdingTotals.entries()).map(([sectorId, holdingRevenue]) => {
+      const sectorRevenue = sectorTotals.get(sectorId) ?? 0;
+      const share = sectorRevenue > 0 ? holdingRevenue / sectorRevenue : 0;
+      const sector = sectorById.get(sectorId);
+
+      return {
+        sectorId,
+        sectorName: sector?.name ?? "Unknown sector",
+        holdingId: String(holdingId),
+        holdingName: holding?.name ?? "Holding",
+        holdingRevenue,
+        sectorRevenue,
+        share,
+      } as HoldingSectorShare;
+    });
+
+    return sortDesc(rows, (r) => r.share).slice(0, limit);
   },
 };

@@ -12,6 +12,7 @@ import Table, { TBody, TD, TH, THead, TR } from "../components/Table";
 import { useWorld } from "../hooks/useWorld";
 import { useHolding } from "../hooks/useHolding";
 import { useCompanies } from "../hooks/useCompany";
+import { useSectorDirectory } from "../hooks/useSectorDirectory";
 import { money } from "../../utils/money";
 
 function formatSeconds(totalSeconds: number | null | undefined) {
@@ -42,6 +43,7 @@ export const OverviewPanel: React.FC = () => {
   const { world, economy, worldRound, secondsUntilNextTick, isTicking, refetch: refetchWorld } = useWorld();
   const { holding, refetch: refetchHolding } = useHolding();
   const { companies, refetch: refetchCompanies } = useCompanies();
+  const { sectorById, nicheById } = useSectorDirectory();
 
   const [refreshing, setRefreshing] = React.useState(false);
 
@@ -208,24 +210,38 @@ export const OverviewPanel: React.FC = () => {
             </TR>
           </THead>
           <TBody>
-            {companies.map((c) => (
-              <TR
-                key={String(c.id)}
-                interactive
-                onClick={() => (window.location.href = `/game/companies/${c.id}`)}
-                className="cursor-pointer"
-              >
-                <TD className="font-semibold">{c.name}</TD>
-                <TD>{String((c as any).sectorId ?? "—")}</TD>
-                <TD>{String((c as any).nicheId ?? "—")}</TD>
-                <TD>{c.region}</TD>
-                <TD className="text-right">
-                  <span className="inline-flex rounded-xl border border-[var(--border)] bg-[var(--card-2)] px-2 py-1 text-xs">
-                    {c.status}
-                  </span>
-                </TD>
-              </TR>
-            ))}
+            {companies.map((c) => {
+              const sector = sectorById.get(String((c as any).sectorId ?? ""));
+              const niche = nicheById.get(String((c as any).nicheId ?? ""));
+              return (
+                <TR
+                  key={String(c.id)}
+                  interactive
+                  onClick={() => (window.location.href = `/game/companies/${c.id}`)}
+                  className="cursor-pointer"
+                >
+                  <TD className="font-semibold">{c.name}</TD>
+                  <TD>
+                    <div className="font-semibold">{sector?.name ?? "Unknown sector"}</div>
+                    <div className="text-xs text-[var(--text-muted)]">
+                      {sector?.description ?? "No description"}
+                    </div>
+                  </TD>
+                  <TD>
+                    <div className="font-semibold">{niche?.name ?? "Unknown niche"}</div>
+                    <div className="text-xs text-[var(--text-muted)]">
+                      {niche?.description ?? "No description"}
+                    </div>
+                  </TD>
+                  <TD>{c.region}</TD>
+                  <TD className="text-right">
+                    <span className="inline-flex rounded-xl border border-[var(--border)] bg-[var(--card-2)] px-2 py-1 text-xs">
+                      {c.status}
+                    </span>
+                  </TD>
+                </TR>
+              );
+            })}
           </TBody>
         </Table>
       </div>

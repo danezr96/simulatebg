@@ -7,11 +7,14 @@ import CompanyMarketplace from "../components/CompanyMarketplace";
 import type { WorldId, HoldingId } from "../../core/domain";
 import { financeRepo } from "../../core/persistence/financeRepo";
 import { companyService } from "../../core/services/companyService";
+import { economyConfig } from "../../config/economy";
 
 import { useStartupListings } from "../hooks/useStartupListings";
+import { useCurrentPlayer } from "../hooks/useCurrentPlayer";
 import type { StartupListing } from "../hooks/useStartupListings";
 import { formatMoney } from "../../utils/money";
 import { cn, formatPercent } from "../../utils/format";
+import { applyCreditRate, estimateWeeklyLoanPayment, getCreditTier } from "../../utils/loan";
 
 // Loan presets remain a simple onboarding choice.
 
@@ -79,6 +82,11 @@ const LOAN_PRESETS: LoanPreset[] = [
 export default function ChooseLoanCard({ worldId, holding, onDone }: Props) {
   const holdingIdStr = readId(holding);
   const holdingCash = Number((holding as any)?.cashBalance ?? 0);
+  const { player } = useCurrentPlayer();
+  const creditLevel = Number(player?.creditRepLevel ?? 1);
+  const creditTier = getCreditTier(creditLevel);
+  const minRate = economyConfig.interest.minAnnualRate ?? 0;
+  const maxRate = economyConfig.interest.maxAnnualRate ?? 0.2;
 
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
@@ -92,6 +100,17 @@ export default function ChooseLoanCard({ worldId, holding, onDone }: Props) {
     () => LOAN_PRESETS.find((p) => p.id === loanPresetId) ?? LOAN_PRESETS[0],
     [loanPresetId]
   );
+  const selectedRate = applyCreditRate({
+    baseRate: preset.interestRate,
+    creditLevel,
+    minRate,
+    maxRate,
+  }).rate;
+  const selectedPayment = estimateWeeklyLoanPayment({
+    principal: preset.principal,
+    annualRate: selectedRate,
+    termWeeks: preset.termWeeks || 1,
+  });
 
   const { listings, sectors, niches, loading: listingsLoading, error: listingsError } = useStartupListings();
   const [selectedListingId, setSelectedListingId] = React.useState<string | null>(null);
@@ -133,7 +152,7 @@ export default function ChooseLoanCard({ worldId, holding, onDone }: Props) {
           worldId: worldId as unknown as WorldId,
           holdingId: holdingIdStr as unknown as HoldingId,
           principal: preset.principal,
-          interestRate: preset.interestRate,
+          interestRate: selectedRate,
           termWeeks: preset.termWeeks,
           lenderName: preset.lenderName,
         });
@@ -174,6 +193,9 @@ export default function ChooseLoanCard({ worldId, holding, onDone }: Props) {
       <div className="mt-1 text-sm text-[var(--text-muted)]">
         Pick a starter loan and a company listing to enter the game.
       </div>
+      <div className="mt-1 text-xs text-[var(--text-muted)]">
+        Credit rating: <span className="text-[var(--text)]">{creditTier.label}</span> ({creditTier.note}).
+      </div>
 
       <div className="mt-6 grid gap-4">
         <div>
@@ -182,8 +204,20 @@ export default function ChooseLoanCard({ worldId, holding, onDone }: Props) {
             {LOAN_PRESETS.map((p) => {
               const selected = p.id === loanPresetId;
               const principalLabel = p.principal > 0 ? formatMoney(p.principal) : "No debt";
-              const interestLabel = p.principal > 0 ? formatPercent(p.interestRate) : "0%";
+              const applied = applyCreditRate({
+                baseRate: p.interestRate,
+                creditLevel,
+                minRate,
+                maxRate,
+              });
+              const interestLabel = p.principal > 0 ? formatPercent(applied.rate) : "0%";
               const termLabel = p.principal > 0 ? `${p.termWeeks} weeks` : "None";
+              const payment = estimateWeeklyLoanPayment({
+                principal: p.principal,
+                annualRate: applied.rate,
+                termWeeks: p.termWeeks || 1,
+              });
+              const weeklyLabel = p.principal > 0 ? formatMoney(payment.weeklyPayment) : "0";
 
               return (
                 <button
@@ -204,7 +238,7 @@ export default function ChooseLoanCard({ worldId, holding, onDone }: Props) {
                     <div className="text-[11px] text-[var(--text-muted)]">{p.lenderName}</div>
                   </div>
 
-                  <div className="mt-3 grid grid-cols-3 gap-2 text-xs text-[var(--text-muted)]">
+                  <div className="mt-3 grid grid-cols-2 md:grid-cols-4 gap-2 text-xs text-[var(--text-muted)]">
                     <div>
                       <div>Principal</div>
                       <div className="text-sm font-semibold text-[var(--text)]">{principalLabel}</div>
@@ -214,9 +248,16 @@ export default function ChooseLoanCard({ worldId, holding, onDone }: Props) {
                       <div className="text-sm font-semibold text-[var(--text)]">{interestLabel}</div>
                     </div>
                     <div>
+                      <div>Weekly</div>
+                      <div className="text-sm font-semibold text-[var(--text)]">{weeklyLabel}</div>
+                    </div>
+                    <div>
                       <div>Term</div>
                       <div className="text-sm font-semibold text-[var(--text)]">{termLabel}</div>
                     </div>
+                  </div>
+                  <div className="mt-2 text-[11px] text-[var(--text-muted)]">
+                    Credit rating: {creditTier.label} ({creditTier.note})
                   </div>
                 </button>
               );
@@ -266,6 +307,12 @@ export default function ChooseLoanCard({ worldId, holding, onDone }: Props) {
           <div className="mt-2 text-xs text-[var(--text-muted)]">
             Available after loan: {formatMoney(availableCash)}
           </div>
+          {preset.principal > 0 ? (
+            <div className="mt-2 text-xs text-[var(--text-muted)]">
+              Weekly payment {formatMoney(selectedPayment.weeklyPayment)} (interest{" "}
+              {formatMoney(selectedPayment.weeklyInterest)}).
+            </div>
+          ) : null}
         </div>
 
         <CompanyMarketplace

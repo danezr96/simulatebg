@@ -14,10 +14,14 @@ import { useCompanies } from "../hooks/useCompany";
 
 import { eventRepo } from "../../core/persistence/eventRepo";
 import { sectorRepo } from "../../core/persistence/sectorRepo";
+import { companyRepo } from "../../core/persistence/companyRepo";
+import { holdingRepo } from "../../core/persistence/holdingRepo";
+import { describeEvent, formatEventScope } from "../../utils/events";
 
 type SectorMetricRow = {
   sectorId: string;
   sectorName?: string;
+  sectorDescription?: string;
   currentDemand: number;
   trendFactor: number;
   volatility: number;
@@ -39,6 +43,9 @@ export const MarketPanel: React.FC = () => {
 
   const [events, setEvents] = React.useState<any[]>([]);
   const [sectorRows, setSectorRows] = React.useState<SectorMetricRow[]>([]);
+  const [sectorById, setSectorById] = React.useState<Record<string, { name: string; description?: string }>>({});
+  const [companyById, setCompanyById] = React.useState<Record<string, { name: string }>>({});
+  const [holdingById, setHoldingById] = React.useState<Record<string, { name: string }>>({});
   const [loading, setLoading] = React.useState(false);
   const [err, setErr] = React.useState<string | null>(null);
 
@@ -78,6 +85,40 @@ export const MarketPanel: React.FC = () => {
     return rows.sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta)).slice(0, 5);
   }, [sectorRows]);
 
+  const sectorSnapshot = React.useMemo(() => {
+    return sectorRows.map((row) => {
+      const metrics = row.lastRoundMetrics as any;
+      const demandDeltaPct = Number(metrics?.demandDeltaPct ?? metrics?.demand_delta_pct ?? NaN);
+      const demandDelta = Number(metrics?.demandDelta ?? metrics?.demand_delta ?? NaN);
+      const deltaPct = Number.isFinite(demandDeltaPct) ? demandDeltaPct : Number(row.trendFactor ?? 1) - 1;
+      const deltaAbs = Number.isFinite(demandDelta) ? demandDelta : row.currentDemand * deltaPct;
+      const direction = deltaPct >= 0.03 ? "Tailwind" : deltaPct <= -0.03 ? "Headwind" : "Stable";
+      const volatility = Number(row.volatility ?? 0);
+      const volatilityLabel = volatility >= 0.12 ? "High" : volatility >= 0.06 ? "Medium" : "Low";
+
+      return {
+        ...row,
+        deltaPct,
+        deltaAbs,
+        direction,
+        volatilityLabel,
+      };
+    });
+  }, [sectorRows]);
+
+  const resolveTarget = React.useCallback(
+    (event: any) => {
+      const companyId = String(event?.companyId ?? event?.company_id ?? "");
+      if (companyId && companyById[companyId]) return companyById[companyId].name;
+      const sectorId = String(event?.sectorId ?? event?.sector_id ?? "");
+      if (sectorId && sectorById[sectorId]) return sectorById[sectorId].name;
+      const holdingId = String(event?.holdingId ?? event?.holding_id ?? "");
+      if (holdingId && holdingById[holdingId]) return holdingById[holdingId].name;
+      return "World";
+    },
+    [companyById, sectorById, holdingById]
+  );
+
   const loadAll = React.useCallback(async () => {
     if (!world) return;
 
@@ -90,20 +131,39 @@ export const MarketPanel: React.FC = () => {
       const recent = await eventRepo.listRecent({ worldId: world.id as any, limit: 20 });
       setEvents(Array.isArray(recent) ? recent : []);
 
-      // 2) sector snapshot from world_sector_state + sector names
-      const [worldSectorStates, sectors] = await Promise.all([
+      // 2) sector snapshot + lookup names
+      const [worldSectorStates, sectors, companiesRows, holdingsRows] = await Promise.all([
         (sectorRepo as any).listWorldSectorStates?.(world.id),
         (sectorRepo as any).listSectors?.(),
+        companyRepo.listByWorld(world.id as any),
+        holdingRepo.listByWorld(world.id as any),
       ]);
 
-      const sectorNameById: Record<string, string> = {};
+      const sectorMap: Record<string, { name: string; description?: string }> = {};
       for (const s of Array.isArray(sectors) ? sectors : []) {
-        sectorNameById[String((s as any).id)] = String((s as any).name ?? (s as any).id);
+        sectorMap[String((s as any).id)] = {
+          name: String((s as any).name ?? (s as any).id),
+          description: (s as any).description ?? undefined,
+        };
       }
+      setSectorById(sectorMap);
+
+      const companyMap: Record<string, { name: string }> = {};
+      for (const c of Array.isArray(companiesRows) ? companiesRows : []) {
+        companyMap[String((c as any).id)] = { name: String((c as any).name ?? "Company") };
+      }
+      setCompanyById(companyMap);
+
+      const holdingMap: Record<string, { name: string }> = {};
+      for (const h of Array.isArray(holdingsRows) ? holdingsRows : []) {
+        holdingMap[String((h as any).id)] = { name: String((h as any).name ?? "Holding") };
+      }
+      setHoldingById(holdingMap);
 
       const rows: SectorMetricRow[] = (Array.isArray(worldSectorStates) ? worldSectorStates : []).map((ss: any) => ({
         sectorId: String(ss.sectorId ?? ss.sector_id ?? ""),
-        sectorName: sectorNameById[String(ss.sectorId ?? ss.sector_id ?? "")],
+        sectorName: sectorMap[String(ss.sectorId ?? ss.sector_id ?? "")]?.name,
+        sectorDescription: sectorMap[String(ss.sectorId ?? ss.sector_id ?? "")]?.description,
         currentDemand: Number(ss.currentDemand ?? ss.current_demand ?? 0),
         trendFactor: Number(ss.trendFactor ?? ss.trend_factor ?? 1),
         volatility: Number(ss.volatility ?? 0),
@@ -128,6 +188,9 @@ export const MarketPanel: React.FC = () => {
   };
 
   const netWorthApprox = 0; // placeholder: je echte net worth zit waarschijnlijk in Holding/OverviewPanel
+  const featuredEvent = currentEvents[0] ?? events[0] ?? null;
+  const featuredStory = featuredEvent ? describeEvent(featuredEvent) : null;
+  const featuredTarget = featuredEvent ? resolveTarget(featuredEvent) : "World";
 
   return (
     <motion.div
@@ -212,6 +275,26 @@ export const MarketPanel: React.FC = () => {
         </Card>
       </div>
 
+      <Card className="rounded-3xl p-5">
+        <div className="flex items-center gap-2 text-[var(--text-muted)]">
+          <Activity className="h-4 w-4" />
+          <div className="text-sm font-semibold text-[var(--text)]">Market pulse</div>
+        </div>
+        <div className="mt-2 text-sm text-[var(--text-muted)]">
+          {currentEvents.length > 0
+            ? `This week logged ${currentEvents.length} event${currentEvents.length === 1 ? "" : "s"}.`
+            : "Quiet week so far."}
+        </div>
+        <div className="mt-3 text-sm text-[var(--text)]">
+          {featuredStory
+            ? `${featuredStory.headline} in ${featuredTarget}.`
+            : "No major market story yet."}
+        </div>
+        {featuredStory ? (
+          <div className="mt-1 text-xs text-[var(--text-muted)]">{featuredStory.detail}</div>
+        ) : null}
+      </Card>
+
       {err ? (
         <Card className="rounded-3xl p-5 border border-rose-200 bg-rose-50">
           <div className="flex items-center gap-2 text-rose-700">
@@ -229,8 +312,8 @@ export const MarketPanel: React.FC = () => {
       >
         <THead>
           <TR>
+            <TH>Story</TH>
             <TH>Scope</TH>
-            <TH>Type</TH>
             <TH>Target</TH>
             <TH className="text-right">Severity</TH>
           </TR>
@@ -238,11 +321,9 @@ export const MarketPanel: React.FC = () => {
         <TBody>
           {currentEvents.map((e) => (
             <TR key={`round-${String(e.id)}`}>
-              <TD>{e.scope}</TD>
-              <TD className="font-semibold">{e.type}</TD>
-              <TD className="text-xs text-[var(--text-muted)]">
-                {e.company_id ?? e.sector_id ?? e.holding_id ?? "-"}
-              </TD>
+              <TD className="font-semibold">{describeEvent(e).headline}</TD>
+              <TD className="text-xs text-[var(--text-muted)]">{formatEventScope(e.scope)}</TD>
+              <TD className="text-xs text-[var(--text-muted)]">{resolveTarget(e)}</TD>
               <TD className="text-right" mono>
                 {Math.round((Number(e.severity ?? 1) * 100)) / 100}
               </TD>
@@ -272,8 +353,13 @@ export const MarketPanel: React.FC = () => {
                 key={`outlook-${row.sectorId}`}
                 className="flex items-center justify-between rounded-2xl border border-[var(--border)] bg-[var(--card-2)] px-3 py-2 text-sm"
               >
-                <div className="font-medium text-[var(--text)]">
-                  {row.sectorName ?? row.sectorId}
+                <div>
+                  <div className="font-medium text-[var(--text)]">
+                    {row.sectorName ?? row.sectorId}
+                  </div>
+                  {row.sectorDescription ? (
+                    <div className="text-xs text-[var(--text-muted)]">{row.sectorDescription}</div>
+                  ) : null}
                 </div>
                 <div className="text-xs text-[var(--text-muted)]">
                   {row.direction} · {row.volatilityLabel}
@@ -287,24 +373,46 @@ export const MarketPanel: React.FC = () => {
       {/* Sector state table */}
       <Table
         caption="Sector snapshot"
-        isEmpty={!loading && sectorRows.length === 0}
+        isEmpty={!loading && sectorSnapshot.length === 0}
         emptyMessage="No sector state found yet. (Seed sectors + run a tick.)"
       >
         <THead>
           <TR>
             <TH>Sector</TH>
             <TH className="text-right">Demand</TH>
-            <TH className="text-right">Trend</TH>
+            <TH className="text-right">Momentum</TH>
             <TH className="text-right">Volatility</TH>
           </TR>
         </THead>
         <TBody>
-          {sectorRows.map((r) => (
+          {sectorSnapshot.map((r) => (
             <TR key={r.sectorId}>
-              <TD className="font-semibold">{r.sectorName ?? r.sectorId}</TD>
-              <TD className="text-right" mono>{Math.round(r.currentDemand * 100) / 100}</TD>
-              <TD className="text-right" mono>{Math.round(r.trendFactor * 1000) / 1000}</TD>
-              <TD className="text-right" mono>{Math.round(r.volatility * 1000) / 1000}</TD>
+              <TD>
+                <div className="font-semibold">{r.sectorName ?? r.sectorId}</div>
+                {r.sectorDescription ? (
+                  <div className="text-xs text-[var(--text-muted)]">{r.sectorDescription}</div>
+                ) : null}
+              </TD>
+              <TD className="text-right" mono>
+                {Math.round(r.currentDemand * 100) / 100}
+                <div className="text-[10px] text-[var(--text-muted)]">
+                  {r.deltaAbs >= 0 ? "+" : ""}
+                  {Math.round(r.deltaAbs * 100) / 100}
+                </div>
+              </TD>
+              <TD className="text-right">
+                <div className="text-sm font-semibold">{r.direction}</div>
+                <div className="text-[10px] text-[var(--text-muted)]">
+                  {r.deltaPct >= 0 ? "+" : ""}
+                  {Math.round(r.deltaPct * 1000) / 10}%
+                </div>
+              </TD>
+              <TD className="text-right" mono>
+                {r.volatilityLabel}
+                <div className="text-[10px] text-[var(--text-muted)]">
+                  {Math.round(r.volatility * 1000) / 1000}
+                </div>
+              </TD>
             </TR>
           ))}
         </TBody>
@@ -318,8 +426,8 @@ export const MarketPanel: React.FC = () => {
       >
         <THead>
           <TR>
+            <TH>Story</TH>
             <TH>Scope</TH>
-            <TH>Type</TH>
             <TH>Target</TH>
             <TH className="text-right">Severity</TH>
           </TR>
@@ -327,11 +435,9 @@ export const MarketPanel: React.FC = () => {
         <TBody>
           {events.map((e) => (
             <TR key={String(e.id)}>
-              <TD>{e.scope}</TD>
-              <TD className="font-semibold">{e.type}</TD>
-              <TD className="text-xs text-[var(--text-muted)]">
-                {e.company_id ?? e.sector_id ?? e.holding_id ?? "-"}
-              </TD>
+              <TD className="font-semibold">{describeEvent(e).headline}</TD>
+              <TD className="text-xs text-[var(--text-muted)]">{formatEventScope(e.scope)}</TD>
+              <TD className="text-xs text-[var(--text-muted)]">{resolveTarget(e)}</TD>
               <TD className="text-right" mono>
                 {Math.round((Number(e.severity ?? 1) * 100)) / 100}
               </TD>

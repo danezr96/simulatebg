@@ -16,6 +16,7 @@ import { useCompanies } from "../hooks/useCompany";
 import { useHolding } from "../hooks/useHolding";
 import { useWorld } from "../hooks/useWorld";
 import { useStartupListings } from "../hooks/useStartupListings";
+import { useSectorDirectory } from "../hooks/useSectorDirectory";
 import type { StartupListing } from "../hooks/useStartupListings";
 
 import { companyService } from "../../core/services/companyService";
@@ -26,6 +27,7 @@ export const CompaniesPanel: React.FC = () => {
   const { holding } = useHolding();
   const { world, economy } = useWorld();
   const { listings, sectors, niches, loading: listingsLoading, error: listingsError } = useStartupListings();
+  const { sectorById, nicheById } = useSectorDirectory();
 
   const worldId = world?.id ? String(world.id) : undefined;
   const holdingCash = Number(holding?.cashBalance ?? 0);
@@ -195,24 +197,38 @@ export const CompaniesPanel: React.FC = () => {
           </TR>
         </THead>
         <TBody>
-          {filteredCompanies.map((c: any) => (
-            <TR
-              key={String(c.id)}
-              interactive
-              className="cursor-pointer"
-              onClick={() => (window.location.href = `/game/companies/${c.id}`)}
-            >
-              <TD className="font-semibold">{c.name}</TD>
-              <TD>{c.region}</TD>
-              <TD>{String(c.sectorId ?? "")}</TD>
-              <TD>{String(c.nicheId ?? "")}</TD>
-              <TD className="text-right">
-                <span className="inline-flex rounded-xl border border-[var(--border)] bg-[var(--card-2)] px-2 py-1 text-xs">
-                  {c.status}
-                </span>
-              </TD>
-            </TR>
-          ))}
+          {filteredCompanies.map((c: any) => {
+            const sector = sectorById.get(String(c.sectorId ?? ""));
+            const niche = nicheById.get(String(c.nicheId ?? ""));
+            return (
+              <TR
+                key={String(c.id)}
+                interactive
+                className="cursor-pointer"
+                onClick={() => (window.location.href = `/game/companies/${c.id}`)}
+              >
+                <TD className="font-semibold">{c.name}</TD>
+                <TD>{c.region}</TD>
+                <TD>
+                  <div className="font-semibold">{sector?.name ?? "Unknown sector"}</div>
+                  <div className="text-xs text-[var(--text-muted)]">
+                    {sector?.description ?? "No description"}
+                  </div>
+                </TD>
+                <TD>
+                  <div className="font-semibold">{niche?.name ?? "Unknown niche"}</div>
+                  <div className="text-xs text-[var(--text-muted)]">
+                    {niche?.description ?? "No description"}
+                  </div>
+                </TD>
+                <TD className="text-right">
+                  <span className="inline-flex rounded-xl border border-[var(--border)] bg-[var(--card-2)] px-2 py-1 text-xs">
+                    {c.status}
+                  </span>
+                </TD>
+              </TR>
+            );
+          })}
         </TBody>
       </Table>
 

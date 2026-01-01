@@ -21,21 +21,26 @@ import Button from "../components/Button";
 import Table, { TBody, TD, TH, THead, TR } from "../components/Table";
 import KPIChip from "../components/KPIChip";
 import Sparkline from "../components/Sparkline";
+import PieChart from "../components/PieChart";
 
 import { useWorld } from "../hooks/useWorld";
 import { useHolding } from "../hooks/useHolding";
 import { useCompanies } from "../hooks/useCompany";
+import { useSectorDirectory } from "../hooks/useSectorDirectory";
+import { useCurrentPlayer } from "../hooks/useCurrentPlayer";
 
 import { financeRepo } from "../../core/persistence/financeRepo";
 import { companyRepo } from "../../core/persistence/companyRepo";
 import { acquisitionRepo } from "../../core/persistence/acquisitionRepo";
 import { companyService } from "../../core/services/companyService";
 import { decisionService } from "../../core/services/decisionService";
+import { scoreboardService, type HoldingSectorShare } from "../../core/services/scoreboardService";
 import { asCompanyId, asHoldingId, asWorldId } from "../../core/domain";
 import type { Loan, AcquisitionOffer } from "../../core/domain";
 
 import { formatMoney, money } from "../../utils/money";
 import { cn } from "../../utils/format";
+import { applyCreditRate, estimateWeeklyLoanPayment, getCreditTier } from "../../utils/loan";
 
 type PortfolioTotals = {
   revenue: number;
@@ -48,7 +53,8 @@ type PortfolioTotals = {
 type PortfolioSeries = {
   revenue: number[];
   netProfit: number[];
-  cashChange: number[];
+  assets: number[];
+  liabilities: number[];
 };
 
 type MarketRow = {
@@ -82,10 +88,21 @@ const emptyTotals: PortfolioTotals = {
 const emptySeries: PortfolioSeries = {
   revenue: [],
   netProfit: [],
-  cashChange: [],
+  assets: [],
+  liabilities: [],
 };
 
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
+const seriesStats = (data: number[]) => {
+  if (!data.length) return { min: 0, max: 0, last: 0, delta: 0 };
+  const clean = data.map((v) => (Number.isFinite(v) ? v : 0));
+  const min = Math.min(...clean);
+  const max = Math.max(...clean);
+  const last = clean[clean.length - 1] ?? 0;
+  const prev = clean[clean.length - 2] ?? last;
+  const delta = last - prev;
+  return { min, max, last, delta };
+};
 
 const TAB_OPTIONS = [
   { key: "overview", label: "Overview", description: "Cash, portfolio, and loans at a glance." },
@@ -103,6 +120,8 @@ export const FinancePanel: React.FC = () => {
   const refreshHolding = holdingHook.refetch ?? (async () => {});
 
   const { companies } = useCompanies();
+  const { sectorById, nicheById } = useSectorDirectory();
+  const { player } = useCurrentPlayer();
 
   const worldId = world?.id ? String(world.id) : undefined;
   const holdingId = holding?.id ? String(holding.id) : undefined;
@@ -136,6 +155,9 @@ export const FinancePanel: React.FC = () => {
   const [offerDrafts, setOfferDrafts] = React.useState<Record<string, string>>({});
   const [counterDrafts, setCounterDrafts] = React.useState<Record<string, string>>({});
   const [offerMessage, setOfferMessage] = React.useState<string | null>(null);
+  const [holdingShareRows, setHoldingShareRows] = React.useState<HoldingSectorShare[]>([]);
+  const [holdingShareLoading, setHoldingShareLoading] = React.useState(false);
+  const [holdingShareError, setHoldingShareError] = React.useState<string | null>(null);
 
   const loadPortfolio = React.useCallback(async () => {
     if (!companies.length) {
@@ -183,7 +205,10 @@ export const FinancePanel: React.FC = () => {
         companies.map((company) => companyService.listFinancials(asCompanyId(String(company.id)), 26))
       );
 
-      const byWeek = new Map<number, { revenue: number; netProfit: number; cashChange: number }>();
+      const byWeek = new Map<
+        number,
+        { revenue: number; netProfit: number; assets: number; liabilities: number }
+      >();
 
       for (const rows of rowsByCompany) {
         for (const row of rows ?? []) {
@@ -191,11 +216,12 @@ export const FinancePanel: React.FC = () => {
           const week = Number((row as any).week ?? 0);
           if (!year || !week) continue;
           const key = year * 52 + week;
-          const prev = byWeek.get(key) ?? { revenue: 0, netProfit: 0, cashChange: 0 };
+          const prev = byWeek.get(key) ?? { revenue: 0, netProfit: 0, assets: 0, liabilities: 0 };
           byWeek.set(key, {
             revenue: prev.revenue + Number(row.revenue ?? 0),
             netProfit: prev.netProfit + Number(row.netProfit ?? 0),
-            cashChange: prev.cashChange + Number(row.cashChange ?? 0),
+            assets: prev.assets + Number((row as any).assets ?? 0),
+            liabilities: prev.liabilities + Number((row as any).liabilities ?? 0),
           });
         }
       }
@@ -203,9 +229,10 @@ export const FinancePanel: React.FC = () => {
       const ordered = Array.from(byWeek.entries()).sort((a, b) => a[0] - b[0]);
       const revenue = ordered.map(([, value]) => value.revenue);
       const netProfit = ordered.map(([, value]) => value.netProfit);
-      const cashChange = ordered.map(([, value]) => value.cashChange);
+      const assets = ordered.map(([, value]) => value.assets);
+      const liabilities = ordered.map(([, value]) => value.liabilities);
 
-      setPortfolioSeries({ revenue, netProfit, cashChange });
+      setPortfolioSeries({ revenue, netProfit, assets, liabilities });
     } catch (error: any) {
       setPortfolioSeriesError(error?.message ?? "Failed to load portfolio trends.");
       setPortfolioSeries(emptySeries);
@@ -319,6 +346,29 @@ export const FinancePanel: React.FC = () => {
     }
   }, [worldId, holdingId, loadOffers]);
 
+  const loadHoldingMarketShare = React.useCallback(async () => {
+    if (!worldId || !holdingId) {
+      setHoldingShareRows([]);
+      return;
+    }
+
+    setHoldingShareLoading(true);
+    setHoldingShareError(null);
+    try {
+      const rows = await scoreboardService.getHoldingMarketShareBySector(
+        asWorldId(worldId),
+        String(holdingId),
+        6
+      );
+      setHoldingShareRows(rows ?? []);
+    } catch (error: any) {
+      setHoldingShareError(error?.message ?? "Failed to load market share.");
+      setHoldingShareRows([]);
+    } finally {
+      setHoldingShareLoading(false);
+    }
+  }, [worldId, holdingId]);
+
   React.useEffect(() => {
     void loadPortfolio();
   }, [loadPortfolio, currentWeek, currentYear]);
@@ -337,11 +387,17 @@ export const FinancePanel: React.FC = () => {
     }
   }, [activeTab, loadMarketplace]);
 
+  React.useEffect(() => {
+    void loadHoldingMarketShare();
+  }, [loadHoldingMarketShare, currentWeek, currentYear]);
+
   const baseRate = Number(economy?.baseInterestRate ?? economyConfig.interest.baseAnnualRate ?? 0.02);
   const minRate = economyConfig.interest.minAnnualRate ?? 0;
   const maxRate = economyConfig.interest.maxAnnualRate ?? 0.2;
   const minTerm = economyConfig.loans.termWeeks.min;
   const maxTerm = economyConfig.loans.termWeeks.max;
+  const creditLevel = Number(player?.creditRepLevel ?? 1);
+  const creditTier = getCreditTier(creditLevel);
 
   const loanOffers = React.useMemo(
     () => [
@@ -373,9 +429,39 @@ export const FinancePanel: React.FC = () => {
     [minTerm, maxTerm]
   );
 
+  const loanOffersWithRates = React.useMemo(
+    () =>
+      loanOffers.map((offer) => {
+        const rawRate = clamp(baseRate + offer.spread, minRate, maxRate);
+        const applied = applyCreditRate({
+          baseRate: rawRate,
+          creditLevel,
+          minRate,
+          maxRate,
+        });
+        return {
+          ...offer,
+          baseRate: rawRate,
+          rate: applied.rate,
+        };
+      }),
+    [loanOffers, baseRate, minRate, maxRate, creditLevel]
+  );
+
   const [selectedOfferId, setSelectedOfferId] = React.useState(loanOffers[0].id);
-  const selectedOffer = loanOffers.find((offer) => offer.id === selectedOfferId) ?? loanOffers[0];
-  const selectedRate = clamp(baseRate + selectedOffer.spread, minRate, maxRate);
+  const fallbackOffer =
+    loanOffersWithRates[0] ?? {
+      ...loanOffers[0],
+      baseRate: clamp(baseRate + loanOffers[0].spread, minRate, maxRate),
+      rate: clamp(baseRate + loanOffers[0].spread, minRate, maxRate),
+    };
+  const selectedOffer = loanOffersWithRates.find((offer) => offer.id === selectedOfferId) ?? fallbackOffer;
+  const selectedRate = selectedOffer.rate ?? clamp(baseRate + loanOffers[0].spread, minRate, maxRate);
+  const selectedPayment = estimateWeeklyLoanPayment({
+    principal: selectedOffer?.principal ?? 0,
+    annualRate: selectedRate,
+    termWeeks: selectedOffer?.termWeeks ?? 1,
+  });
 
   const [loanBusy, setLoanBusy] = React.useState(false);
   const [loanMessage, setLoanMessage] = React.useState<string | null>(null);
@@ -387,6 +473,10 @@ export const FinancePanel: React.FC = () => {
     setLoanMessage(null);
     if (!worldId || !holdingId) {
       setLoanMessage("World or holding is not ready yet.");
+      return;
+    }
+    if (!selectedOffer) {
+      setLoanMessage("Select a loan offer first.");
       return;
     }
 
@@ -651,13 +741,32 @@ export const FinancePanel: React.FC = () => {
     setLoanMessage(null);
     setOfferMessage(null);
     setRepayMessage(null);
-    await Promise.all([loadPortfolio(), loadPortfolioSeries(), loadLoans(), loadOffers()]);
+    await Promise.all([loadPortfolio(), loadPortfolioSeries(), loadLoans(), loadOffers(), loadHoldingMarketShare()]);
     if (activeTab === "acquisitions") {
       await loadMarketplace();
     }
   };
 
   const loansOutstanding = loans.reduce((sum, loan) => sum + Number(loan.outstandingBalance ?? 0), 0);
+  const loanPrincipal = Number(selectedOffer?.principal ?? 0);
+  const loanCashAfter = cash + loanPrincipal;
+  const loanDebtAfter = debt + loanPrincipal;
+  const loanNetWorthAfter = loanCashAfter + equity - loanDebtAfter;
+  const leverageBase = Math.max(1, equity + cash);
+  const loanLeverageAfter = loanDebtAfter / leverageBase;
+  const revenueStats = seriesStats(portfolioSeries.revenue);
+  const profitStats = seriesStats(portfolioSeries.netProfit);
+  const assetStats = seriesStats(portfolioSeries.assets);
+  const sharePalette = ["#2a7f62", "#3566a8", "#b57b2b", "#7a5fa8", "#b05b5b", "#4d8f9a"];
+  const sharePieData = React.useMemo(
+    () =>
+      holdingShareRows.map((row, idx) => ({
+        label: row.sectorName,
+        value: row.share,
+        color: sharePalette[idx % sharePalette.length],
+      })),
+    [holdingShareRows]
+  );
 
   return (
     <motion.div className="space-y-4" initial="hidden" animate="show" variants={MOTION.page.variants}>
@@ -765,7 +874,10 @@ export const FinancePanel: React.FC = () => {
                 <div className="rounded-2xl border border-[var(--border)] bg-[var(--card-2)] p-3">
                   <div className="text-xs text-[var(--text-muted)]">Revenue</div>
                   <div className="mt-1 text-sm font-semibold text-[var(--text)]">
-                    {money.compact(portfolioSeries.revenue[portfolioSeries.revenue.length - 1] ?? 0)}
+                    {money.compact(revenueStats.last)}
+                  </div>
+                  <div className="mt-1 text-[10px] text-[var(--text-muted)]">
+                    Range {money.compact(revenueStats.min)} - {money.compact(revenueStats.max)}
                   </div>
                   <div className="mt-2">
                     <Sparkline data={portfolioSeries.revenue} />
@@ -774,24 +886,72 @@ export const FinancePanel: React.FC = () => {
                 <div className="rounded-2xl border border-[var(--border)] bg-[var(--card-2)] p-3">
                   <div className="text-xs text-[var(--text-muted)]">Net profit</div>
                   <div className="mt-1 text-sm font-semibold text-[var(--text)]">
-                    {money.compact(portfolioSeries.netProfit[portfolioSeries.netProfit.length - 1] ?? 0)}
+                    {money.compact(profitStats.last)}
+                  </div>
+                  <div className="mt-1 text-[10px] text-[var(--text-muted)]">
+                    Margin {revenueStats.last !== 0 ? `${Math.round((profitStats.last / revenueStats.last) * 1000) / 10}%` : "0%"}
                   </div>
                   <div className="mt-2">
                     <Sparkline data={portfolioSeries.netProfit} stroke="var(--success)" />
                   </div>
                 </div>
                 <div className="rounded-2xl border border-[var(--border)] bg-[var(--card-2)] p-3">
-                  <div className="text-xs text-[var(--text-muted)]">Cash change</div>
+                  <div className="text-xs text-[var(--text-muted)]">Assets</div>
                   <div className="mt-1 text-sm font-semibold text-[var(--text)]">
-                    {money.compact(portfolioSeries.cashChange[portfolioSeries.cashChange.length - 1] ?? 0)}
+                    {money.compact(assetStats.last)}
+                  </div>
+                  <div className="mt-1 text-[10px] text-[var(--text-muted)]">
+                    Range {money.compact(assetStats.min)} - {money.compact(assetStats.max)}
                   </div>
                   <div className="mt-2">
-                    <Sparkline data={portfolioSeries.cashChange} stroke="var(--warning)" />
+                    <Sparkline data={portfolioSeries.assets} stroke="var(--accent)" />
                   </div>
                 </div>
               </div>
             ) : (
               <div className="mt-3 text-xs text-[var(--text-muted)]">No trend data yet.</div>
+            )}
+          </Card>
+
+          <Card className="rounded-3xl p-5">
+            <div className="text-sm font-semibold text-[var(--text)]">Market share snapshot</div>
+            <div className="mt-1 text-xs text-[var(--text-muted)]">
+              Your holding share by sector (latest tick).
+            </div>
+            {holdingShareError ? (
+              <div className="mt-3 text-xs text-rose-600">{holdingShareError}</div>
+            ) : null}
+            {holdingShareLoading ? (
+              <div className="mt-3 text-xs text-[var(--text-muted)]">Loading market share...</div>
+            ) : holdingShareRows.length > 0 ? (
+              <div className="mt-4 grid grid-cols-1 md:grid-cols-[200px_1fr] gap-4 items-center">
+                <div className="flex items-center justify-center">
+                  <PieChart data={sharePieData} size={160} innerRadius={48} />
+                </div>
+                <div className="space-y-2">
+                  {holdingShareRows.map((row, idx) => (
+                    <div
+                      key={row.sectorId}
+                      className="flex items-center justify-between rounded-2xl border border-[var(--border)] bg-[var(--card-2)] px-3 py-2 text-xs"
+                    >
+                      <div className="flex items-center gap-2">
+                        <span
+                          className="h-2.5 w-2.5 rounded-full"
+                          style={{ background: sharePalette[idx % sharePalette.length] }}
+                        />
+                        <span className="font-semibold text-[var(--text)]">{row.sectorName}</span>
+                      </div>
+                      <div className="text-[var(--text-muted)]">
+                        {Math.round(row.share * 1000) / 10}% - {money.compact(row.holdingRevenue)}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <div className="mt-3 text-xs text-[var(--text-muted)]">
+                No market share data yet.
+              </div>
             )}
           </Card>
 
@@ -850,15 +1010,15 @@ export const FinancePanel: React.FC = () => {
                     onChange={(e) => setSelectedOfferId(e.target.value)}
                     disabled={loanBusy}
                   >
-                    {loanOffers.map((offer) => (
+                    {loanOffersWithRates.map((offer) => (
                       <option key={offer.id} value={offer.id}>
-                        {offer.label}
+                        {offer.label} ({Math.round((offer.rate ?? 0) * 1000) / 10}%)
                       </option>
                     ))}
                   </select>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-sm">
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-3 text-sm">
                   <div className="rounded-2xl border border-[var(--border)] bg-[var(--card-2)] px-3 py-2">
                     <div className="text-xs text-[var(--text-muted)]">Principal</div>
                     <div className="font-semibold text-[var(--text)]">
@@ -866,14 +1026,62 @@ export const FinancePanel: React.FC = () => {
                     </div>
                   </div>
                   <div className="rounded-2xl border border-[var(--border)] bg-[var(--card-2)] px-3 py-2">
-                    <div className="text-xs text-[var(--text-muted)]">Interest rate</div>
+                    <div className="text-xs text-[var(--text-muted)]">Rate (credit adjusted)</div>
                     <div className="font-semibold text-[var(--text)]">
                       {Math.round(selectedRate * 1000) / 10}%
                     </div>
                   </div>
                   <div className="rounded-2xl border border-[var(--border)] bg-[var(--card-2)] px-3 py-2">
+                    <div className="text-xs text-[var(--text-muted)]">Weekly payment</div>
+                    <div className="font-semibold text-[var(--text)]">
+                      {formatMoney(selectedPayment.weeklyPayment)}
+                    </div>
+                  </div>
+                  <div className="rounded-2xl border border-[var(--border)] bg-[var(--card-2)] px-3 py-2">
                     <div className="text-xs text-[var(--text-muted)]">Term</div>
                     <div className="font-semibold text-[var(--text)]">{selectedOffer.termWeeks} weeks</div>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-sm">
+                  <div className="rounded-2xl border border-[var(--border)] bg-[var(--card-2)] px-3 py-2">
+                    <div className="text-xs text-[var(--text-muted)]">Weekly interest</div>
+                    <div className="font-semibold text-[var(--text)]">
+                      {formatMoney(selectedPayment.weeklyInterest)}
+                    </div>
+                  </div>
+                  <div className="rounded-2xl border border-[var(--border)] bg-[var(--card-2)] px-3 py-2">
+                    <div className="text-xs text-[var(--text-muted)]">Weekly principal</div>
+                    <div className="font-semibold text-[var(--text)]">
+                      {formatMoney(selectedPayment.weeklyPrincipal)}
+                    </div>
+                  </div>
+                  <div className="rounded-2xl border border-[var(--border)] bg-[var(--card-2)] px-3 py-2">
+                    <div className="text-xs text-[var(--text-muted)]">Total interest (est.)</div>
+                    <div className="font-semibold text-[var(--text)]">
+                      {formatMoney(selectedPayment.totalInterestEstimate)}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="rounded-2xl border border-[var(--border)] bg-[var(--card-2)] px-3 py-2">
+                  <div className="text-xs text-[var(--text-muted)]">Story impact</div>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    <KPIChip label="Cash after" value={formatMoney(loanCashAfter)} trend="up" />
+                    <KPIChip label="Debt after" value={formatMoney(loanDebtAfter)} trend="down" subtle />
+                    <KPIChip label="Net worth after" value={formatMoney(loanNetWorthAfter)} trend="neutral" subtle />
+                    <KPIChip
+                      label="Leverage"
+                      value={`${Math.round(loanLeverageAfter * 100) / 100}x`}
+                      trend={loanLeverageAfter > 2 ? "down" : "neutral"}
+                      subtle
+                    />
+                  </div>
+                  <div className="mt-2 text-xs text-[var(--text-muted)]">
+                    Credit rating: <span className="text-[var(--text)]">{creditTier.label}</span> (
+                    {creditTier.note}). Rate adj:{" "}
+                    {creditTier.rateDelta >= 0 ? "+" : ""}
+                    {Math.round(creditTier.rateDelta * 1000) / 10}%.
                   </div>
                 </div>
 
@@ -909,6 +1117,7 @@ export const FinancePanel: React.FC = () => {
               <div className="mt-4 flex flex-wrap gap-2">
                 <KPIChip label="Outstanding" value={formatMoney(loansOutstanding)} trend="neutral" />
                 <KPIChip label="Cash" value={formatMoney(cash)} trend="neutral" subtle />
+                <KPIChip label="Credit" value={creditTier.label} trend="neutral" subtle />
               </div>
 
               <div className="mt-3 text-xs text-[var(--text-muted)]">
@@ -1032,11 +1241,27 @@ export const FinancePanel: React.FC = () => {
                 const offerValue = offerDrafts[row.id] ?? "";
                 const parsedOffer = Number(offerValue || row.price);
                 const canAfford = cash >= parsedOffer;
+                const sector = sectorById.get(String(row.sectorId ?? ""));
+                const niche = nicheById.get(String(row.nicheId ?? ""));
                 return (
                   <TR key={row.id}>
                     <TD className="font-semibold">{row.name}</TD>
-                    <TD className="text-xs text-[var(--text-muted)]">{row.sectorId}</TD>
-                    <TD className="text-xs text-[var(--text-muted)]">{row.nicheId}</TD>
+                    <TD>
+                      <div className="text-xs text-[var(--text-muted)]">
+                        {sector?.name ?? row.sectorId}
+                      </div>
+                      {sector?.description ? (
+                        <div className="text-[10px] text-[var(--text-muted)]">{sector.description}</div>
+                      ) : null}
+                    </TD>
+                    <TD>
+                      <div className="text-xs text-[var(--text-muted)]">
+                        {niche?.name ?? row.nicheId}
+                      </div>
+                      {niche?.description ? (
+                        <div className="text-[10px] text-[var(--text-muted)]">{niche.description}</div>
+                      ) : null}
+                    </TD>
                     <TD className="text-right" mono>
                       {money.compact(row.revenue)}
                     </TD>

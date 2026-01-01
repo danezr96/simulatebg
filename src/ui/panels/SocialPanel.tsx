@@ -8,14 +8,21 @@ import { MOTION } from "../../config/motion";
 import Card from "../components/Card";
 import Button from "../components/Button";
 import Table, { TBody, TD, TH, THead, TR } from "../components/Table";
+import PlayerProfileModal from "../components/PlayerProfileModal";
 
 import { useWorld } from "../hooks/useWorld";
 import { useCurrentPlayer } from "../hooks/useCurrentPlayer";
+import { useSectorDirectory } from "../hooks/useSectorDirectory";
 
 import { scoreboardService } from "../../core/services/scoreboardService";
 import { friendService } from "../../core/services/friendService";
 import { eventRepo } from "../../core/persistence/eventRepo";
+import { companyRepo } from "../../core/persistence/companyRepo";
+import { holdingRepo } from "../../core/persistence/holdingRepo";
+import { companyService } from "../../core/services/companyService";
+import { asWorldId, asCompanyId } from "../../core/domain";
 import { money } from "../../utils/money";
+import { describeEvent, formatEventScope } from "../../utils/events";
 
 const LEADERBOARD_LIMIT = 10;
 const PROFIT_WINDOW = 4;
@@ -26,6 +33,16 @@ export const SocialPanel: React.FC = () => {
   const { player } = useCurrentPlayer();
 
   const worldId = world?.id ? String(world.id) : effectiveWorldId ?? null;
+  const { sectorById } = useSectorDirectory();
+
+  const [profilePlayerId, setProfilePlayerId] = React.useState<string | null>(null);
+  const [profileOpen, setProfileOpen] = React.useState(false);
+
+  const openProfile = React.useCallback((playerId: string) => {
+    if (!playerId) return;
+    setProfilePlayerId(playerId);
+    setProfileOpen(true);
+  }, []);
 
   const [search, setSearch] = React.useState("");
   const [searchResults, setSearchResults] = React.useState<Array<{ id: string; name: string }>>([]);
@@ -42,6 +59,12 @@ export const SocialPanel: React.FC = () => {
   const profitQuery = useQuery({
     queryKey: ["scoreboard", "profit", worldId, PROFIT_WINDOW],
     queryFn: async () => scoreboardService.getProfitLeaderboard(worldId as any, PROFIT_WINDOW, LEADERBOARD_LIMIT),
+    enabled: !!worldId,
+  });
+
+  const reputationQuery = useQuery({
+    queryKey: ["scoreboard", "reputation", worldId],
+    queryFn: async () => scoreboardService.getReputationLeaderboard(worldId as any, LEADERBOARD_LIMIT),
     enabled: !!worldId,
   });
 
@@ -67,6 +90,20 @@ export const SocialPanel: React.FC = () => {
     queryKey: ["worldFeed", worldId],
     queryFn: async () => eventRepo.listRecent({ worldId: worldId as any, limit: 20 }),
     enabled: !!worldId,
+  });
+
+  const worldCompaniesQuery = useQuery({
+    queryKey: ["worldCompanies", worldId],
+    queryFn: async () => companyRepo.listByWorld(asWorldId(worldId as any)),
+    enabled: !!worldId,
+    staleTime: 20_000,
+  });
+
+  const worldHoldingsQuery = useQuery({
+    queryKey: ["worldHoldings", worldId],
+    queryFn: async () => holdingRepo.listByWorld(asWorldId(worldId as any)),
+    enabled: !!worldId,
+    staleTime: 20_000,
   });
 
   const onSearch = async () => {
@@ -134,15 +171,103 @@ export const SocialPanel: React.FC = () => {
 
   const netWorthRows = netWorthQuery.data ?? [];
   const profitRows = profitQuery.data ?? [];
+  const reputationRows = reputationQuery.data ?? [];
   const shareRows = marketShareQuery.data ?? [];
 
   const friends = friendsQuery.data ?? [];
   const acceptedFriends = friends.filter((f) => f.status === "ACCEPTED");
   const pendingIncoming = friends.filter((f) => f.status === "PENDING" && f.direction === "incoming");
   const pendingOutgoing = friends.filter((f) => f.status === "PENDING" && f.direction === "outgoing");
+  const friendNameById = React.useMemo(
+    () => new Map(acceptedFriends.map((f) => [String(f.friend.id), f.friend.name])),
+    [acceptedFriends]
+  );
 
   const friendWorlds = friendWorldsQuery.data ?? [];
   const feed = feedQuery.data ?? [];
+
+  const acceptedFriendIds = React.useMemo(
+    () => acceptedFriends.map((f) => String(f.friend.id)).filter(Boolean),
+    [acceptedFriends]
+  );
+
+  const friendSnapshotsQuery = useQuery({
+    queryKey: ["friendSnapshots", worldId, acceptedFriendIds.join("|")],
+    queryFn: async () => {
+      if (!worldId || acceptedFriendIds.length === 0) return [];
+      const holdings = await holdingRepo.listByPlayers(acceptedFriendIds as any);
+      const inWorld = holdings.filter((h) => String(h.worldId) === String(worldId));
+
+      return Promise.all(
+        inWorld.map(async (holding) => {
+          const companies = await companyRepo.listByHolding(holding.id as any);
+          const financials = await Promise.all(
+            companies.map(async (company) => ({
+              companyId: String(company.id),
+              financials: await companyService.getLatestFinancials(asCompanyId(String(company.id))),
+            }))
+          );
+          const totals = financials.reduce(
+            (acc, row) => {
+              const fin = row.financials;
+              if (!fin) return acc;
+              acc.revenue += Number(fin.revenue ?? 0);
+              acc.netProfit += Number(fin.netProfit ?? 0);
+              return acc;
+            },
+            { revenue: 0, netProfit: 0 }
+          );
+          const netWorth =
+            Number(holding.cashBalance ?? 0) + Number(holding.totalEquity ?? 0) - Number(holding.totalDebt ?? 0);
+          return {
+            friendId: String(holding.playerId),
+            holdingId: String(holding.id),
+            holdingName: holding.name,
+            netWorth,
+            revenue: totals.revenue,
+            netProfit: totals.netProfit,
+            companyCount: companies.length,
+          };
+        })
+      );
+    },
+    enabled: !!worldId && acceptedFriendIds.length > 0,
+  });
+
+  const friendSnapshots = friendSnapshotsQuery.data ?? [];
+
+  const companyById = React.useMemo(() => {
+    const map = new Map<string, { name: string; holdingId?: string; sectorId?: string }>();
+    for (const c of worldCompaniesQuery.data ?? []) {
+      map.set(String(c.id), {
+        name: String(c.name ?? "Company"),
+        holdingId: String((c as any).holdingId ?? ""),
+        sectorId: String((c as any).sectorId ?? ""),
+      });
+    }
+    return map;
+  }, [worldCompaniesQuery.data]);
+
+  const holdingById = React.useMemo(() => {
+    const map = new Map<string, { name: string; playerId?: string }>();
+    for (const h of worldHoldingsQuery.data ?? []) {
+      map.set(String(h.id), { name: String(h.name ?? "Holding"), playerId: String((h as any).playerId ?? "") });
+    }
+    return map;
+  }, [worldHoldingsQuery.data]);
+
+  const resolveEventTarget = React.useCallback(
+    (event: any) => {
+      const companyId = String(event?.companyId ?? event?.company_id ?? "");
+      if (companyId && companyById.has(companyId)) return companyById.get(companyId)!.name;
+      const sectorId = String(event?.sectorId ?? event?.sector_id ?? "");
+      if (sectorId && sectorById.has(sectorId)) return sectorById.get(sectorId)!.name;
+      const holdingId = String(event?.holdingId ?? event?.holding_id ?? "");
+      if (holdingId && holdingById.has(holdingId)) return holdingById.get(holdingId)!.name;
+      return "World";
+    },
+    [companyById, sectorById, holdingById]
+  );
 
   return (
     <motion.div className="space-y-4" initial="hidden" animate="show" variants={MOTION.page.variants}>
@@ -162,26 +287,34 @@ export const SocialPanel: React.FC = () => {
             void Promise.all([
               netWorthQuery.refetch(),
               profitQuery.refetch(),
+              reputationQuery.refetch(),
               marketShareQuery.refetch(),
               friendsQuery.refetch(),
               friendWorldsQuery.refetch(),
+              friendSnapshotsQuery.refetch(),
               feedQuery.refetch(),
+              worldCompaniesQuery.refetch(),
+              worldHoldingsQuery.refetch(),
             ]);
           }}
           loading={
             netWorthQuery.isFetching ||
             profitQuery.isFetching ||
+            reputationQuery.isFetching ||
             marketShareQuery.isFetching ||
             friendsQuery.isFetching ||
             friendWorldsQuery.isFetching ||
-            feedQuery.isFetching
+            friendSnapshotsQuery.isFetching ||
+            feedQuery.isFetching ||
+            worldCompaniesQuery.isFetching ||
+            worldHoldingsQuery.isFetching
           }
         >
           Refresh
         </Button>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         <Card className="rounded-3xl p-4">
           <div className="flex items-center gap-2 text-[var(--text-muted)]">
             <Trophy className="h-4 w-4" />
@@ -206,7 +339,15 @@ export const SocialPanel: React.FC = () => {
                 {netWorthRows.map((row, idx) => (
                   <TR key={row.holdingId}>
                     <TD className="text-xs text-[var(--text-muted)]">#{idx + 1}</TD>
-                    <TD className="font-semibold">{row.playerName}</TD>
+                    <TD>
+                      <button
+                        type="button"
+                        className="font-semibold text-[var(--text)] hover:underline"
+                        onClick={() => openProfile(String(row.playerId))}
+                      >
+                        {row.playerName}
+                      </button>
+                    </TD>
                     <TD className="text-xs text-[var(--text-muted)]">{row.holdingName}</TD>
                     <TD className="text-right" mono>
                       {money.format(row.netWorth)}
@@ -242,10 +383,64 @@ export const SocialPanel: React.FC = () => {
                 {profitRows.map((row, idx) => (
                   <TR key={row.holdingId}>
                     <TD className="text-xs text-[var(--text-muted)]">#{idx + 1}</TD>
-                    <TD className="font-semibold">{row.playerName}</TD>
+                    <TD>
+                      <button
+                        type="button"
+                        className="font-semibold text-[var(--text)] hover:underline"
+                        onClick={() => openProfile(String(row.playerId))}
+                      >
+                        {row.playerName}
+                      </button>
+                    </TD>
                     <TD className="text-xs text-[var(--text-muted)]">{row.holdingName}</TD>
                     <TD className="text-right" mono>
                       {money.format(row.totalProfit)}
+                    </TD>
+                  </TR>
+                ))}
+              </TBody>
+            </Table>
+          </div>
+        </Card>
+
+        <Card className="rounded-3xl p-4">
+          <div className="flex items-center gap-2 text-[var(--text-muted)]">
+            <Users className="h-4 w-4" />
+            <div className="text-sm font-semibold text-[var(--text)]">Reputation leaderboard</div>
+          </div>
+
+          <div className="mt-3">
+            <Table
+              caption={`Top ${LEADERBOARD_LIMIT} reputations`}
+              isEmpty={!reputationQuery.isLoading && reputationRows.length === 0}
+              emptyMessage="No reputation data yet."
+            >
+              <THead>
+                <TR>
+                  <TH>#</TH>
+                  <TH>Player</TH>
+                  <TH className="text-right">Rep</TH>
+                  <TH className="text-right">Credit</TH>
+                </TR>
+              </THead>
+              <TBody>
+                {reputationRows.map((row, idx) => (
+                  <TR key={row.playerId}>
+                    <TD className="text-xs text-[var(--text-muted)]">#{idx + 1}</TD>
+                    <TD>
+                      <button
+                        type="button"
+                        className="font-semibold text-[var(--text)] hover:underline"
+                        onClick={() => openProfile(String(row.playerId))}
+                      >
+                        {row.playerName}
+                      </button>
+                    </TD>
+                    <TD className="text-right" mono>
+                      {row.overallRep}
+                    </TD>
+                    <TD className="text-right" mono>
+                      {row.creditRepLevel}
                     </TD>
                   </TR>
                 ))}
@@ -277,19 +472,34 @@ export const SocialPanel: React.FC = () => {
               </TR>
             </THead>
             <TBody>
-              {shareRows.map((row) => (
-                <TR key={`${row.sectorId}-${row.companyId}`}>
-                  <TD className="text-xs text-[var(--text-muted)]">{row.sectorName}</TD>
-                  <TD className="font-semibold">{row.companyName}</TD>
-                  <TD className="text-xs text-[var(--text-muted)]">{row.holdingName}</TD>
-                  <TD className="text-right" mono>
-                    {`${Math.round(row.share * 1000) / 10}%`}
-                  </TD>
-                  <TD className="text-right" mono>
-                    {money.format(row.revenue)}
-                  </TD>
-                </TR>
-              ))}
+              {shareRows.map((row) => {
+                const holdingPlayerId = holdingById.get(String(row.holdingId))?.playerId ?? "";
+                return (
+                  <TR key={`${row.sectorId}-${row.companyId}`}>
+                    <TD className="text-xs text-[var(--text-muted)]">{row.sectorName}</TD>
+                    <TD className="font-semibold">{row.companyName}</TD>
+                    <TD className="text-xs text-[var(--text-muted)]">
+                      {holdingPlayerId ? (
+                        <button
+                          type="button"
+                          className="text-[var(--text)] hover:underline"
+                          onClick={() => openProfile(String(holdingPlayerId))}
+                        >
+                          {row.holdingName}
+                        </button>
+                      ) : (
+                        row.holdingName
+                      )}
+                    </TD>
+                    <TD className="text-right" mono>
+                      {`${Math.round(row.share * 1000) / 10}%`}
+                    </TD>
+                    <TD className="text-right" mono>
+                      {money.format(row.revenue)}
+                    </TD>
+                  </TR>
+                );
+              })}
             </TBody>
           </Table>
         </div>
@@ -331,7 +541,13 @@ export const SocialPanel: React.FC = () => {
                 <div className="mt-2 space-y-2">
                   {searchResults.map((r) => (
                     <div key={r.id} className="flex items-center justify-between">
-                      <div className="text-sm">{r.name}</div>
+                      <button
+                        type="button"
+                        className="text-sm text-[var(--text)] hover:underline"
+                        onClick={() => openProfile(r.id)}
+                      >
+                        {r.name}
+                      </button>
                       <Button
                         variant="primary"
                         size="sm"
@@ -352,7 +568,13 @@ export const SocialPanel: React.FC = () => {
                 <div className="mt-2 space-y-2">
                   {pendingIncoming.map((req) => (
                     <div key={req.id} className="flex items-center justify-between">
-                      <div className="text-sm">{req.friend.name}</div>
+                      <button
+                        type="button"
+                        className="text-sm text-[var(--text)] hover:underline"
+                        onClick={() => openProfile(String(req.friend.id))}
+                      >
+                        {req.friend.name}
+                      </button>
                       <div className="flex items-center gap-2">
                         <Button size="sm" variant="primary" onClick={() => void onAccept(req.id)} leftIcon={<Check className="h-4 w-4" />}
                         >
@@ -383,7 +605,15 @@ export const SocialPanel: React.FC = () => {
               <TBody>
                 {acceptedFriends.map((friend) => (
                   <TR key={friend.id}>
-                    <TD className="font-semibold">{friend.friend.name}</TD>
+                    <TD>
+                      <button
+                        type="button"
+                        className="font-semibold text-[var(--text)] hover:underline"
+                        onClick={() => openProfile(String(friend.friend.id))}
+                      >
+                        {friend.friend.name}
+                      </button>
+                    </TD>
                     <TD className="text-right">
                       <Button variant="ghost" size="sm" onClick={() => void onRemove(friend.id)}>
                         Remove
@@ -396,7 +626,19 @@ export const SocialPanel: React.FC = () => {
 
             {pendingOutgoing.length > 0 ? (
               <div className="text-xs text-[var(--text-muted)]">
-                Pending requests: {pendingOutgoing.map((p) => p.friend.name).join(", ")}
+                Pending requests:{" "}
+                {pendingOutgoing.map((p, idx) => (
+                  <span key={p.id}>
+                    <button
+                      type="button"
+                      className="text-[var(--text)] hover:underline"
+                      onClick={() => openProfile(String(p.friend.id))}
+                    >
+                      {p.friend.name}
+                    </button>
+                    {idx < pendingOutgoing.length - 1 ? ", " : ""}
+                  </span>
+                ))}
               </div>
             ) : null}
           </div>
@@ -425,7 +667,15 @@ export const SocialPanel: React.FC = () => {
               <TBody>
                 {friendWorlds.map((fw) => (
                   <TR key={`${fw.friendId}-${fw.worldId}-${fw.holdingId}`}>
-                    <TD className="font-semibold">{fw.friendName}</TD>
+                    <TD>
+                      <button
+                        type="button"
+                        className="font-semibold text-[var(--text)] hover:underline"
+                        onClick={() => openProfile(String(fw.friendId))}
+                      >
+                        {fw.friendName}
+                      </button>
+                    </TD>
                     <TD className="text-xs text-[var(--text-muted)]">{fw.worldName}</TD>
                     <TD className="text-xs text-[var(--text-muted)]">{fw.holdingName}</TD>
                     <TD className="text-right">
@@ -448,6 +698,61 @@ export const SocialPanel: React.FC = () => {
 
       <Card className="rounded-3xl p-4">
         <div className="flex items-center gap-2 text-[var(--text-muted)]">
+          <TrendingUp className="h-4 w-4" />
+          <div className="text-sm font-semibold text-[var(--text)]">Friends snapshot</div>
+        </div>
+        <div className="mt-2 text-xs text-[var(--text-muted)]">
+          Quick comparison across your accepted friends in this world.
+        </div>
+        <div className="mt-3">
+          <Table
+            caption={`Friends in world (${friendSnapshots.length})`}
+            isEmpty={!friendSnapshotsQuery.isLoading && friendSnapshots.length === 0}
+            emptyMessage="No friend holdings in this world yet."
+          >
+            <THead>
+              <TR>
+                <TH>Friend</TH>
+                <TH>Holding</TH>
+                <TH className="text-right">Net worth</TH>
+                <TH className="text-right">Profit</TH>
+                <TH className="text-right">Companies</TH>
+              </TR>
+            </THead>
+            <TBody>
+              {friendSnapshots.map((row) => (
+                <TR key={row.holdingId}>
+                  <TD>
+                    <button
+                      type="button"
+                      className="font-semibold text-[var(--text)] hover:underline"
+                      onClick={() => openProfile(String(row.friendId))}
+                    >
+                      {friendNameById.get(String(row.friendId)) ?? "Friend"}
+                    </button>
+                  </TD>
+                  <TD className="text-xs text-[var(--text-muted)]">{row.holdingName}</TD>
+                  <TD className="text-right" mono>
+                    {money.format(row.netWorth)}
+                  </TD>
+                  <TD
+                    className={row.netProfit >= 0 ? "text-right text-emerald-600" : "text-right text-rose-600"}
+                    mono
+                  >
+                    {money.format(row.netProfit)}
+                  </TD>
+                  <TD className="text-right" mono>
+                    {row.companyCount}
+                  </TD>
+                </TR>
+              ))}
+            </TBody>
+          </Table>
+        </div>
+      </Card>
+
+      <Card className="rounded-3xl p-4">
+        <div className="flex items-center gap-2 text-[var(--text-muted)]">
           <Users className="h-4 w-4" />
           <div className="text-sm font-semibold text-[var(--text)]">World feed</div>
         </div>
@@ -460,33 +765,44 @@ export const SocialPanel: React.FC = () => {
           >
             <THead>
               <TR>
+                <TH>Story</TH>
                 <TH>Scope</TH>
-                <TH>Type</TH>
                 <TH>Target</TH>
                 <TH className="text-right">Severity</TH>
                 <TH className="text-right">Year/Week</TH>
               </TR>
             </THead>
             <TBody>
-              {feed.map((e) => (
-                <TR key={String(e.id)}>
-                  <TD className="text-xs text-[var(--text-muted)]">{String(e.scope ?? "WORLD")}</TD>
-                  <TD className="font-semibold">{String(e.type ?? "EVENT")}</TD>
-                  <TD className="text-xs text-[var(--text-muted)]">
-                    {String((e as any).companyId ?? (e as any).sectorId ?? (e as any).holdingId ?? "-")}
-                  </TD>
-                  <TD className="text-right" mono>
-                    {Math.round(Number((e as any).severity ?? 0) * 100) / 100}
-                  </TD>
-                  <TD className="text-right" mono>
-                    {`${e.year}/${e.week}`}
-                  </TD>
-                </TR>
-              ))}
+              {feed.map((e) => {
+                const story = describeEvent(e);
+                return (
+                  <TR key={String(e.id)}>
+                    <TD>
+                      <div className="font-semibold">{story.headline}</div>
+                      <div className="text-xs text-[var(--text-muted)]">{story.detail}</div>
+                    </TD>
+                    <TD className="text-xs text-[var(--text-muted)]">{formatEventScope(e.scope)}</TD>
+                    <TD className="text-xs text-[var(--text-muted)]">{resolveEventTarget(e)}</TD>
+                    <TD className="text-right" mono>
+                      {Math.round(Number((e as any).severity ?? 0) * 100) / 100}
+                    </TD>
+                    <TD className="text-right" mono>
+                      {`${e.year}/${e.week}`}
+                    </TD>
+                  </TR>
+                );
+              })}
             </TBody>
           </Table>
         </div>
       </Card>
+
+      <PlayerProfileModal
+        open={profileOpen}
+        onOpenChange={setProfileOpen}
+        playerId={profilePlayerId}
+        worldId={worldId}
+      />
     </motion.div>
   );
 };
