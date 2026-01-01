@@ -158,7 +158,6 @@ export const scoreboardService = {
 
     const playerIds = Array.from(new Set(holdings.map((h) => String(h.playerId))));
     const players = await playerRepo.listByIds(playerIds as any);
-    const playerById = new Map(players.map((p) => [String(p.id), p]));
     const holdingByPlayerId = new Map(holdings.map((h) => [String(h.playerId), h]));
 
     const rows = players.map((player) => {
