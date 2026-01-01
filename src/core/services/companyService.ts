@@ -18,6 +18,7 @@ import { financeRepo } from "../persistence/financeRepo";
 import { decisionRepo } from "../persistence/decisionRepo";
 import { sectorRepo } from "../persistence/sectorRepo";
 import { getStartupPricing } from "../config/companyPricing";
+import { isSectorPlayable } from "../config/playableSectors";
 
 /**
  * CompanyService responsibilities:
@@ -54,6 +55,9 @@ export const companyService = {
     const niche = await sectorRepo.getNicheById(input.nicheId);
     if (!sector || !niche) {
       throw new Error("Sector or niche not found.");
+    }
+    if (!isSectorPlayable(sector.code)) {
+      throw new Error(`Sector ${sector.code} is not currently playable.`);
     }
     if (String(niche.sectorId) !== String(input.sectorId)) {
       throw new Error("Niche does not belong to selected sector.");

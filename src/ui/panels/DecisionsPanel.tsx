@@ -23,11 +23,20 @@ import { upgradeService } from "../../core/services/upgradeService";
 import { companyService } from "../../core/services/companyService";
 import { eventRepo } from "../../core/persistence/eventRepo";
 import { sectorRepo } from "../../core/persistence/sectorRepo";
+import { nicheProductRepo } from "../../core/persistence/nicheProductRepo";
 import { getStartupPricing } from "../../core/config/companyPricing";
 import { getDecisionModulesForNiche } from "../../core/config/nicheDecisions";
 import { getDecisionFieldsForNiche } from "../../core/config/nicheDecisionFields";
 import { getDecisionGuidance } from "../../core/config/decisionGuidance";
-import type { CompanyDecisionPayload, CompanyProgram, NicheUpgrade, CompanyUpgrade, CompanyState } from "../../core/domain";
+import type {
+  CompanyDecisionPayload,
+  CompanyProgram,
+  NicheUpgrade,
+  CompanyUpgrade,
+  CompanyState,
+  NicheProduct,
+  SetProductPlanDecision,
+} from "../../core/domain";
 import type { DecisionField } from "../../core/config/nicheDecisionFields";
 import { asWorldId, asCompanyId, asNicheId, asSectorId } from "../../core/domain";
 
@@ -58,6 +67,123 @@ const WEEKS_PER_MONTH = 52 / 12;
 const normalizeRatio = (value: number, min: number, max: number) => {
   if (!Number.isFinite(value) || !Number.isFinite(min) || !Number.isFinite(max) || max === min) return 0;
   return clamp((value - min) / (max - min), 0, 1);
+};
+
+const getPriceRange = (product: NicheProduct) => {
+  const min = toNumber(product.priceMinEur, 0);
+  const max = Math.max(min, toNumber(product.priceMaxEur, min));
+  return { min, max };
+};
+
+const getPriceBase = (product: NicheProduct) => {
+  const { min, max } = getPriceRange(product);
+  return (min + max) / 2 || min;
+};
+
+const getPriceStep = (min: number, max: number) => {
+  const span = Math.max(0, max - min);
+  if (span <= 1) return 0.01;
+  if (span <= 10) return 0.1;
+  if (span <= 100) return 1;
+  if (span <= 1000) return 10;
+  return 50;
+};
+
+const buildDefaultProductPlan = (products: NicheProduct[]): ProductPlanState => {
+  const count = products.length;
+  if (!count) return {};
+
+  const baseShare = Math.floor(100 / count);
+  const remainder = 100 - baseShare * count;
+  const plan: ProductPlanState = {};
+
+  products.forEach((product, idx) => {
+    const { min, max } = getPriceRange(product);
+    const priceEur = (min + max) / 2 || min;
+    const volumeShare = baseShare + (idx < remainder ? 1 : 0);
+    plan[product.sku] = {
+      priceEur,
+      volumeShare,
+      bufferWeeks: 0.5,
+    };
+  });
+
+  return plan;
+};
+
+const mergeProductPlan = (
+  products: NicheProduct[],
+  decision?: SetProductPlanDecision | null
+): ProductPlanState => {
+  const defaults = buildDefaultProductPlan(products);
+  if (!decision || !Array.isArray(decision.items)) return defaults;
+
+  const bySku = new Map<string, ProductPlanEntry>();
+  for (const item of decision.items) {
+    if (!item || !item.sku) continue;
+    bySku.set(item.sku, item);
+  }
+
+  const next: ProductPlanState = { ...defaults };
+  for (const product of products) {
+    const item = bySku.get(product.sku);
+    if (!item) continue;
+    const fallback = defaults[product.sku];
+    const { min, max } = getPriceRange(product);
+    next[product.sku] = {
+      priceEur: clamp(toNumber(item.priceEur, fallback.priceEur), min, max),
+      volumeShare: clamp(toNumber(item.volumeShare, fallback.volumeShare), 0, 100),
+      bufferWeeks: clamp(toNumber(item.bufferWeeks, fallback.bufferWeeks), 0, 12),
+    };
+  }
+
+  return next;
+};
+
+const buildProductPlanItems = (
+  products: NicheProduct[],
+  plan: ProductPlanState
+): ProductPlanEntry[] => {
+  const defaults = buildDefaultProductPlan(products);
+  return products.map((product) => {
+    const fallback = defaults[product.sku];
+    const entry = plan[product.sku] ?? fallback;
+    return {
+      sku: product.sku,
+      priceEur: toNumber(entry?.priceEur, fallback.priceEur),
+      volumeShare: toNumber(entry?.volumeShare, fallback.volumeShare),
+      bufferWeeks: toNumber(entry?.bufferWeeks, fallback.bufferWeeks),
+    };
+  });
+};
+
+const computePlanPriceLevel = (products: NicheProduct[], plan: ProductPlanState) => {
+  if (!products.length) return 1;
+
+  const defaults = buildDefaultProductPlan(products);
+  let weighted = 0;
+  let weightTotal = 0;
+  let fallbackTotal = 0;
+  let fallbackCount = 0;
+
+  for (const product of products) {
+    const basePrice = getPriceBase(product);
+    const entry = plan[product.sku] ?? defaults[product.sku];
+    const priceEur = toNumber(entry?.priceEur, basePrice);
+    const multiplier = basePrice > 0 ? priceEur / basePrice : 1;
+    const share = Math.max(0, toNumber(entry?.volumeShare, 0));
+
+    if (share > 0) {
+      weighted += multiplier * share;
+      weightTotal += share;
+    }
+
+    fallbackTotal += multiplier;
+    fallbackCount += 1;
+  }
+
+  if (weightTotal > 0) return weighted / weightTotal;
+  return fallbackCount > 0 ? fallbackTotal / fallbackCount : 1;
 };
 
 const FIELD_ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
@@ -205,6 +331,15 @@ type SectorMetricRow = {
   lastRoundMetrics?: any;
 };
 
+type ProductPlanEntry = {
+  sku: string;
+  priceEur: number;
+  volumeShare: number;
+  bufferWeeks: number;
+};
+
+type ProductPlanState = Record<string, Omit<ProductPlanEntry, "sku">>;
+
 const getPreviousWeek = (year: number, week: number) => {
   if (week <= 1) {
     return { year: Math.max(1, year - 1), week: 52 };
@@ -278,6 +413,16 @@ export const DecisionsPanel: React.FC = () => {
       return sectorRepo.getSectorById(asSectorId(String(company.sectorId)));
     },
     enabled: !!company?.sectorId,
+    staleTime: 60_000,
+  });
+
+  const nicheProductsQuery = useQuery({
+    queryKey: ["nicheProducts", company?.nicheId],
+    queryFn: async () => {
+      if (!company?.nicheId) return [];
+      return nicheProductRepo.listByNiche(asNicheId(String(company.nicheId)));
+    },
+    enabled: !!company?.nicheId,
     staleTime: 60_000,
   });
 
@@ -386,8 +531,29 @@ export const DecisionsPanel: React.FC = () => {
     staleTime: 60_000,
   });
 
+  const [open, setOpen] = React.useState(false);
+  const [saving, setSaving] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
+  const [fieldValues, setFieldValues] = React.useState<Record<string, number>>({});
+  const [productPlan, setProductPlan] = React.useState<ProductPlanState>({});
+  const [moduleSelections, setModuleSelections] = React.useState<Record<string, string>>({});
+  const [selectedUpgradeIds, setSelectedUpgradeIds] = React.useState<string[]>([]);
+  const [reviewAccepted, setReviewAccepted] = React.useState(false);
+
+  const [queued, setQueued] = React.useState<Array<{ type: string; payload: any; createdAt?: string }>>([]);
+  const [queuedLoading, setQueuedLoading] = React.useState(false);
+
   const niche = nicheQuery.data ?? null;
   const sector = sectorQuery.data ?? null;
+  const nicheProducts = nicheProductsQuery.data ?? [];
+  const hasProductPlan = nicheProducts.length > 0;
+  const nicheProductsBySku = React.useMemo(() => {
+    const map = new Map<string, NicheProduct>();
+    for (const product of nicheProducts) {
+      map.set(product.sku, product);
+    }
+    return map;
+  }, [nicheProducts]);
   const portfolioNicheById = React.useMemo(() => {
     const map = new Map<string, any>();
     for (const row of portfolioNichesQuery.data ?? []) {
@@ -406,6 +572,10 @@ export const DecisionsPanel: React.FC = () => {
   }, [portfolioSectorsQuery.data]);
   const decisionModules = React.useMemo(() => getDecisionModulesForNiche(niche), [niche]);
   const decisionFields = React.useMemo(() => getDecisionFieldsForNiche(niche), [niche]);
+  const editableDecisionFields = React.useMemo(
+    () => (hasProductPlan ? decisionFields.filter((field) => field.kind !== "PRICE") : decisionFields),
+    [decisionFields, hasProductPlan]
+  );
   const guidance = React.useMemo(() => getDecisionGuidance(niche, sector, state), [niche, sector, state]);
   const briefing = briefingQuery.data ?? { events: [], sectorRows: [] };
   const previousWeek = React.useMemo(() => getPreviousWeek(currentYear, currentWeek), [currentYear, currentWeek]);
@@ -429,6 +599,69 @@ export const DecisionsPanel: React.FC = () => {
     }
     return map;
   }, [companyFinancialsQuery.data]);
+  const defaultProductPlan = React.useMemo(
+    () => buildDefaultProductPlan(nicheProducts),
+    [nicheProducts]
+  );
+  const getPlanEntry = React.useCallback(
+    (sku: string) => productPlan[sku] ?? defaultProductPlan[sku],
+    [productPlan, defaultProductPlan]
+  );
+  const productPlanSummary = React.useMemo(() => {
+    if (!hasProductPlan) return null;
+    let totalShare = 0;
+    let weightedPrice = 0;
+    let weightedMultiplier = 0;
+    let fallbackPrice = 0;
+    let fallbackMultiplier = 0;
+    let count = 0;
+
+    for (const product of nicheProducts) {
+      const entry = getPlanEntry(product.sku);
+      if (!entry) continue;
+      const basePrice = getPriceBase(product);
+      const priceEur = toNumber(entry.priceEur, basePrice);
+      const share = Math.max(0, toNumber(entry.volumeShare, 0));
+      const multiplier = basePrice > 0 ? priceEur / basePrice : 1;
+
+      totalShare += share;
+      if (share > 0) {
+        weightedPrice += priceEur * share;
+        weightedMultiplier += multiplier * share;
+      }
+      fallbackPrice += priceEur;
+      fallbackMultiplier += multiplier;
+      count += 1;
+    }
+
+    const denom = totalShare > 0 ? totalShare : Math.max(1, count);
+    const avgPrice = (totalShare > 0 ? weightedPrice : fallbackPrice) / denom;
+    const avgMultiplier = (totalShare > 0 ? weightedMultiplier : fallbackMultiplier) / denom;
+
+    return { totalShare, avgPrice, avgMultiplier, count };
+  }, [hasProductPlan, nicheProducts, getPlanEntry]);
+  const productPlanHighlights = React.useMemo(() => {
+    if (!hasProductPlan) return [];
+    const rows = nicheProducts
+      .map((product) => {
+        const entry = getPlanEntry(product.sku);
+        const share = toNumber(entry?.volumeShare, 0);
+        const price = toNumber(entry?.priceEur, getPriceBase(product));
+        return {
+          sku: product.sku,
+          name: product.name,
+          share,
+          price,
+        };
+      })
+      .filter((row) => row.share > 0)
+      .sort((a, b) => b.share - a.share);
+    return rows.slice(0, 3);
+  }, [hasProductPlan, nicheProducts, getPlanEntry]);
+  const derivedPriceLevel = React.useMemo(
+    () => computePlanPriceLevel(nicheProducts, productPlan),
+    [nicheProducts, productPlan]
+  );
   const portfolioTotals = React.useMemo(() => {
     let revenue = 0;
     let netProfit = 0;
@@ -550,11 +783,15 @@ export const DecisionsPanel: React.FC = () => {
   const formatDecisionSummary = React.useCallback(
     (payload: any) => {
       if (!payload || typeof payload !== "object") return "Decision";
-      switch (payload.type) {
-        case "SET_PRICE":
-          return `Price level ${Number(payload.priceLevel ?? 0).toFixed(2)}x`;
-        case "SET_MARKETING":
-          return `Marketing level ${Math.round(Number(payload.marketingLevel ?? 0))}`;
+        switch (payload.type) {
+          case "SET_PRICE":
+            return `Price level ${Number(payload.priceLevel ?? 0).toFixed(2)}x`;
+          case "SET_PRODUCT_PLAN": {
+            const count = Array.isArray(payload.items) ? payload.items.length : 0;
+            return count > 0 ? `Product plan (${count} items)` : "Product plan";
+          }
+          case "SET_MARKETING":
+            return `Marketing level ${Math.round(Number(payload.marketingLevel ?? 0))}`;
         case "SET_STAFFING":
           return `Staff target ${Number(payload.targetEmployees ?? 0)}`;
         case "INVEST_CAPACITY":
@@ -642,17 +879,6 @@ export const DecisionsPanel: React.FC = () => {
     staleTime: 10_000,
   });
 
-  const [open, setOpen] = React.useState(false);
-  const [saving, setSaving] = React.useState(false);
-  const [error, setError] = React.useState<string | null>(null);
-  const [fieldValues, setFieldValues] = React.useState<Record<string, number>>({});
-  const [moduleSelections, setModuleSelections] = React.useState<Record<string, string>>({});
-  const [selectedUpgradeIds, setSelectedUpgradeIds] = React.useState<string[]>([]);
-  const [reviewAccepted, setReviewAccepted] = React.useState(false);
-
-  const [queued, setQueued] = React.useState<Array<{ type: string; payload: any; createdAt?: string }>>([]);
-  const [queuedLoading, setQueuedLoading] = React.useState(false);
-
   // Initialize decision fields from latest state
   React.useEffect(() => {
     if (!decisionFields.length) {
@@ -675,8 +901,23 @@ export const DecisionsPanel: React.FC = () => {
   }, [selectedCompanyId]);
 
   React.useEffect(() => {
+    setProductPlan({});
+  }, [selectedCompanyId]);
+
+  React.useEffect(() => {
     if (fromCompanyId) setSelectedCompanyId(fromCompanyId);
   }, [fromCompanyId]);
+
+  React.useEffect(() => {
+    if (!nicheProducts.length) {
+      setProductPlan({});
+      return;
+    }
+    setProductPlan((prev) => {
+      if (Object.keys(prev).length > 0) return prev;
+      return buildDefaultProductPlan(nicheProducts);
+    });
+  }, [nicheProducts]);
 
   React.useEffect(() => {
     if (activeStep !== "review") {
@@ -783,6 +1024,29 @@ export const DecisionsPanel: React.FC = () => {
     setFieldValues((prev) => ({ ...prev, [fieldId]: value }));
   }, []);
 
+  const updateProductPlan = React.useCallback(
+    (sku: string, updates: Partial<ProductPlanEntry>) => {
+      const product = nicheProductsBySku.get(sku);
+      const fallback = defaultProductPlan[sku];
+      if (!product || !fallback) return;
+      const { min, max } = getPriceRange(product);
+
+      setProductPlan((prev) => {
+        const current = prev[sku] ?? fallback;
+        const next = { ...current, ...updates };
+        return {
+          ...prev,
+          [sku]: {
+            priceEur: clamp(toNumber(next.priceEur, fallback.priceEur), min, max),
+            volumeShare: clamp(toNumber(next.volumeShare, fallback.volumeShare), 0, 100),
+            bufferWeeks: clamp(toNumber(next.bufferWeeks, fallback.bufferWeeks), 0, 12),
+          },
+        };
+      });
+    },
+    [defaultProductPlan, nicheProductsBySku]
+  );
+
   const loadQueued = React.useCallback(async () => {
     setError(null);
 
@@ -800,21 +1064,30 @@ export const DecisionsPanel: React.FC = () => {
         week: currentWeek as any,
       });
 
-      setQueued(
-        (rows ?? []).map((d: any) => ({
-          // Decisions no longer have d.type; type lives in payload.type
-          type: String(d.payload?.type ?? "UNKNOWN"),
-          payload: d.payload ?? {},
-          createdAt: d.createdAt ? String(d.createdAt) : undefined,
-        }))
-      );
+      const normalized = (rows ?? []).map((d: any) => ({
+        // Decisions no longer have d.type; type lives in payload.type
+        type: String(d.payload?.type ?? "UNKNOWN"),
+        payload: d.payload ?? {},
+        createdAt: d.createdAt ? String(d.createdAt) : undefined,
+      }));
+
+      setQueued(normalized);
+
+      const planPayload = normalized
+        .map((row) => row.payload)
+        .filter((payload) => payload?.type === "SET_PRODUCT_PLAN")
+        .at(-1) as SetProductPlanDecision | undefined;
+
+      if (planPayload && nicheProducts.length) {
+        setProductPlan(mergeProductPlan(nicheProducts, planPayload));
+      }
     } catch (e: any) {
       setError(e?.message ?? "Failed to load queued decisions.");
       setQueued([]);
     } finally {
       setQueuedLoading(false);
     }
-  }, [worldId, selectedCompanyId, economy, currentYear, currentWeek]);
+  }, [worldId, selectedCompanyId, economy, currentYear, currentWeek, nicheProducts]);
 
   React.useEffect(() => {
     void loadQueued();
@@ -840,7 +1113,9 @@ export const DecisionsPanel: React.FC = () => {
     try {
       const payloads: CompanyDecisionPayload[] = [];
 
-      for (const field of decisionFields) {
+      const fieldsToSave = hasProductPlan ? editableDecisionFields : decisionFields;
+
+      for (const field of fieldsToSave) {
         const raw = Number(fieldValues[field.id] ?? 0);
         const range = resolveRangeForField(field);
         const value = clamp(raw, range.min, range.max);
@@ -872,6 +1147,15 @@ export const DecisionsPanel: React.FC = () => {
           default:
             break;
         }
+      }
+
+      if (hasProductPlan && nicheProducts.length) {
+        const planItems = buildProductPlanItems(nicheProducts, productPlan);
+        if (planItems.length) {
+          payloads.push({ type: "SET_PRODUCT_PLAN", version: 1, items: planItems } as any);
+        }
+        const priceLevel = Number.isFinite(derivedPriceLevel) ? derivedPriceLevel : 1;
+        payloads.push({ type: "SET_PRICE", priceLevel } as any);
       }
 
       for (const module of decisionModules) {
@@ -1401,6 +1685,48 @@ export const DecisionsPanel: React.FC = () => {
                     </div>
 
                     <div className="rounded-2xl border border-[var(--border)] bg-[var(--card-2)] p-3">
+                      <div className="text-xs font-semibold text-[var(--text)]">Product plan</div>
+                      {!hasProductPlan ? (
+                        <div className="mt-2 text-xs text-[var(--text-muted)]">
+                          No catalog products found for this niche.
+                        </div>
+                      ) : (
+                        <div className="mt-2 space-y-2 text-xs text-[var(--text-muted)]">
+                          <div className="flex items-center justify-between">
+                            <span>Effective price</span>
+                            <span className="font-semibold text-[var(--text)]">
+                              {derivedPriceLevel.toFixed(2)}x
+                            </span>
+                          </div>
+                          <div className="flex items-center justify-between">
+                            <span>Avg unit price</span>
+                            <span className="font-semibold text-[var(--text)]">
+                              {money.format(Number(productPlanSummary?.avgPrice ?? 0))}
+                            </span>
+                          </div>
+                          <div className="flex items-center justify-between">
+                            <span>Allocation</span>
+                            <span className="font-semibold text-[var(--text)]">
+                              {Math.round(Number(productPlanSummary?.totalShare ?? 0))}%
+                            </span>
+                          </div>
+                          {productPlanHighlights.length > 0 ? (
+                            <div className="mt-2 space-y-1">
+                              {productPlanHighlights.map((row) => (
+                                <div key={row.sku} className="flex items-center justify-between">
+                                  <span>{row.name}</span>
+                                  <span className="text-[var(--text)]">{Math.round(row.share)}%</span>
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <div className="mt-2 text-[var(--text-muted)]">No mix set yet.</div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="rounded-2xl border border-[var(--border)] bg-[var(--card-2)] p-3">
                       <div className="text-xs font-semibold text-[var(--text)]">Active programs</div>
                       {activePrograms.length === 0 ? (
                         <div className="mt-2 text-xs text-[var(--text-muted)]">No active programs.</div>
@@ -1663,6 +1989,141 @@ export const DecisionsPanel: React.FC = () => {
             </div>
           ) : null}
 
+          {hasProductPlan ? (
+            <div className="rounded-2xl border border-[var(--border)] bg-[var(--card-2)] p-4">
+              <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+                <div>
+                  <div className="text-sm font-semibold text-[var(--text)]">Products & pricing</div>
+                  <div className="text-xs text-[var(--text-muted)]">
+                    Set per-product pricing, mix, and buffer targets. The engine uses the weighted price level.
+                  </div>
+                </div>
+                <div className="text-xs text-[var(--text-muted)]">
+                  Effective price level:{" "}
+                  <span className="text-[var(--text)]">{derivedPriceLevel.toFixed(2)}x</span>
+                </div>
+              </div>
+
+              <div className="mt-3 flex flex-wrap gap-2 text-xs">
+                <div className="rounded-full border border-[var(--border)] bg-[var(--bg)] px-2 py-1 text-[var(--text-muted)]">
+                  Avg price:{" "}
+                  <span className="text-[var(--text)]">
+                    {money.format(Number(productPlanSummary?.avgPrice ?? 0))}
+                  </span>
+                </div>
+                <div className="rounded-full border border-[var(--border)] bg-[var(--bg)] px-2 py-1 text-[var(--text-muted)]">
+                  Allocation:{" "}
+                  <span className="text-[var(--text)]">
+                    {Math.round(Number(productPlanSummary?.totalShare ?? 0))}%
+                  </span>
+                </div>
+                <div className="rounded-full border border-[var(--border)] bg-[var(--bg)] px-2 py-1 text-[var(--text-muted)]">
+                  Items:{" "}
+                  <span className="text-[var(--text)]">{productPlanSummary?.count ?? 0}</span>
+                </div>
+              </div>
+
+              {productPlanSummary && Math.abs(productPlanSummary.totalShare - 100) > 2 ? (
+                <div className="mt-2 rounded-2xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700">
+                  Allocation totals {Math.round(productPlanSummary.totalShare)}%. Aim for ~100% to keep price weights
+                  realistic.
+                </div>
+              ) : null}
+
+              <div className="mt-4">
+                <Table
+                  caption={`Catalog products (${nicheProducts.length})`}
+                  isEmpty={nicheProducts.length === 0}
+                  emptyMessage="No products found for this niche."
+                >
+                  <THead>
+                    <TR>
+                      <TH>Product</TH>
+                      <TH>Target price</TH>
+                      <TH>Mix %</TH>
+                      <TH>Buffer (wks)</TH>
+                    </TR>
+                  </THead>
+                  <TBody>
+                    {nicheProducts.map((product) => {
+                      const entry = getPlanEntry(product.sku);
+                      const { min, max } = getPriceRange(product);
+                      const basePrice = getPriceBase(product);
+                      const priceEur = toNumber(entry?.priceEur, basePrice);
+                      const volumeShare = toNumber(entry?.volumeShare, 0);
+                      const bufferWeeks = toNumber(entry?.bufferWeeks, 0);
+                      const multiplier = basePrice > 0 ? priceEur / basePrice : 1;
+                      const cogsLabel = `${formatRange(product.cogsPctMin, product.cogsPctMax, 0)}%`;
+                      return (
+                        <TR key={product.sku} interactive>
+                          <TD>
+                            <div className="text-sm font-semibold text-[var(--text)]">{product.name}</div>
+                            <div className="text-xs text-[var(--text-muted)]">
+                              {product.sku} • {product.unit} • COGS {cogsLabel}
+                            </div>
+                            <div className="text-xs text-[var(--text-muted)]">
+                              Driver: {product.capacityDriver}
+                            </div>
+                            <div className="text-xs text-[var(--text-muted)]">{product.notes}</div>
+                          </TD>
+                          <TD>
+                            <div className="text-xs text-[var(--text-muted)]">
+                              Range {formatMoneyRange(min, max, true)}
+                            </div>
+                            <input
+                              type="number"
+                              min={min}
+                              max={max}
+                              step={getPriceStep(min, max)}
+                              className="mt-2 w-full rounded-2xl border border-[var(--border)] bg-[var(--bg)] px-3 py-2 text-sm outline-none"
+                              value={Number.isFinite(priceEur) ? priceEur : basePrice}
+                              onChange={(e) =>
+                                updateProductPlan(product.sku, { priceEur: Number(e.target.value) })
+                              }
+                            />
+                            <div className="mt-1 text-xs text-[var(--text-muted)]">
+                              {multiplier.toFixed(2)}x vs baseline
+                            </div>
+                          </TD>
+                          <TD>
+                            <input
+                              type="number"
+                              min={0}
+                              max={100}
+                              step={1}
+                              className="w-full rounded-2xl border border-[var(--border)] bg-[var(--bg)] px-3 py-2 text-sm outline-none"
+                              value={Number.isFinite(volumeShare) ? volumeShare : 0}
+                              onChange={(e) =>
+                                updateProductPlan(product.sku, { volumeShare: Number(e.target.value) })
+                              }
+                            />
+                            <div className="mt-1 text-xs text-[var(--text-muted)]">Share of weekly output</div>
+                          </TD>
+                          <TD>
+                            <input
+                              type="number"
+                              min={0}
+                              max={12}
+                              step={0.25}
+                              className="w-full rounded-2xl border border-[var(--border)] bg-[var(--bg)] px-3 py-2 text-sm outline-none"
+                              value={Number.isFinite(bufferWeeks) ? bufferWeeks : 0}
+                              onChange={(e) =>
+                                updateProductPlan(product.sku, { bufferWeeks: Number(e.target.value) })
+                              }
+                            />
+                            <div className="mt-1 text-xs text-[var(--text-muted)]">
+                              Inventory or backlog buffer
+                            </div>
+                          </TD>
+                        </TR>
+                      );
+                    })}
+                  </TBody>
+                </Table>
+              </div>
+            </div>
+          ) : null}
+
           <div className="rounded-2xl border border-[var(--border)] bg-[var(--card-2)] p-4">
             <div className="flex items-center gap-2 text-[var(--text-muted)]">
               <SlidersHorizontal className="h-4 w-4" />
@@ -1673,10 +2134,10 @@ export const DecisionsPanel: React.FC = () => {
             </div>
 
             <div className="mt-4 grid grid-cols-1 gap-3">
-              {decisionFields.length === 0 ? (
+              {editableDecisionFields.length === 0 ? (
                 <div className="text-sm text-[var(--text-muted)]">No decision levers available.</div>
               ) : (
-                decisionFields.map((field) => {
+                editableDecisionFields.map((field) => {
                   const range = resolveRangeForField(field);
                   const decimals = fieldDecimals(field);
                   const rawValue = Number(fieldValues[field.id] ?? getDefaultValueForField(field, state));

@@ -39,6 +39,13 @@ type SeasonLike = {
   };
 } | null;
 
+type ProductPlanStats = {
+  avgPrice?: number;
+  avgCost?: number;
+  capacityMultiplier?: number;
+  bufferWeeks?: number;
+};
+
 export type CompanySimInput = {
   worldId: WorldId;
   year: Year;
@@ -54,6 +61,7 @@ export type CompanySimInput = {
   botPressure?: BotMarketPressure | null;
   modifiersByCompanyId?: Record<string, CompanyEffectModifiers>;
   extraOpexByCompanyId?: Record<string, number>;
+  productPlansByCompanyId?: Record<string, ProductPlanStats>;
 };
 
 export type CompanySimOutput = {
@@ -134,11 +142,19 @@ export const companyEngine = {
 
     // 1) Utility per company -> market shares
     const utilities = input.companies.map((c) => {
+      const cid = String(c.id);
       const s = input.statesByCompanyId[c.id] ?? null;
       const mod = modifiers[c.id] ?? {};
+      const plan = input.productPlansByCompanyId?.[cid] ?? null;
+      const planCapacityMultiplier = Number.isFinite(Number(plan?.capacityMultiplier))
+        ? Number(plan?.capacityMultiplier)
+        : 1;
 
       const priceLvl = applyScalar(Number(s?.priceLevel ?? 1), 0, mod.priceLevelMultiplier);
-      const cap = Math.max(0, Number(s?.capacity ?? 0)) * Number(mod.capacityMultiplier ?? 1);
+      const cap =
+        Math.max(0, Number(s?.capacity ?? 0)) *
+        Number(mod.capacityMultiplier ?? 1) *
+        planCapacityMultiplier;
       const q = applyScalar(Number(s?.qualityScore ?? 1), 0, mod.qualityMultiplier);
       const m = applyScalar(
         Number(s?.marketingLevel ?? 0),
@@ -164,12 +180,20 @@ export const companyEngine = {
     const soldVolumes: Record<string, number> = {};
 
     for (const c of input.companies) {
+      const cid = String(c.id);
       const share = marketShares[c.id] ?? 0;
       const desired = effectiveDemand * share;
 
       const s = input.statesByCompanyId[c.id] ?? null;
       const mod = modifiers[c.id] ?? {};
-      const cap = Math.max(0, Number(s?.capacity ?? 0)) * Number(mod.capacityMultiplier ?? 1);
+      const plan = input.productPlansByCompanyId?.[cid] ?? null;
+      const planCapacityMultiplier = Number.isFinite(Number(plan?.capacityMultiplier))
+        ? Number(plan?.capacityMultiplier)
+        : 1;
+      const cap =
+        Math.max(0, Number(s?.capacity ?? 0)) *
+        Number(mod.capacityMultiplier ?? 1) *
+        planCapacityMultiplier;
 
       soldVolumes[c.id] = Math.min(desired, cap);
     }
@@ -179,8 +203,10 @@ export const companyEngine = {
     const nextStates: Record<string, CompanyState> = {};
 
     for (const c of input.companies) {
+      const cid = String(c.id);
       const prev = input.statesByCompanyId[c.id] ?? null;
       const mod = modifiers[c.id] ?? {};
+      const plan = input.productPlansByCompanyId?.[cid] ?? null;
 
       const basePriceLevel = Number(prev?.priceLevel ?? 1);
       const priceLvl = applyScalar(basePriceLevel, 0, mod.priceLevelMultiplier);
@@ -188,12 +214,15 @@ export const companyEngine = {
 
       // Pricing
       const basePrice = Number(nicheCfg.basePrice ?? DEFAULTS.pricing.defaultBasePrice);
-      const unitPrice = basePrice * priceLvl;
+      const planPrice = Number(plan?.avgPrice);
+      const unitPrice = Number.isFinite(planPrice) && planPrice > 0 ? planPrice : basePrice * priceLvl;
 
       // Variable cost per unit
       const baseVarCost = Number(prev?.variableCostPerUnit ?? nicheCfg.baseVariableCost ?? DEFAULTS.costs.defaultVarCost);
+      const planCost = Number(plan?.avgCost);
+      const rawVarCost = Number.isFinite(planCost) && planCost > 0 ? planCost : baseVarCost;
       const varCostPerUnit =
-        baseVarCost *
+        rawVarCost *
         (1 + inflation) *
         energyCostFactor *
         Number(mod.variableCostMultiplier ?? 1);
@@ -233,7 +262,13 @@ export const companyEngine = {
       const cashChange = netProfit;
 
       // Utilisation
-      const cap = Math.max(0, Number(prev?.capacity ?? 0)) * Number(mod.capacityMultiplier ?? 1);
+      const planCapacityMultiplier = Number.isFinite(Number(plan?.capacityMultiplier))
+        ? Number(plan?.capacityMultiplier)
+        : 1;
+      const cap =
+        Math.max(0, Number(prev?.capacity ?? 0)) *
+        Number(mod.capacityMultiplier ?? 1) *
+        planCapacityMultiplier;
       const utilisation = cap > 0 ? sold / cap : 0;
 
       // Reputation drift

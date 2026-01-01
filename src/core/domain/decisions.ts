@@ -15,6 +15,7 @@ import type{
   LoanId,
   PropertyId,
   InvestmentId,
+  AcquisitionOfferId,
   JsonObject,
 } from "./common";
 import type { CompanyEffectModifiers } from "./programs";
@@ -33,6 +34,7 @@ import type { CompanyEffectModifiers } from "./programs";
  * ========================= */
 
 export type CompanyDecisionType =
+  | "SET_PRODUCT_PLAN"
   | "SET_PRICE"
   | "SET_MARKETING"
   | "SET_STAFFING"
@@ -57,6 +59,19 @@ export type SetPriceDecision = {
    * Example: 0.9 = cheaper, 1.1 = premium.
    */
   priceLevel: Decimal;
+};
+
+export type ProductPlanItem = {
+  sku: string;
+  priceEur: Money;
+  volumeShare: Decimal;
+  bufferWeeks: Decimal;
+};
+
+export type SetProductPlanDecision = {
+  type: "SET_PRODUCT_PLAN";
+  version: number;
+  items: ProductPlanItem[];
 };
 
 export type SetMarketingDecision = {
@@ -177,6 +192,7 @@ export type RequestCapitalInjectionDecision = {
 };
 
 export type CompanyDecisionPayload =
+  | SetProductPlanDecision
   | SetPriceDecision
   | SetMarketingDecision
   | SetStaffingDecision
@@ -220,6 +236,11 @@ export type HoldingDecisionType =
   | "SELL_INVESTMENT"
   | "START_COMPANY"
   | "BUY_COMPANY"
+  | "SUBMIT_ACQUISITION_OFFER"
+  | "ACCEPT_ACQUISITION_OFFER"
+  | "REJECT_ACQUISITION_OFFER"
+  | "COUNTER_ACQUISITION_OFFER"
+  | "WITHDRAW_ACQUISITION_OFFER"
   | "SELL_COMPANY"
   | "SET_HOLDING_POLICY";
 
@@ -291,6 +312,37 @@ export type BuyCompanyDecision = {
   offerPrice: Money;
 };
 
+export type SubmitAcquisitionOfferDecision = {
+  type: "SUBMIT_ACQUISITION_OFFER";
+  companyId: CompanyId;
+  offerPrice: Money;
+  message?: string;
+  expiresInWeeks?: number;
+};
+
+export type AcceptAcquisitionOfferDecision = {
+  type: "ACCEPT_ACQUISITION_OFFER";
+  offerId: AcquisitionOfferId;
+};
+
+export type RejectAcquisitionOfferDecision = {
+  type: "REJECT_ACQUISITION_OFFER";
+  offerId: AcquisitionOfferId;
+  reason?: string;
+};
+
+export type CounterAcquisitionOfferDecision = {
+  type: "COUNTER_ACQUISITION_OFFER";
+  offerId: AcquisitionOfferId;
+  counterPrice: Money;
+  message?: string;
+};
+
+export type WithdrawAcquisitionOfferDecision = {
+  type: "WITHDRAW_ACQUISITION_OFFER";
+  offerId: AcquisitionOfferId;
+};
+
 export type SellCompanyDecision = {
   type: "SELL_COMPANY";
   companyId: CompanyId;
@@ -314,6 +366,11 @@ export type HoldingDecisionPayload =
   | SellInvestmentDecision
   | StartCompanyDecision
   | BuyCompanyDecision
+  | SubmitAcquisitionOfferDecision
+  | AcceptAcquisitionOfferDecision
+  | RejectAcquisitionOfferDecision
+  | CounterAcquisitionOfferDecision
+  | WithdrawAcquisitionOfferDecision
   | SellCompanyDecision
   | SetHoldingPolicyDecision;
 

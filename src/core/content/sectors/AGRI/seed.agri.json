@@ -1,0 +1,1399 @@
+{
+  "sector": {
+    "id": "AGRI",
+    "name": "Agriculture",
+    "description": "Food and input supply chains driven by seasons and yields."
+  },
+  "niches": [
+    {
+      "id": "cropFarm",
+      "code": "AGRI_FARM",
+      "name": "Crop Farm",
+      "description": "Field and greenhouse crops with seasonal yield swings."
+    },
+    {
+      "id": "dairy",
+      "code": "AGRI_DAIRY",
+      "name": "Dairy",
+      "description": "Continuous milk production with health constraints and thin margins."
+    },
+    {
+      "id": "foodProcessing",
+      "code": "AGRI_FOODPROC",
+      "name": "Food Processing",
+      "description": "Input-driven conversion with tight margins and high scaling."
+    },
+    {
+      "id": "greenhouse",
+      "code": "AGRI_GREEN",
+      "name": "Greenhouse",
+      "description": "Energy-sensitive controlled agriculture with fast cycles."
+    },
+    {
+      "id": "livestock",
+      "code": "AGRI_MEAT",
+      "name": "Livestock",
+      "description": "Feed-driven animal production with welfare and compliance pressure."
+    },
+    {
+      "id": "organicFarming",
+      "code": "AGRI_ORGANIC",
+      "name": "Organic Farming",
+      "description": "Certification-driven farming with premium channels and audit risk."
+    }
+  ],
+  "products": [
+    {
+      "nicheId": "cropFarm",
+      "sku": "agri.crop.wheat",
+      "name": "Wheat",
+      "unit": "ton",
+      "priceMin": 180,
+      "priceMax": 320,
+      "cogsPercent": 0.38,
+      "capacityDrivers": ["land_ha", "machinery_units", "storage_tons"],
+      "notes": "Bulk grain crop."
+    },
+    {
+      "nicheId": "cropFarm",
+      "sku": "agri.crop.corn",
+      "name": "Corn",
+      "unit": "ton",
+      "priceMin": 160,
+      "priceMax": 300,
+      "cogsPercent": 0.36,
+      "capacityDrivers": ["land_ha", "machinery_units", "irrigation_level"],
+      "notes": "Irrigated field crop."
+    },
+    {
+      "nicheId": "cropFarm",
+      "sku": "agri.crop.potato",
+      "name": "Potato",
+      "unit": "ton",
+      "priceMin": 220,
+      "priceMax": 380,
+      "cogsPercent": 0.42,
+      "capacityDrivers": ["land_ha", "machinery_units", "storage_tons"],
+      "notes": "Storage-sensitive crop."
+    },
+    {
+      "nicheId": "cropFarm",
+      "sku": "agri.crop.soy",
+      "name": "Soy",
+      "unit": "ton",
+      "priceMin": 250,
+      "priceMax": 420,
+      "cogsPercent": 0.35,
+      "capacityDrivers": ["land_ha", "machinery_units"],
+      "notes": "Rotation-driven crop."
+    },
+    {
+      "nicheId": "cropFarm",
+      "sku": "agri.crop.tomato",
+      "name": "Tomato",
+      "unit": "kg",
+      "priceMin": 1.2,
+      "priceMax": 2.8,
+      "cogsPercent": 0.48,
+      "capacityDrivers": ["greenhouse_m2", "irrigation_level", "energy_kwh"],
+      "notes": "Greenhouse produce."
+    },
+    {
+      "nicheId": "cropFarm",
+      "sku": "agri.crop.apple",
+      "name": "Apple",
+      "unit": "kg",
+      "priceMin": 0.8,
+      "priceMax": 2.2,
+      "cogsPercent": 0.4,
+      "capacityDrivers": ["orchard_ha", "storage_tons"],
+      "notes": "Orchard crop."
+    },
+    {
+      "nicheId": "dairy",
+      "sku": "raw_milk_bulk_liter",
+      "name": "Raw Milk (Bulk)",
+      "unit": "liter",
+      "priceMin": 0.35,
+      "priceMax": 0.6,
+      "cogsPercent": 1.35,
+      "capacityDrivers": ["cows_lactating", "milking_robots", "cooling_tank_liters"],
+      "notes": "Loss-leading bulk milk."
+    },
+    {
+      "nicheId": "dairy",
+      "sku": "premium_milk_liter",
+      "name": "Premium Milk",
+      "unit": "liter",
+      "priceMin": 0.55,
+      "priceMax": 0.9,
+      "cogsPercent": 0.95,
+      "capacityDrivers": ["cows_lactating", "pasteurizer", "cooling_tank_liters"],
+      "notes": "Pasteurized premium milk."
+    },
+    {
+      "nicheId": "dairy",
+      "sku": "cheese_kg",
+      "name": "Cheese",
+      "unit": "kg",
+      "priceMin": 6,
+      "priceMax": 18,
+      "cogsPercent": 0.6,
+      "capacityDrivers": ["cheese_vat", "cold_storage_kg"],
+      "notes": "Value-add cheese."
+    },
+    {
+      "nicheId": "dairy",
+      "sku": "yogurt_kg",
+      "name": "Yogurt",
+      "unit": "kg",
+      "priceMin": 1.5,
+      "priceMax": 4,
+      "cogsPercent": 0.65,
+      "capacityDrivers": ["fermentation_tank", "cold_storage_kg"],
+      "notes": "Short shelf life dairy."
+    },
+    {
+      "nicheId": "dairy",
+      "sku": "butter_kg",
+      "name": "Butter",
+      "unit": "kg",
+      "priceMin": 5,
+      "priceMax": 12,
+      "cogsPercent": 0.6,
+      "capacityDrivers": ["butter_churn", "cold_storage_kg"],
+      "notes": "High-fat dairy product."
+    },
+    {
+      "nicheId": "dairy",
+      "sku": "whey_liter",
+      "name": "Whey (Byproduct)",
+      "unit": "liter",
+      "priceMin": 0.05,
+      "priceMax": 0.2,
+      "cogsPercent": 0.3,
+      "capacityDrivers": ["cooling_tank_liters"],
+      "notes": "Byproduct of cheese and butter."
+    },
+    {
+      "nicheId": "foodProcessing",
+      "sku": "flour_kg",
+      "name": "Flour",
+      "unit": "kg",
+      "priceMin": 0.3,
+      "priceMax": 0.6,
+      "cogsPercent": 1.05,
+      "capacityDrivers": ["milling_line", "dry_storage_kg", "energy_capacity_kwh"],
+      "notes": "Commodity milling output."
+    },
+    {
+      "nicheId": "foodProcessing",
+      "sku": "packaged_bread_unit",
+      "name": "Packaged Bread",
+      "unit": "unit",
+      "priceMin": 1.2,
+      "priceMax": 3.5,
+      "cogsPercent": 0.65,
+      "capacityDrivers": ["baking_line", "packaging_line", "dry_storage_kg"],
+      "notes": "High-volume packaged bakery."
+    },
+    {
+      "nicheId": "foodProcessing",
+      "sku": "ready_meal_unit",
+      "name": "Ready Meals",
+      "unit": "unit",
+      "priceMin": 3,
+      "priceMax": 8,
+      "cogsPercent": 0.7,
+      "capacityDrivers": ["cooking_line", "packaging_line", "cold_storage_kg"],
+      "notes": "Energy-intensive prepared meals."
+    },
+    {
+      "nicheId": "foodProcessing",
+      "sku": "animal_feed_mix_ton",
+      "name": "Animal Feed Mix",
+      "unit": "ton",
+      "priceMin": 220,
+      "priceMax": 420,
+      "cogsPercent": 0.75,
+      "capacityDrivers": ["mixing_line", "dry_storage_kg"],
+      "notes": "Stable bulk contracts for feed."
+    },
+    {
+      "nicheId": "foodProcessing",
+      "sku": "frozen_vegetables_kg",
+      "name": "Frozen Vegetables",
+      "unit": "kg",
+      "priceMin": 1.5,
+      "priceMax": 3.5,
+      "cogsPercent": 0.7,
+      "capacityDrivers": ["freezing_line", "cold_storage_kg"],
+      "notes": "Cold chain frozen goods."
+    },
+    {
+      "nicheId": "foodProcessing",
+      "sku": "private_label_batch",
+      "name": "Private Label Batch",
+      "unit": "batch",
+      "priceMin": 6000,
+      "priceMax": 80000,
+      "cogsPercent": 0.6,
+      "capacityDrivers": ["packaging_line", "cold_storage_kg", "processing_m2"],
+      "notes": "Contracted batch manufacturing."
+    },
+    {
+      "nicheId": "greenhouse",
+      "sku": "tomatoes_kg",
+      "name": "Tomatoes",
+      "unit": "kg",
+      "priceMin": 1.2,
+      "priceMax": 3.2,
+      "cogsPercent": 1.05,
+      "capacityDrivers": ["greenhouse_m2", "climate_control_level", "cold_storage_kg"],
+      "notes": "High-volume greenhouse staple."
+    },
+    {
+      "nicheId": "greenhouse",
+      "sku": "cucumbers_kg",
+      "name": "Cucumbers",
+      "unit": "kg",
+      "priceMin": 0.8,
+      "priceMax": 2,
+      "cogsPercent": 0.9,
+      "capacityDrivers": ["greenhouse_m2", "climate_control_level", "cold_storage_kg"],
+      "notes": "Fast cycle crop sensitive to oversupply."
+    },
+    {
+      "nicheId": "greenhouse",
+      "sku": "bell_peppers_kg",
+      "name": "Bell Peppers",
+      "unit": "kg",
+      "priceMin": 1.8,
+      "priceMax": 4.5,
+      "cogsPercent": 0.8,
+      "capacityDrivers": ["greenhouse_m2", "sorting_line", "cold_storage_kg"],
+      "notes": "Premium greenhouse produce."
+    },
+    {
+      "nicheId": "greenhouse",
+      "sku": "herbs_pack",
+      "name": "Herbs Pack",
+      "unit": "pack",
+      "priceMin": 0.7,
+      "priceMax": 2.2,
+      "cogsPercent": 0.75,
+      "capacityDrivers": ["greenhouse_m2", "packaging_line", "cold_storage_kg"],
+      "notes": "Packaging-heavy herb packs."
+    },
+    {
+      "nicheId": "greenhouse",
+      "sku": "strawberries_kg",
+      "name": "Strawberries",
+      "unit": "kg",
+      "priceMin": 2.5,
+      "priceMax": 7,
+      "cogsPercent": 0.85,
+      "capacityDrivers": ["greenhouse_m2", "pest_management_system", "cold_storage_kg"],
+      "notes": "High spoilage risk, high upside."
+    },
+    {
+      "nicheId": "greenhouse",
+      "sku": "microgreens_kg",
+      "name": "Microgreens",
+      "unit": "kg",
+      "priceMin": 10,
+      "priceMax": 35,
+      "cogsPercent": 0.7,
+      "capacityDrivers": ["greenhouse_m2", "lighting_kw_capacity", "co2_injection_enabled"],
+      "notes": "Premium microgreens with energy load."
+    },
+    {
+      "nicheId": "livestock",
+      "sku": "poultry_meat_kg",
+      "name": "Poultry Meat",
+      "unit": "kg",
+      "priceMin": 2.2,
+      "priceMax": 4,
+      "cogsPercent": 1.1,
+      "capacityDrivers": ["animals_total", "barn_m2", "cold_storage_kg"],
+      "notes": "Fast cycle meat with feed volatility."
+    },
+    {
+      "nicheId": "livestock",
+      "sku": "eggs_dozen",
+      "name": "Eggs",
+      "unit": "dozen",
+      "priceMin": 1.2,
+      "priceMax": 3.2,
+      "cogsPercent": 0.75,
+      "capacityDrivers": ["animals_total", "egg_sorting_line"],
+      "notes": "Stable demand, welfare sensitive."
+    },
+    {
+      "nicheId": "livestock",
+      "sku": "pork_kg",
+      "name": "Pork",
+      "unit": "kg",
+      "priceMin": 1.8,
+      "priceMax": 3.2,
+      "cogsPercent": 0.8,
+      "capacityDrivers": ["animals_total", "barn_m2", "slaughter_line"],
+      "notes": "Commodity volumes with biosecurity requirements."
+    },
+    {
+      "nicheId": "livestock",
+      "sku": "beef_kg",
+      "name": "Beef",
+      "unit": "kg",
+      "priceMin": 3.8,
+      "priceMax": 7.5,
+      "cogsPercent": 0.75,
+      "capacityDrivers": ["animals_total", "barn_m2", "cold_storage_kg"],
+      "notes": "Premium, compliance heavy, long cycles."
+    },
+    {
+      "nicheId": "livestock",
+      "sku": "hides_leather_kg",
+      "name": "Hides & Leather",
+      "unit": "kg",
+      "priceMin": 0.8,
+      "priceMax": 2.2,
+      "cogsPercent": 0.6,
+      "capacityDrivers": ["animals_market_ready", "refrigerated_truck"],
+      "notes": "Volatile byline with quality constraints."
+    },
+    {
+      "nicheId": "livestock",
+      "sku": "byproducts_rendered_kg",
+      "name": "Rendered Byproducts",
+      "unit": "kg",
+      "priceMin": 0.3,
+      "priceMax": 0.9,
+      "cogsPercent": 0.45,
+      "capacityDrivers": ["rendering_unit", "waste_processing_enabled"],
+      "notes": "Low price, offsets waste costs."
+    },
+    {
+      "nicheId": "organicFarming",
+      "sku": "organic_grain_ton",
+      "name": "Organic Grain",
+      "unit": "ton",
+      "priceMin": 320,
+      "priceMax": 520,
+      "cogsPercent": 1.1,
+      "capacityDrivers": [
+        "organic_arable_m2",
+        "soil_health_score",
+        "rotation_compliance_score",
+        "storage_ton"
+      ],
+      "notes": "Transition organic grain with lower yields."
+    },
+    {
+      "nicheId": "organicFarming",
+      "sku": "organic_vegetables_kg",
+      "name": "Organic Vegetables",
+      "unit": "kg",
+      "priceMin": 1.8,
+      "priceMax": 4.2,
+      "cogsPercent": 0.9,
+      "capacityDrivers": [
+        "organic_arable_m2",
+        "irrigation_system",
+        "compost_capacity_ton",
+        "cold_storage_kg"
+      ],
+      "notes": "Labor-heavy premium vegetables."
+    },
+    {
+      "nicheId": "organicFarming",
+      "sku": "organic_milk_liter",
+      "name": "Organic Milk",
+      "unit": "liter",
+      "priceMin": 0.75,
+      "priceMax": 1.4,
+      "cogsPercent": 0.95,
+      "capacityDrivers": [
+        "dairy_module_enabled",
+        "organic_certified",
+        "cooling_tank_liters"
+      ],
+      "notes": "Certified dairy with audit-sensitive premiums."
+    },
+    {
+      "nicheId": "organicFarming",
+      "sku": "csa_box_unit",
+      "name": "CSA Subscription Box",
+      "unit": "unit",
+      "priceMin": 15,
+      "priceMax": 35,
+      "cogsPercent": 0.75,
+      "capacityDrivers": [
+        "brand_reputation_score",
+        "csa_subscribers",
+        "packaging_line"
+      ],
+      "notes": "Direct-to-consumer channel with stable demand."
+    },
+    {
+      "nicheId": "organicFarming",
+      "sku": "farmers_market_slot_day",
+      "name": "Farmers Market Slot",
+      "unit": "day",
+      "priceMin": 500,
+      "priceMax": 1800,
+      "cogsPercent": 0.6,
+      "capacityDrivers": ["farmers_market_slots", "brand_reputation_score"],
+      "notes": "High-touch sales channel with limited capacity."
+    },
+    {
+      "nicheId": "organicFarming",
+      "sku": "premium_organic_contract_batch",
+      "name": "Premium Organic Contract",
+      "unit": "batch",
+      "priceMin": 8000,
+      "priceMax": 60000,
+      "cogsPercent": 0.6,
+      "capacityDrivers": [
+        "organic_certified",
+        "audit_readiness_score",
+        "packaging_line"
+      ],
+      "notes": "Audit-gated contract batches with premium pricing."
+    }
+  ],
+  "upgrades": [
+    {
+      "nicheId": "cropFarm",
+      "code": "soil_rotation_program",
+      "name": "Soil Rotation Program",
+      "timing": "direct",
+      "leadTimeWeeks": 0,
+      "capexFormula": "landHa * 40",
+      "opexFormula": "landHa * 3",
+      "effects": ["yield +4%", "soilQuality +0.05"],
+      "risk": {
+        "failureChance": 0.05,
+        "failureMode": "Implementation delays reduce first-week benefit."
+      }
+    },
+    {
+      "nicheId": "cropFarm",
+      "code": "drip_irrigation",
+      "name": "Drip Irrigation",
+      "timing": "multi_tick",
+      "leadTimeWeeks": 4,
+      "capexFormula": "landHa * 800",
+      "opexFormula": "landHa * 5",
+      "effects": ["yield +8%", "waterUse -15%"],
+      "risk": {
+        "failureChance": 0.08,
+        "failureMode": "Installation overruns extend lead time.",
+        "downtimeWeeks": 2
+      }
+    },
+    {
+      "nicheId": "cropFarm",
+      "code": "precision_ag",
+      "name": "Precision Agriculture Suite",
+      "timing": "next_tick",
+      "leadTimeWeeks": 1,
+      "capexFormula": "machineryUnits * 2000",
+      "opexFormula": "machineryUnits * 15",
+      "effects": ["laborEfficiency +6%", "inputWaste -5%"],
+      "risk": {
+        "failureChance": 0.06,
+        "failureMode": "Calibration errors reduce expected savings."
+      }
+    },
+    {
+      "nicheId": "cropFarm",
+      "code": "cold_chain",
+      "name": "Cold Chain Expansion",
+      "timing": "multi_tick",
+      "leadTimeWeeks": 6,
+      "capexFormula": "storageTons * 1200",
+      "opexFormula": "storageTons * 8",
+      "effects": ["wasteRate -10%", "qualityScore +0.05"],
+      "risk": {
+        "failureChance": 0.1,
+        "failureMode": "Equipment failures create short-term losses.",
+        "downtimeWeeks": 1
+      }
+    },
+    {
+      "nicheId": "cropFarm",
+      "code": "orchard_establishment",
+      "name": "Orchard Establishment",
+      "timing": "multi_tick",
+      "leadTimeWeeks": 12,
+      "capexFormula": "orchardHa * 5000",
+      "opexFormula": "orchardHa * 12",
+      "effects": ["unlock apple production", "yield +6% after maturity"],
+      "risk": {
+        "failureChance": 0.12,
+        "failureMode": "Sapling losses delay full capacity.",
+        "downtimeWeeks": 4
+      }
+    },
+    {
+      "nicheId": "cropFarm",
+      "code": "greenhouse_expansion",
+      "name": "Greenhouse Expansion",
+      "timing": "multi_tick",
+      "leadTimeWeeks": 8,
+      "capexFormula": "greenhouseM2 * 300",
+      "opexFormula": "greenhouseM2 * 1.5",
+      "effects": ["capacity +15%", "qualityScore +0.04"],
+      "risk": {
+        "failureChance": 0.09,
+        "failureMode": "Supply delays increase costs.",
+        "downtimeWeeks": 2
+      }
+    },
+    {
+      "nicheId": "cropFarm",
+      "code": "organic_certification",
+      "name": "Organic Certification",
+      "timing": "next_tick",
+      "leadTimeWeeks": 2,
+      "capexFormula": "landHa * 150",
+      "opexFormula": "landHa * 4",
+      "effects": ["pricePremium +8%", "demand +5%"],
+      "risk": {
+        "failureChance": 0.07,
+        "failureMode": "Audit findings delay certification.",
+        "downtimeWeeks": 2
+      }
+    },
+    {
+      "nicheId": "dairy",
+      "code": "feed_optimization_program",
+      "name": "Feed Optimization Program",
+      "timing": "next_tick",
+      "leadTimeWeeks": 1,
+      "capexFormula": "0",
+      "opexFormula": "feedCost * 1.10..1.25",
+      "effects": ["milk_yield +15..30%", "feed_cost +10..25%"],
+      "risk": {
+        "failureChance": 0.1,
+        "failureMode": "Supplier dependency variance."
+      }
+    },
+    {
+      "nicheId": "dairy",
+      "code": "herd_health_program",
+      "name": "Herd Health Program",
+      "timing": "multi_tick",
+      "leadTimeWeeks": 3,
+      "capexFormula": "0",
+      "opexFormula": "monthlyFixed 2000..8000",
+      "effects": ["health_score +20%", "disease_chance -40%"],
+      "risk": {
+        "failureChance": 0.08,
+        "failureMode": "Coverage gaps reduce impact."
+      }
+    },
+    {
+      "nicheId": "dairy",
+      "code": "automated_milking_system",
+      "name": "Automated Milking System",
+      "timing": "multi_tick",
+      "leadTimeWeeks": 5,
+      "capexFormula": "startup_cost * 0.05..0.15",
+      "opexFormula": "revenueMonthly * 0.005..0.012",
+      "effects": ["labor_cost -20%", "milk_yield +10%"],
+      "risk": {
+        "failureChance": 0.15,
+        "failureMode": "Automation downtime during rollout."
+      }
+    },
+    {
+      "nicheId": "dairy",
+      "code": "vertical_integration_push",
+      "name": "Vertical Integration Push",
+      "timing": "multi_tick",
+      "leadTimeWeeks": 6,
+      "capexFormula": "startup_cost * 0.08..0.18",
+      "opexFormula": "revenueMonthly * 0.006..0.015",
+      "effects": ["unlock cheese_kg", "unlock butter_kg"],
+      "risk": {
+        "failureChance": 0.18,
+        "failureMode": "Cashflow stress during build."
+      }
+    },
+    {
+      "nicheId": "foodProcessing",
+      "code": "energy_optimization",
+      "name": "Energy Optimization",
+      "timing": "multi_tick",
+      "leadTimeWeeks": 2,
+      "capexFormula": "0",
+      "opexFormula": "monthlyFixed 2000..10000",
+      "effects": ["energy_cost -15..30%"],
+      "risk": {
+        "failureChance": 0.1,
+        "failureMode": "Audit gaps reduce savings."
+      }
+    },
+    {
+      "nicheId": "foodProcessing",
+      "code": "advanced_packaging",
+      "name": "Advanced Packaging",
+      "timing": "multi_tick",
+      "leadTimeWeeks": 4,
+      "capexFormula": "capex 300000..900000",
+      "opexFormula": "0",
+      "effects": ["shelf_life +40%", "price +10%"],
+      "risk": {
+        "failureChance": 0.12,
+        "failureMode": "Packaging line delays and tuning."
+      }
+    },
+    {
+      "nicheId": "foodProcessing",
+      "code": "throughput_expansion",
+      "name": "Throughput Expansion",
+      "timing": "multi_tick",
+      "leadTimeWeeks": 6,
+      "capexFormula": "startup_cost * 0.1..0.25",
+      "opexFormula": "revenueMonthly * 0.004..0.01",
+      "effects": ["machine_capacity +25..60%", "fixed_cost +5..15%"],
+      "risk": {
+        "failureChance": 0.15,
+        "failureMode": "Underutilization penalty after expansion."
+      }
+    },
+    {
+      "nicheId": "foodProcessing",
+      "code": "contract_production_line",
+      "name": "Contract Production Line",
+      "timing": "multi_tick",
+      "leadTimeWeeks": 7,
+      "capexFormula": "startup_cost * 0.12..0.3",
+      "opexFormula": "revenueMonthly * 0.004..0.01",
+      "effects": ["unlock private_label_batch", "contract_capacity +10..30%"],
+      "risk": {
+        "failureChance": 0.18,
+        "failureMode": "SLA penalties during ramp-up."
+      }
+    },
+    {
+      "nicheId": "greenhouse",
+      "code": "climate_control_upgrade",
+      "name": "Climate Control Upgrade",
+      "timing": "multi_tick",
+      "leadTimeWeeks": 4,
+      "capexFormula": "startup_cost * 0.04..0.12",
+      "opexFormula": "revenueMonthly * 0.003..0.010",
+      "effects": ["climate_control_level +0.15..0.35", "yield +8..18%", "pest_chance -10..25%"],
+      "risk": {
+        "failureChance": 0.12,
+        "failureMode": "Control system tuning delays output."
+      }
+    },
+    {
+      "nicheId": "greenhouse",
+      "code": "led_lighting_system",
+      "name": "LED Lighting System",
+      "timing": "multi_tick",
+      "leadTimeWeeks": 3,
+      "capexFormula": "startup_cost * 0.03..0.10",
+      "opexFormula": "revenueMonthly * 0.004..0.015",
+      "effects": ["yield +10..25%", "energy_use +15..40%", "unlock microgreens_kg"],
+      "risk": {
+        "failureChance": 0.16,
+        "failureMode": "Energy price spikes during rollout."
+      }
+    },
+    {
+      "nicheId": "greenhouse",
+      "code": "integrated_pest_management",
+      "name": "Integrated Pest Management",
+      "timing": "next_tick",
+      "leadTimeWeeks": 1,
+      "capexFormula": "0",
+      "opexFormula": "monthlyFixed 2000..8000",
+      "effects": ["pest_damage -30..70%", "quality +2..8%"],
+      "risk": {
+        "failureChance": 0.08,
+        "failureMode": "Coverage gaps reduce effectiveness."
+      }
+    },
+    {
+      "nicheId": "greenhouse",
+      "code": "cold_chain_packaging_expansion",
+      "name": "Cold Chain & Packaging Expansion",
+      "timing": "multi_tick",
+      "leadTimeWeeks": 5,
+      "capexFormula": "cold_storage_kg * 120 + packaging_units * 0.6",
+      "opexFormula": "revenueMonthly * 0.003..0.008",
+      "effects": ["spoilage -20..60%", "price +5..12%"],
+      "risk": {
+        "failureChance": 0.14,
+        "failureMode": "Cold chain installation delays."
+      }
+    },
+    {
+      "nicheId": "livestock",
+      "code": "biosecurity_program",
+      "name": "Biosecurity Program",
+      "timing": "next_tick",
+      "leadTimeWeeks": 1,
+      "capexFormula": "0",
+      "opexFormula": "monthlyFixed 2000..10000",
+      "effects": ["disease_chance -30..60%", "health_score +2..8%"],
+      "risk": {
+        "failureChance": 0.1,
+        "failureMode": "Compliance overhead increases."
+      }
+    },
+    {
+      "nicheId": "livestock",
+      "code": "welfare_facility_improvements",
+      "name": "Welfare Facility Improvements",
+      "timing": "multi_tick",
+      "leadTimeWeeks": 4,
+      "capexFormula": "startup_cost * 0.03..0.10",
+      "opexFormula": "revenueMonthly * 0.002..0.006",
+      "effects": ["welfare_score +0.15..0.35", "growth_rate +5..12%", "premium_price_access true"],
+      "risk": {
+        "failureChance": 0.12,
+        "failureMode": "Construction delays limit early gains."
+      }
+    },
+    {
+      "nicheId": "livestock",
+      "code": "feed_contract_hedging",
+      "name": "Feed Contract Hedging",
+      "timing": "immediate",
+      "leadTimeWeeks": 0,
+      "capexFormula": "0",
+      "opexFormula": "0",
+      "effects": ["feed_price_volatility -50%", "feed_price_base +5..10%"],
+      "risk": {
+        "failureChance": 0.06,
+        "failureMode": "Locked into higher base prices."
+      }
+    },
+    {
+      "nicheId": "livestock",
+      "code": "onsite_processing_line",
+      "name": "On-site Processing Line",
+      "timing": "multi_tick",
+      "leadTimeWeeks": 6,
+      "capexFormula": "startup_cost * 0.06..0.18",
+      "opexFormula": "revenueMonthly * 0.004..0.012",
+      "effects": ["processing_margin +8..20%", "unlock byproducts_rendered_kg"],
+      "risk": {
+        "failureChance": 0.16,
+        "failureMode": "Processing line downtime events."
+      }
+    },
+    {
+      "nicheId": "organicFarming",
+      "code": "organic_certification_program",
+      "name": "Organic Certification Program",
+      "timing": "multi_tick",
+      "leadTimeWeeks": 7,
+      "capexFormula": "capex 15000..60000",
+      "opexFormula": "monthlyFixed 500..2000",
+      "effects": ["organic_certified true", "premium_channels unlock"],
+      "risk": {
+        "failureChance": 0.15,
+        "failureMode": "Audit failure delays certification."
+      }
+    },
+    {
+      "nicheId": "organicFarming",
+      "code": "soil_regeneration_plan",
+      "name": "Soil Regeneration Plan",
+      "timing": "next_tick",
+      "leadTimeWeeks": 1,
+      "capexFormula": "0",
+      "opexFormula": "monthlyFixed 2000..12000",
+      "effects": ["soil_health_score +0.05..0.20", "yield_stability +2..8%"],
+      "risk": {
+        "failureChance": 0.08,
+        "failureMode": "Rotation penalties reduce gains."
+      }
+    },
+    {
+      "nicheId": "organicFarming",
+      "code": "composting_infrastructure",
+      "name": "Composting Infrastructure",
+      "timing": "multi_tick",
+      "leadTimeWeeks": 4,
+      "capexFormula": "compost_capacity_ton * 400",
+      "opexFormula": "monthlyFixed 500..3000",
+      "effects": ["compost_capacity_ton +20..80", "fertilizer_cost_volatility -10..30%"],
+      "risk": {
+        "failureChance": 0.12,
+        "failureMode": "Compost system delays."
+      }
+    },
+    {
+      "nicheId": "organicFarming",
+      "code": "brand_direct_sales_engine",
+      "name": "Brand & Direct Sales Engine",
+      "timing": "multi_tick",
+      "leadTimeWeeks": 4,
+      "capexFormula": "capex 20000..200000",
+      "opexFormula": "revenueMonthly * 0.002..0.006",
+      "effects": ["brand_reputation_score +0.1..0.3", "channel_capacity +15..40%"],
+      "risk": {
+        "failureChance": 0.14,
+        "failureMode": "Marketing spend overruns."
+      }
+    }
+  ],
+  "unlocks": [
+    {
+      "nicheId": "cropFarm",
+      "productSku": "agri.crop.wheat",
+      "startingUnlocked": true,
+      "requirements": {
+        "assets": [
+          { "assetId": "land_ha", "minCount": 10 },
+          { "assetId": "tractor", "minCount": 1 },
+          { "assetId": "harvester", "minCount": 1 }
+        ],
+        "staff": [
+          { "roleId": "field_worker", "minFTE": 2 },
+          { "roleId": "machine_operator", "minFTE": 1 }
+        ]
+      }
+    },
+    {
+      "nicheId": "cropFarm",
+      "productSku": "agri.crop.potato",
+      "startingUnlocked": true,
+      "requirements": {
+        "assets": [
+          { "assetId": "land_ha", "minCount": 8 },
+          { "assetId": "cold_storage_tons", "minCount": 10 }
+        ],
+        "staff": [{ "roleId": "field_worker", "minFTE": 2 }]
+      }
+    },
+    {
+      "nicheId": "cropFarm",
+      "productSku": "agri.crop.corn",
+      "startingUnlocked": false,
+      "requirements": {
+        "assets": [
+          { "assetId": "land_ha", "minCount": 12 },
+          { "assetId": "irrigation_system", "minCount": 1 }
+        ],
+        "staff": [{ "roleId": "field_worker", "minFTE": 3 }],
+        "upgrades": ["drip_irrigation"],
+        "minQualityScore": 0.75
+      }
+    },
+    {
+      "nicheId": "cropFarm",
+      "productSku": "agri.crop.soy",
+      "startingUnlocked": false,
+      "requirements": {
+        "assets": [{ "assetId": "land_ha", "minCount": 10 }],
+        "staff": [{ "roleId": "agronomist", "minFTE": 0.5 }],
+        "upgrades": ["soil_rotation_program"]
+      }
+    },
+    {
+      "nicheId": "cropFarm",
+      "productSku": "agri.crop.tomato",
+      "startingUnlocked": false,
+      "requirements": {
+        "assets": [
+          { "assetId": "greenhouse_m2", "minCount": 500 },
+          { "assetId": "irrigation_system", "minCount": 1 }
+        ],
+        "staff": [{ "roleId": "horticulturist", "minFTE": 1 }],
+        "upgrades": ["greenhouse_expansion"],
+        "minQualityScore": 0.8
+      }
+    },
+    {
+      "nicheId": "cropFarm",
+      "productSku": "agri.crop.apple",
+      "startingUnlocked": false,
+      "requirements": {
+        "assets": [
+          { "assetId": "orchard_ha", "minCount": 15 },
+          { "assetId": "cold_storage_tons", "minCount": 15 }
+        ],
+        "staff": [{ "roleId": "horticulturist", "minFTE": 0.5 }],
+        "upgrades": ["orchard_establishment"],
+        "minQualityScore": 0.8
+      }
+    },
+    {
+      "nicheId": "dairy",
+      "productSku": "raw_milk_bulk_liter",
+      "startingUnlocked": true,
+      "requirements": {}
+    },
+    {
+      "nicheId": "dairy",
+      "productSku": "premium_milk_liter",
+      "startingUnlocked": false,
+      "requirements": {
+        "machines": [{ "machineId": "pasteurizer", "minCount": 1 }],
+        "staff": [{ "roleId": "quality_compliance", "minFTE": 1 }],
+        "minHealthScore": 0.85
+      }
+    },
+    {
+      "nicheId": "dairy",
+      "productSku": "cheese_kg",
+      "startingUnlocked": false,
+      "requirements": {
+        "machines": [{ "machineId": "cheese_vat", "minCount": 2 }],
+        "staff": [{ "roleId": "processing_operator", "minFTE": 2 }],
+        "assets": [{ "assetId": "cold_storage_kg", "minCount": 1000 }],
+        "complianceAuditPassed": true,
+        "upgrades": ["vertical_integration_push"]
+      }
+    },
+    {
+      "nicheId": "dairy",
+      "productSku": "yogurt_kg",
+      "startingUnlocked": false,
+      "requirements": {
+        "machines": [{ "machineId": "fermentation_tank", "minCount": 1 }],
+        "staff": [{ "roleId": "processing_operator", "minFTE": 2 }]
+      }
+    },
+    {
+      "nicheId": "dairy",
+      "productSku": "butter_kg",
+      "startingUnlocked": false,
+      "requirements": {
+        "machines": [{ "machineId": "butter_churn", "minCount": 1 }],
+        "assets": [{ "assetId": "cold_storage_kg", "minCount": 800 }],
+        "upgrades": ["vertical_integration_push"]
+      }
+    },
+    {
+      "nicheId": "dairy",
+      "productSku": "whey_liter",
+      "startingUnlocked": false,
+      "requirements": {
+        "byproductOf": ["cheese_kg", "butter_kg"]
+      }
+    },
+    {
+      "nicheId": "foodProcessing",
+      "productSku": "flour_kg",
+      "startingUnlocked": true,
+      "requirements": {}
+    },
+    {
+      "nicheId": "foodProcessing",
+      "productSku": "packaged_bread_unit",
+      "startingUnlocked": false,
+      "requirements": {
+        "machines": [
+          { "machineId": "mixing_line", "minCount": 1 },
+          { "machineId": "baking_line", "minCount": 2 },
+          { "machineId": "packaging_line", "minCount": 1 }
+        ],
+        "staff": [
+          { "roleId": "processing_operator", "minFTE": 4 },
+          { "roleId": "quality_compliance", "minFTE": 1 }
+        ],
+        "assets": [{ "assetId": "packaging_capacity_units", "minCount": 10000 }],
+        "upgrades": ["advanced_packaging"],
+        "minComplianceScore": 0.7
+      }
+    },
+    {
+      "nicheId": "foodProcessing",
+      "productSku": "ready_meal_unit",
+      "startingUnlocked": false,
+      "requirements": {
+        "machines": [
+          { "machineId": "mixing_line", "minCount": 1 },
+          { "machineId": "cooking_line", "minCount": 1 },
+          { "machineId": "packaging_line", "minCount": 1 }
+        ],
+        "staff": [
+          { "roleId": "processing_operator", "minFTE": 4 },
+          { "roleId": "quality_compliance", "minFTE": 1 },
+          { "roleId": "production_manager", "minFTE": 0.5 }
+        ],
+        "assets": [{ "assetId": "cold_storage_kg", "minCount": 5000 }],
+        "upgrades": ["throughput_expansion"],
+        "minComplianceScore": 0.8,
+        "complianceAuditPassed": true
+      }
+    },
+    {
+      "nicheId": "foodProcessing",
+      "productSku": "animal_feed_mix_ton",
+      "startingUnlocked": false,
+      "requirements": {
+        "machines": [{ "machineId": "mixing_line", "minCount": 1 }],
+        "staff": [{ "roleId": "processing_operator", "minFTE": 2 }],
+        "assets": [{ "assetId": "dry_storage_kg", "minCount": 15000 }],
+        "upgrades": ["energy_optimization"],
+        "minComplianceScore": 0.6
+      }
+    },
+    {
+      "nicheId": "foodProcessing",
+      "productSku": "frozen_vegetables_kg",
+      "startingUnlocked": false,
+      "requirements": {
+        "machines": [
+          { "machineId": "freezing_line", "minCount": 1 },
+          { "machineId": "packaging_line", "minCount": 1 }
+        ],
+        "staff": [
+          { "roleId": "processing_operator", "minFTE": 3 },
+          { "roleId": "quality_compliance", "minFTE": 1 }
+        ],
+        "assets": [{ "assetId": "cold_storage_kg", "minCount": 8000 }],
+        "upgrades": ["advanced_packaging"],
+        "minComplianceScore": 0.75
+      }
+    },
+    {
+      "nicheId": "foodProcessing",
+      "productSku": "private_label_batch",
+      "startingUnlocked": false,
+      "requirements": {
+        "machines": [
+          { "machineId": "mixing_line", "minCount": 1 },
+          { "machineId": "cooking_line", "minCount": 1 },
+          { "machineId": "packaging_line", "minCount": 1 }
+        ],
+        "staff": [
+          { "roleId": "quality_compliance", "minFTE": 2 },
+          { "roleId": "logistics_staff", "minFTE": 2 },
+          { "roleId": "production_manager", "minFTE": 1 }
+        ],
+        "assets": [
+          { "assetId": "packaging_capacity_units", "minCount": 20000 },
+          { "assetId": "cold_storage_kg", "minCount": 6000 }
+        ],
+        "upgrades": ["contract_production_line"],
+        "minComplianceScore": 0.85,
+        "complianceAuditPassed": true,
+        "contractSigned": true
+      }
+    },
+    {
+      "nicheId": "greenhouse",
+      "productSku": "tomatoes_kg",
+      "startingUnlocked": true,
+      "requirements": {}
+    },
+    {
+      "nicheId": "greenhouse",
+      "productSku": "cucumbers_kg",
+      "startingUnlocked": false,
+      "requirements": {
+        "minClimateControlLevel": 0.45,
+        "anyOf": [
+          { "machines": [{ "machineId": "packaging_line", "minCount": 1 }] },
+          { "staff": [{ "roleId": "logistics_staff", "minFTE": 2 }] }
+        ]
+      }
+    },
+    {
+      "nicheId": "greenhouse",
+      "productSku": "bell_peppers_kg",
+      "startingUnlocked": false,
+      "requirements": {
+        "minClimateControlLevel": 0.6,
+        "machines": [{ "machineId": "sorting_line", "minCount": 1 }],
+        "staff": [{ "roleId": "quality_compliance", "minFTE": 1 }]
+      }
+    },
+    {
+      "nicheId": "greenhouse",
+      "productSku": "herbs_pack",
+      "startingUnlocked": false,
+      "requirements": {
+        "machines": [{ "machineId": "packaging_line", "minCount": 1 }],
+        "staff": [{ "roleId": "quality_compliance", "minFTE": 1 }]
+      }
+    },
+    {
+      "nicheId": "greenhouse",
+      "productSku": "strawberries_kg",
+      "startingUnlocked": false,
+      "requirements": {
+        "machines": [{ "machineId": "pest_management_system", "minCount": 1 }],
+        "assets": [{ "assetId": "cold_storage_kg", "minCount": 1500 }],
+        "staff": [{ "roleId": "maintenance_technician", "minFTE": 1 }]
+      }
+    },
+    {
+      "nicheId": "greenhouse",
+      "productSku": "microgreens_kg",
+      "startingUnlocked": false,
+      "requirements": {
+        "machines": [{ "machineId": "led_lighting_system", "minCount": 1 }],
+        "assets": [{ "assetId": "co2_injection_enabled", "minCount": 1 }],
+        "staff": [{ "roleId": "grower", "minFTE": 2 }],
+        "co2InjectionRequired": true,
+        "complianceAuditPassed": true
+      }
+    },
+    {
+      "nicheId": "livestock",
+      "productSku": "poultry_meat_kg",
+      "startingUnlocked": true,
+      "requirements": {}
+    },
+    {
+      "nicheId": "livestock",
+      "productSku": "eggs_dozen",
+      "startingUnlocked": false,
+      "requirements": {
+        "machines": [{ "machineId": "egg_sorting_line", "minCount": 1 }],
+        "staff": [{ "roleId": "quality_compliance", "minFTE": 1 }],
+        "minWelfareScore": 0.75
+      }
+    },
+    {
+      "nicheId": "livestock",
+      "productSku": "pork_kg",
+      "startingUnlocked": false,
+      "requirements": {
+        "assets": [{ "assetId": "pens_capacity_animals", "minCount": 20000 }],
+        "staff": [{ "roleId": "feed_manager", "minFTE": 1 }],
+        "vehicles": [{ "vehicleId": "livestock_trailer", "minCount": 1 }],
+        "minBiosecurityLevel": 0.6
+      }
+    },
+    {
+      "nicheId": "livestock",
+      "productSku": "beef_kg",
+      "startingUnlocked": false,
+      "requirements": {
+        "assets": [{ "assetId": "barn_m2", "minCount": 2000 }],
+        "staff": [{ "roleId": "vet_health_officer", "minFTE": 1 }],
+        "minWelfareScore": 0.8,
+        "complianceAuditPassed": true
+      }
+    },
+    {
+      "nicheId": "livestock",
+      "productSku": "hides_leather_kg",
+      "startingUnlocked": false,
+      "requirements": {
+        "staff": [{ "roleId": "processing_operator", "minFTE": 1 }],
+        "minQualityScore": 0.7,
+        "anyOf": [
+          { "vehicles": [{ "vehicleId": "refrigerated_truck", "minCount": 1 }] },
+          { "contractPickupAllowed": true }
+        ]
+      }
+    },
+    {
+      "nicheId": "livestock",
+      "productSku": "byproducts_rendered_kg",
+      "startingUnlocked": false,
+      "requirements": {
+        "assets": [{ "assetId": "waste_processing_enabled", "minCount": 1 }],
+        "anyOf": [
+          { "machines": [{ "machineId": "rendering_unit", "minCount": 1 }] },
+          { "machines": [{ "machineId": "slaughter_line", "minCount": 1 }] }
+        ]
+      }
+    },
+    {
+      "nicheId": "organicFarming",
+      "productSku": "organic_grain_ton",
+      "startingUnlocked": true,
+      "requirements": {}
+    },
+    {
+      "nicheId": "organicFarming",
+      "productSku": "organic_vegetables_kg",
+      "startingUnlocked": false,
+      "requirements": {
+        "assets": [
+          { "assetId": "irrigation_system", "minCount": 1 },
+          { "assetId": "compost_capacity_ton", "minCount": 15 }
+        ],
+        "staff": [{ "roleId": "farm_worker", "minFTE": 3 }],
+        "minRotationComplianceScore": 0.6,
+        "minSoilHealthScore": 0.5
+      }
+    },
+    {
+      "nicheId": "organicFarming",
+      "productSku": "farmers_market_slot_day",
+      "startingUnlocked": false,
+      "requirements": {
+        "assets": [{ "assetId": "farmers_market_slots", "minCount": 1 }],
+        "staff": [{ "roleId": "sales_staff", "minFTE": 1 }],
+        "minReputationScore": 0.55
+      }
+    },
+    {
+      "nicheId": "organicFarming",
+      "productSku": "csa_box_unit",
+      "startingUnlocked": false,
+      "requirements": {
+        "assets": [
+          { "assetId": "packaging_line", "minCount": 1 },
+          { "assetId": "csa_subscribers", "minCount": 200 }
+        ],
+        "staff": [{ "roleId": "logistics_staff", "minFTE": 2 }],
+        "minReputationScore": 0.65
+      }
+    },
+    {
+      "nicheId": "organicFarming",
+      "productSku": "organic_milk_liter",
+      "startingUnlocked": false,
+      "requirements": {
+        "assets": [{ "assetId": "dairy_module_enabled", "minCount": 1 }],
+        "staff": [{ "roleId": "quality_compliance", "minFTE": 1 }],
+        "requiresOrganicCertified": true,
+        "minWelfareScore": 0.75
+      }
+    },
+    {
+      "nicheId": "organicFarming",
+      "productSku": "premium_organic_contract_batch",
+      "startingUnlocked": false,
+      "requirements": {
+        "staff": [{ "roleId": "quality_compliance", "minFTE": 1 }],
+        "requiresOrganicCertified": true,
+        "minAuditReadinessScore": 0.75,
+        "minTicksSinceSyntheticInput": 6
+      }
+    }
+  ],
+  "startingLoadouts": [
+    {
+      "nicheId": "cropFarm",
+      "startingCash": 120000,
+      "assets": [
+        { "assetId": "land_ha", "count": 20 },
+        { "assetId": "tractor", "count": 1 },
+        { "assetId": "harvester", "count": 1 },
+        { "assetId": "cold_storage_tons", "count": 10 }
+      ],
+      "staff": [
+        { "roleId": "farm_manager", "fte": 1 },
+        { "roleId": "field_worker", "fte": 4 },
+        { "roleId": "machine_operator", "fte": 1 }
+      ],
+      "unlockedProducts": ["agri.crop.wheat", "agri.crop.potato"]
+    },
+    {
+      "nicheId": "dairy",
+      "startingCash": 300000,
+      "assets": [
+        { "assetId": "cows_total", "count": 300 },
+        { "assetId": "cows_lactating", "count": 250 },
+        { "assetId": "cows_dry", "count": 50 },
+        { "assetId": "barn_m2", "count": 1600 },
+        { "assetId": "milking_robots", "count": 1 },
+        { "assetId": "cooling_tank_liters", "count": 6000 },
+        { "assetId": "feed_storage_ton", "count": 20 }
+      ],
+      "staff": [
+        { "roleId": "livestock_caretaker", "fte": 2 },
+        { "roleId": "milking_operator", "fte": 1 },
+        { "roleId": "processing_operator", "fte": 0 },
+        { "roleId": "quality_compliance", "fte": 0 },
+        { "roleId": "logistics_staff", "fte": 1 }
+      ],
+      "unlockedProducts": ["raw_milk_bulk_liter"]
+    },
+    {
+      "nicheId": "foodProcessing",
+      "startingCash": 400000,
+      "assets": [
+        { "assetId": "processing_m2", "count": 800 },
+        { "assetId": "dry_storage_kg", "count": 2000 },
+        { "assetId": "packaging_capacity_units", "count": 2000 },
+        { "assetId": "energy_capacity_kwh", "count": 4000 },
+        { "assetId": "milling_line", "count": 1 }
+      ],
+      "staff": [
+        { "roleId": "processing_operator", "fte": 2 },
+        { "roleId": "maintenance_technician", "fte": 0.5 },
+        { "roleId": "logistics_staff", "fte": 0.5 }
+      ],
+      "unlockedProducts": ["flour_kg"]
+    },
+    {
+      "nicheId": "greenhouse",
+      "startingCash": 350000,
+      "assets": [
+        { "assetId": "greenhouse_m2", "count": 3000 },
+        { "assetId": "climate_control_level", "count": 0.35 },
+        { "assetId": "irrigation_capacity_lph", "count": 3000 },
+        { "assetId": "cold_storage_kg", "count": 500 }
+      ],
+      "staff": [
+        { "roleId": "grower", "fte": 1 },
+        { "roleId": "picking_staff", "fte": 2 },
+        { "roleId": "logistics_staff", "fte": 1 }
+      ],
+      "unlockedProducts": ["tomatoes_kg"]
+    },
+    {
+      "nicheId": "livestock",
+      "startingCash": 320000,
+      "assets": [
+        { "assetId": "barn_m2", "count": 900 },
+        { "assetId": "pens_capacity_animals", "count": 16000 },
+        { "assetId": "animals_total", "count": 14000 },
+        { "assetId": "animals_market_ready", "count": 6000 },
+        { "assetId": "feed_storage_ton", "count": 40 },
+        { "assetId": "cold_storage_kg", "count": 800 },
+        { "assetId": "manure_capacity_ton", "count": 20 },
+        { "assetId": "feed_truck", "count": 1 },
+        { "assetId": "contract_processing", "count": 1 },
+        { "assetId": "biosecurity_level", "count": 0.35 },
+        { "assetId": "welfare_score", "count": 0.55 },
+        { "assetId": "health_score", "count": 0.7 }
+      ],
+      "staff": [
+        { "roleId": "animal_caretaker", "fte": 2 },
+        { "roleId": "logistics_staff", "fte": 1 },
+        { "roleId": "quality_compliance", "fte": 0 },
+        { "roleId": "feed_manager", "fte": 0 },
+        { "roleId": "vet_health_officer", "fte": 0 },
+        { "roleId": "processing_operator", "fte": 0 }
+      ],
+      "unlockedProducts": ["poultry_meat_kg"]
+    },
+    {
+      "nicheId": "organicFarming",
+      "startingCash": 280000,
+      "assets": [
+        { "assetId": "organic_arable_m2", "count": 220000 },
+        { "assetId": "tractor", "count": 1 },
+        { "assetId": "seeder", "count": 1 },
+        { "assetId": "storage_ton", "count": 80 },
+        { "assetId": "compost_capacity_ton", "count": 0 },
+        { "assetId": "soil_health_score", "count": 0.45 },
+        { "assetId": "rotation_compliance_score", "count": 0.35 },
+        { "assetId": "organic_certified", "count": 0 },
+        { "assetId": "audit_readiness_score", "count": 0.35 },
+        { "assetId": "brand_reputation_score", "count": 0.4 },
+        { "assetId": "synthetic_input_used_last_ticks", "count": 0 }
+      ],
+      "staff": [
+        { "roleId": "farm_worker", "fte": 2 },
+        { "roleId": "logistics_staff", "fte": 1 },
+        { "roleId": "farm_manager", "fte": 0 },
+        { "roleId": "quality_compliance", "fte": 0 },
+        { "roleId": "sales_staff", "fte": 0 }
+      ],
+      "unlockedProducts": ["organic_grain_ton"]
+    }
+  ]
+}

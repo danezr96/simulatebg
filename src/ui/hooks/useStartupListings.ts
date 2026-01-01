@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import type { Sector, Niche } from "../../core/domain/sector";
 import { sectorRepo } from "../../core/persistence/sectorRepo";
 import { getStartupPricing } from "../../core/config/companyPricing";
+import { isSectorPlayable } from "../../core/config/playableSectors";
 
 export type StartupListing = {
   id: string;
@@ -47,11 +48,24 @@ export function useStartupListings() {
     };
   }, []);
 
-  const listings = useMemo(() => {
-    if (sectors.length === 0 || niches.length === 0) return [];
-    const sectorById = new Map(sectors.map((s) => [String(s.id), s]));
+  const playableSectors = useMemo(
+    () => sectors.filter((sector) => isSectorPlayable(sector.code)),
+    [sectors]
+  );
+  const playableSectorIds = useMemo(
+    () => new Set(playableSectors.map((sector) => String(sector.id))),
+    [playableSectors]
+  );
+  const playableNiches = useMemo(
+    () => niches.filter((niche) => playableSectorIds.has(String(niche.sectorId))),
+    [niches, playableSectorIds]
+  );
 
-    return niches
+  const listings = useMemo(() => {
+    if (playableSectors.length === 0 || playableNiches.length === 0) return [];
+    const sectorById = new Map(playableSectors.map((s) => [String(s.id), s]));
+
+    return playableNiches
       .map((niche) => {
         const sector = sectorById.get(String(niche.sectorId));
         if (!sector) return null;
@@ -63,17 +77,17 @@ export function useStartupListings() {
         } as StartupListing;
       })
       .filter(Boolean) as StartupListing[];
-  }, [sectors, niches]);
+  }, [playableSectors, playableNiches]);
 
   return useMemo(
     () => ({
-      sectors,
-      niches,
+      sectors: playableSectors,
+      niches: playableNiches,
       listings,
       loading,
       error,
     }),
-    [sectors, niches, listings, loading, error]
+    [playableSectors, playableNiches, listings, loading, error]
   );
 }
 

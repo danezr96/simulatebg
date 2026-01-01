@@ -114,6 +114,20 @@ export type Niche = {
   maintenancePctOfCapexPerYear?: { min: Decimal; max: Decimal };
 };
 
+export type NicheProduct = {
+  id: string;
+  nicheId: NicheId;
+  sku: string;
+  name: string;
+  unit: string;
+  priceMinEur: number;
+  priceMaxEur: number;
+  cogsPctMin: number;
+  cogsPctMax: number;
+  capacityDriver: string;
+  notes: string;
+};
+
 /* =========================
  * World sector state (dynamic)
  * ========================= */

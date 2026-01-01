@@ -1,0 +1,1331 @@
+{
+  "sector": {
+    "id": "AUTO",
+    "name": "Automotive & Mobility",
+    "description": "Automotive commerce and mobility services."
+  },
+  "niches": [
+    {
+      "id": "carDealer",
+      "code": "AUTO_DEALER",
+      "name": "Car Dealer",
+      "description": "Vehicle retail with inventory financing and warranty exposure."
+    },
+    {
+      "id": "carWash",
+      "code": "AUTO_WASH",
+      "name": "Car Wash",
+      "description": "High-volume wash services with weather-driven demand."
+    },
+    {
+      "id": "evServices",
+      "code": "AUTO_EV",
+      "name": "EV Services",
+      "description": "Charging and maintenance services for EV fleets."
+    },
+    {
+      "id": "mobility",
+      "code": "AUTO_MOBILITY",
+      "name": "Mobility",
+      "description": "Rental and fleet mobility operations."
+    },
+    {
+      "id": "partsTires",
+      "code": "AUTO_PARTS",
+      "name": "Parts & Tires",
+      "description": "Parts distribution and tire services."
+    },
+    {
+      "id": "repairShop",
+      "code": "AUTO_REPAIR",
+      "name": "Repair Shop",
+      "description": "Mechanical repair and diagnostics services."
+    }
+  ],
+  "products": [
+    {
+      "nicheId": "carDealer",
+      "sku": "used_car_unit",
+      "name": "Used Car",
+      "unit": "unit",
+      "priceMin": 8000,
+      "priceMax": 35000,
+      "cogsPercent": 1.03,
+      "capacityDrivers": ["inventory_slots", "reconditioning_bays", "showroom_m2"],
+      "notes": "Used car sales with thin margins and reconditioning delays."
+    },
+    {
+      "nicheId": "carDealer",
+      "sku": "new_car_unit",
+      "name": "New Car",
+      "unit": "unit",
+      "priceMin": 18000,
+      "priceMax": 80000,
+      "cogsPercent": 0.97,
+      "capacityDrivers": ["inventory_slots", "showroom_m2"],
+      "notes": "OEM-backed sales with very thin gross margin."
+    },
+    {
+      "nicheId": "carDealer",
+      "sku": "trade_in_unit",
+      "name": "Trade-In",
+      "unit": "unit",
+      "priceMin": 6000,
+      "priceMax": 20000,
+      "cogsPercent": 1.15,
+      "capacityDrivers": ["appraisal_tools", "inventory_slots"],
+      "notes": "Negative cashflow intake that feeds used inventory."
+    },
+    {
+      "nicheId": "carDealer",
+      "sku": "financing_contract_unit",
+      "name": "Financing Contract",
+      "unit": "unit",
+      "priceMin": 300,
+      "priceMax": 1800,
+      "cogsPercent": 0.25,
+      "capacityDrivers": ["finance_staff", "compliance_score"],
+      "notes": "Commission-based finance revenue with compliance gating."
+    },
+    {
+      "nicheId": "carDealer",
+      "sku": "extended_warranty_unit",
+      "name": "Extended Warranty",
+      "unit": "unit",
+      "priceMin": 250,
+      "priceMax": 1500,
+      "cogsPercent": 0.45,
+      "capacityDrivers": ["finance_staff", "reputation_score"],
+      "notes": "Warranty sales with claim exposure and reputation requirements."
+    },
+    {
+      "nicheId": "carDealer",
+      "sku": "detailing_service_unit",
+      "name": "Detailing Service",
+      "unit": "unit",
+      "priceMin": 80,
+      "priceMax": 450,
+      "cogsPercent": 0.65,
+      "capacityDrivers": ["reconditioning_bays", "service_hours_capacity_per_tick"],
+      "notes": "Service throughput product consuming reconditioning time."
+    },
+    {
+      "nicheId": "repairShop",
+      "sku": "inspection_service_unit",
+      "name": "Inspection Service",
+      "unit": "unit",
+      "priceMin": 45,
+      "priceMax": 120,
+      "cogsPercent": 0.55,
+      "capacityDrivers": ["service_bays", "lifts", "technician_fte"],
+      "jobModel": {
+        "laborHoursPerUnitRange": { "min": 0.6, "max": 1.2 },
+        "partsCostEurPerUnitRange": { "min": 5, "max": 20 },
+        "partsAvailabilitySensitivity": 0.2,
+        "reworkProbabilityRange": { "min": 0.01, "max": 0.03 },
+        "customerTimeSensitivity": 0.4,
+        "qualitySensitivity": 0.4
+      },
+      "notes": "Regulated inspection work with compliance gating."
+    },
+    {
+      "nicheId": "repairShop",
+      "sku": "oil_service_unit",
+      "name": "Oil Service",
+      "unit": "unit",
+      "priceMin": 90,
+      "priceMax": 220,
+      "cogsPercent": 0.65,
+      "capacityDrivers": ["service_bays", "lifts", "technician_fte"],
+      "jobModel": {
+        "laborHoursPerUnitRange": { "min": 0.7, "max": 1.5 },
+        "partsCostEurPerUnitRange": { "min": 25, "max": 90 },
+        "partsAvailabilitySensitivity": 0.35,
+        "reworkProbabilityRange": { "min": 0.02, "max": 0.05 },
+        "customerTimeSensitivity": 0.5,
+        "qualitySensitivity": 0.35
+      },
+      "notes": "Quick service with parts dependency."
+    },
+    {
+      "nicheId": "repairShop",
+      "sku": "brake_job_unit",
+      "name": "Brake Job",
+      "unit": "unit",
+      "priceMin": 280,
+      "priceMax": 900,
+      "cogsPercent": 0.7,
+      "capacityDrivers": ["service_bays", "lifts", "technician_fte"],
+      "jobModel": {
+        "laborHoursPerUnitRange": { "min": 2.5, "max": 5.5 },
+        "partsCostEurPerUnitRange": { "min": 120, "max": 520 },
+        "partsAvailabilitySensitivity": 0.6,
+        "reworkProbabilityRange": { "min": 0.04, "max": 0.1 },
+        "customerTimeSensitivity": 0.55,
+        "qualitySensitivity": 0.6
+      },
+      "notes": "High-touch labor and parts service."
+    },
+    {
+      "nicheId": "repairShop",
+      "sku": "tires_service_unit",
+      "name": "Tires Service",
+      "unit": "unit",
+      "priceMin": 60,
+      "priceMax": 180,
+      "cogsPercent": 0.6,
+      "capacityDrivers": ["service_bays", "lifts", "technician_fte"],
+      "jobModel": {
+        "laborHoursPerUnitRange": { "min": 0.8, "max": 1.8 },
+        "partsCostEurPerUnitRange": { "min": 40, "max": 300 },
+        "partsAvailabilitySensitivity": 0.7,
+        "reworkProbabilityRange": { "min": 0.02, "max": 0.06 },
+        "customerTimeSensitivity": 0.6,
+        "qualitySensitivity": 0.5
+      },
+      "notes": "Seasonal tire service with supply sensitivity."
+    },
+    {
+      "nicheId": "repairShop",
+      "sku": "diagnostics_advanced_unit",
+      "name": "Advanced Diagnostics",
+      "unit": "unit",
+      "priceMin": 80,
+      "priceMax": 250,
+      "cogsPercent": 0.6,
+      "capacityDrivers": ["service_bays", "diagnostic_tools_level", "master_tech_fte"],
+      "jobModel": {
+        "laborHoursPerUnitRange": { "min": 1, "max": 3 },
+        "partsCostEurPerUnitRange": { "min": 10, "max": 80 },
+        "partsAvailabilitySensitivity": 0.4,
+        "reworkProbabilityRange": { "min": 0.05, "max": 0.15 },
+        "customerTimeSensitivity": 0.65,
+        "qualitySensitivity": 0.7
+      },
+      "notes": "Tooling-gated diagnostics with reputation dependence."
+    },
+    {
+      "nicheId": "repairShop",
+      "sku": "ev_repair_job_unit",
+      "name": "EV Repair Job",
+      "unit": "unit",
+      "priceMin": 250,
+      "priceMax": 2000,
+      "cogsPercent": 0.75,
+      "capacityDrivers": ["service_bays", "diagnostic_tools_level", "master_tech_fte"],
+      "jobModel": {
+        "laborHoursPerUnitRange": { "min": 2, "max": 8 },
+        "partsCostEurPerUnitRange": { "min": 150, "max": 1200 },
+        "partsAvailabilitySensitivity": 0.65,
+        "reworkProbabilityRange": { "min": 0.03, "max": 0.12 },
+        "customerTimeSensitivity": 0.7,
+        "qualitySensitivity": 0.75
+      },
+      "notes": "High-voltage work gated behind tools and compliance."
+    },
+    {
+      "nicheId": "evServices",
+      "sku": "ac_charge_session_unit",
+      "name": "AC Charge Session",
+      "unit": "unit",
+      "priceMin": 2,
+      "priceMax": 8,
+      "cogsPercent": 0.78,
+      "capacityDrivers": ["chargers_ac_count", "grid_capacity_kw", "uptime_score"],
+      "cogsModel": {
+        "model": "energy_cost",
+        "energyKwhPerUnitRange": { "min": 10, "max": 18 },
+        "gridFeeEurPerKwhRange": { "min": 0.04, "max": 0.12 },
+        "paymentProcessingPctRange": { "min": 0.02, "max": 0.04 },
+        "maintenanceCostEurPerUnitRange": { "min": 0.2, "max": 0.8 },
+        "demandChargeModel": {
+          "model": "per_peak_kw",
+          "feeEurPerKwRange": { "min": 3, "max": 8 }
+        }
+      },
+      "notes": "Session-based charging with uptime and grid fee exposure."
+    },
+    {
+      "nicheId": "evServices",
+      "sku": "dc_fast_charge_session_unit",
+      "name": "DC Fast Charge Session",
+      "unit": "unit",
+      "priceMin": 8,
+      "priceMax": 35,
+      "cogsPercent": 0.85,
+      "capacityDrivers": ["chargers_dc_count", "grid_capacity_kw", "uptime_score"],
+      "cogsModel": {
+        "model": "energy_cost",
+        "energyKwhPerUnitRange": { "min": 28, "max": 65 },
+        "gridFeeEurPerKwhRange": { "min": 0.06, "max": 0.14 },
+        "paymentProcessingPctRange": { "min": 0.02, "max": 0.04 },
+        "maintenanceCostEurPerUnitRange": { "min": 0.6, "max": 2.4 },
+        "demandChargeModel": {
+          "model": "per_peak_kw",
+          "feeEurPerKwRange": { "min": 6, "max": 18 }
+        }
+      },
+      "notes": "Fast charging sessions with high demand charge sensitivity."
+    },
+    {
+      "nicheId": "evServices",
+      "sku": "kwh_energy_sale_kwh",
+      "name": "Metered Energy Sale",
+      "unit": "kwh",
+      "priceMin": 0.35,
+      "priceMax": 0.85,
+      "cogsPercent": 0.76,
+      "capacityDrivers": ["metering_enabled", "grid_capacity_kw"],
+      "cogsModel": {
+        "model": "energy_cost",
+        "energyKwhPerUnitRange": { "min": 1, "max": 1 },
+        "gridFeeEurPerKwhRange": { "min": 0.05, "max": 0.12 },
+        "paymentProcessingPctRange": { "min": 0.01, "max": 0.03 },
+        "maintenanceCostEurPerUnitRange": { "min": 0.01, "max": 0.05 },
+        "demandChargeModel": {
+          "model": "per_peak_kw",
+          "feeEurPerKwRange": { "min": 2, "max": 6 }
+        }
+      },
+      "notes": "kWh-based retail pricing enabled by smart metering."
+    },
+    {
+      "nicheId": "evServices",
+      "sku": "charging_membership_monthly_unit",
+      "name": "Charging Membership",
+      "unit": "unit",
+      "priceMin": 5,
+      "priceMax": 20,
+      "cogsPercent": 0.35,
+      "capacityDrivers": ["uptime_score", "crm_billing_system"],
+      "cogsModel": {
+        "model": "service_cost",
+        "costPerUnitRange": { "min": 2, "max": 8 }
+      },
+      "notes": "Recurring subscription revenue with churn sensitivity."
+    },
+    {
+      "nicheId": "evServices",
+      "sku": "fleet_charging_contract_unit",
+      "name": "Fleet Charging Contract",
+      "unit": "unit",
+      "priceMin": 800,
+      "priceMax": 12000,
+      "cogsPercent": 0.7,
+      "capacityDrivers": ["chargers_dc_count", "uptime_score", "site_count"],
+      "cogsModel": {
+        "model": "contract_cost",
+        "costPerUnitRange": { "min": 600, "max": 6000 }
+      },
+      "notes": "Uptime-gated fleet agreements with SLA risk."
+    },
+    {
+      "nicheId": "evServices",
+      "sku": "installation_service_unit",
+      "name": "Installation Service",
+      "unit": "unit",
+      "priceMin": 1200,
+      "priceMax": 12000,
+      "cogsPercent": 0.78,
+      "capacityDrivers": ["certified_installer", "site_count"],
+      "cogsModel": {
+        "model": "service_cost",
+        "costPerUnitRange": { "min": 800, "max": 9000 }
+      },
+      "notes": "Install and commissioning service gated by compliance."
+    },
+    {
+      "nicheId": "mobility",
+      "sku": "economy_rental_day_unit",
+      "name": "Economy Rental Day",
+      "unit": "unit",
+      "priceMin": 25,
+      "priceMax": 70,
+      "cogsPercent": 0.71,
+      "capacityDrivers": [
+        "fleet_economy_count",
+        "utilization_rate_actual",
+        "downtime_pct"
+      ],
+      "cogsModel": {
+        "model": "per_day_cost",
+        "vehicleDepreciationEurPerDayRange": { "min": 8, "max": 18 },
+        "maintenanceEurPerDayRange": { "min": 2, "max": 6 },
+        "insuranceEurPerDayRange": { "min": 3, "max": 9 },
+        "cleaningEurPerDayRange": { "min": 1, "max": 4 },
+        "paymentProcessingPctRange": { "min": 0.02, "max": 0.04 }
+      },
+      "notes": "Core rental day product; profitability depends on utilization."
+    },
+    {
+      "nicheId": "mobility",
+      "sku": "premium_rental_day_unit",
+      "name": "Premium Rental Day",
+      "unit": "unit",
+      "priceMin": 65,
+      "priceMax": 180,
+      "cogsPercent": 0.67,
+      "capacityDrivers": [
+        "fleet_premium_count",
+        "utilization_rate_actual",
+        "downtime_pct"
+      ],
+      "cogsModel": {
+        "model": "per_day_cost",
+        "vehicleDepreciationEurPerDayRange": { "min": 18, "max": 45 },
+        "maintenanceEurPerDayRange": { "min": 3, "max": 9 },
+        "insuranceEurPerDayRange": { "min": 6, "max": 12 },
+        "cleaningEurPerDayRange": { "min": 2, "max": 6 },
+        "paymentProcessingPctRange": { "min": 0.02, "max": 0.04 }
+      },
+      "notes": "Premium rentals with higher demand for reputation and support."
+    },
+    {
+      "nicheId": "mobility",
+      "sku": "van_rental_day_unit",
+      "name": "Van Rental Day",
+      "unit": "unit",
+      "priceMin": 55,
+      "priceMax": 150,
+      "cogsPercent": 0.66,
+      "capacityDrivers": ["fleet_van_count", "utilization_rate_actual", "downtime_pct"],
+      "cogsModel": {
+        "model": "per_day_cost",
+        "vehicleDepreciationEurPerDayRange": { "min": 12, "max": 30 },
+        "maintenanceEurPerDayRange": { "min": 3, "max": 10 },
+        "insuranceEurPerDayRange": { "min": 4, "max": 10 },
+        "cleaningEurPerDayRange": { "min": 2, "max": 5 },
+        "paymentProcessingPctRange": { "min": 0.02, "max": 0.04 }
+      },
+      "notes": "Utility rentals tied to compliance and fleet availability."
+    },
+    {
+      "nicheId": "mobility",
+      "sku": "corporate_fleet_contract_unit",
+      "name": "Corporate Fleet Contract",
+      "unit": "unit",
+      "priceMin": 1000,
+      "priceMax": 25000,
+      "cogsPercent": 0.75,
+      "capacityDrivers": ["fleet_economy_count", "fleet_van_count", "uptime_score"],
+      "cogsModel": {
+        "model": "per_day_cost",
+        "vehicleDepreciationEurPerDayRange": { "min": 14, "max": 38 },
+        "maintenanceEurPerDayRange": { "min": 3, "max": 8 },
+        "insuranceEurPerDayRange": { "min": 4, "max": 10 },
+        "cleaningEurPerDayRange": { "min": 1, "max": 4 },
+        "paymentProcessingPctRange": { "min": 0.01, "max": 0.03 }
+      },
+      "notes": "Contract revenue tied to uptime and corporate readiness."
+    },
+    {
+      "nicheId": "mobility",
+      "sku": "insurance_addon_day_unit",
+      "name": "Insurance Add-on Day",
+      "unit": "unit",
+      "priceMin": 6,
+      "priceMax": 20,
+      "cogsPercent": 0.33,
+      "capacityDrivers": ["booking_system_enabled", "utilization_rate_actual"],
+      "cogsModel": {
+        "model": "per_day_cost",
+        "vehicleDepreciationEurPerDayRange": { "min": 0.2, "max": 0.8 },
+        "maintenanceEurPerDayRange": { "min": 0.1, "max": 0.4 },
+        "insuranceEurPerDayRange": { "min": 1.2, "max": 4.5 },
+        "cleaningEurPerDayRange": { "min": 0.1, "max": 0.4 },
+        "paymentProcessingPctRange": { "min": 0.01, "max": 0.03 }
+      },
+      "notes": "High-margin upsell enabled by booking system and support."
+    },
+    {
+      "nicheId": "mobility",
+      "sku": "delivery_mobility_day_unit",
+      "name": "Delivery Mobility Day",
+      "unit": "unit",
+      "priceMin": 40,
+      "priceMax": 120,
+      "cogsPercent": 0.69,
+      "capacityDrivers": ["fleet_van_count", "utilization_rate_actual", "uptime_score"],
+      "cogsModel": {
+        "model": "per_day_cost",
+        "vehicleDepreciationEurPerDayRange": { "min": 12, "max": 26 },
+        "maintenanceEurPerDayRange": { "min": 4, "max": 10 },
+        "insuranceEurPerDayRange": { "min": 4, "max": 10 },
+        "cleaningEurPerDayRange": { "min": 2, "max": 5 },
+        "paymentProcessingPctRange": { "min": 0.01, "max": 0.03 }
+      },
+      "notes": "Last-mile utilization smoothing with higher wear-and-tear."
+    }
+  ],
+  "upgrades": [
+    {
+      "nicheId": "carDealer",
+      "code": "local_lead_gen_engine",
+      "name": "Local Lead Gen Engine",
+      "timing": "next_tick",
+      "leadTimeWeeks": 1,
+      "capexFormula": "capex 3000..25000",
+      "opexFormula": "monthlyFixed 500..2500",
+      "effects": ["lead_pool +40..160", "conversion_rate +0.01..0.03"],
+      "risk": {
+        "failureChance": 0.08,
+        "failureMode": "Lead quality drops for 1-2 weeks."
+      }
+    },
+    {
+      "nicheId": "carDealer",
+      "code": "reconditioning_bay_expansion",
+      "name": "Reconditioning Bay Expansion",
+      "timing": "multi_tick",
+      "leadTimeWeeks": 4,
+      "capexFormula": "reconditioning_bays * 25000..90000",
+      "opexFormula": "monthlyFixed 800..3000",
+      "effects": ["reconditioning_bays +1..3", "service_hours_capacity_per_tick +20..60"],
+      "risk": {
+        "failureChance": 0.12,
+        "failureMode": "Underutilized capacity increases fixed costs.",
+        "downtimeWeeks": 1
+      }
+    },
+    {
+      "nicheId": "carDealer",
+      "code": "finance_desk_compliance_program",
+      "name": "Finance Desk & Compliance Program",
+      "timing": "multi_tick",
+      "leadTimeWeeks": 3,
+      "capexFormula": "capex 10000..60000",
+      "opexFormula": "monthlyFixed 1000..6000",
+      "effects": [
+        "compliance_score +0.10..0.25",
+        "unlock financing_contract_unit",
+        "unlock extended_warranty_unit"
+      ],
+      "risk": {
+        "failureChance": 0.14,
+        "failureMode": "Audit failure delays finance desk."
+      }
+    },
+    {
+      "nicheId": "carDealer",
+      "code": "reputation_reviews_flywheel",
+      "name": "Reputation & Reviews Flywheel",
+      "timing": "next_tick",
+      "leadTimeWeeks": 1,
+      "capexFormula": "capex 2000..20000",
+      "opexFormula": "monthlyFixed 500..2500",
+      "effects": ["reputation_score +0.10..0.30", "price_uplift +1..4%", "returns_rate -5..15%"],
+      "risk": {
+        "failureChance": 0.1,
+        "failureMode": "Visibility backlash event impacts reputation."
+      }
+    },
+    {
+      "nicheId": "carDealer",
+      "code": "manufacturer_dealership_agreement",
+      "name": "Manufacturer Dealership Agreement",
+      "timing": "multi_tick",
+      "leadTimeWeeks": 8,
+      "capexFormula": "capex 50000..250000",
+      "opexFormula": "monthlyFixed 2000..10000",
+      "effects": [
+        "unlock new_car_unit",
+        "new_car_supply_stability +20..40%",
+        "inventory_floorplan_apr -2..10%"
+      ],
+      "risk": {
+        "failureChance": 0.18,
+        "failureMode": "Sales target penalties trigger cash drain.",
+        "downtimeWeeks": 2
+      }
+    },
+    {
+      "nicheId": "repairShop",
+      "code": "shop_management_software",
+      "name": "Shop Management Software",
+      "timing": "multi_tick",
+      "leadTimeWeeks": 2,
+      "capexFormula": "capex 2000..25000",
+      "opexFormula": "monthlyFixed 100..800",
+      "effects": [
+        "shop_software_enabled true",
+        "average_wait_ticks -10..25%",
+        "customer_satisfaction_score +0.02..0.06"
+      ],
+      "risk": {
+        "failureChance": 0.1,
+        "failureMode": "Adoption dip reduces capacity for 1 week.",
+        "downtimeWeeks": 1
+      }
+    },
+    {
+      "nicheId": "repairShop",
+      "code": "bay_lift_expansion",
+      "name": "Bay & Lift Expansion",
+      "timing": "multi_tick",
+      "leadTimeWeeks": 4,
+      "capexFormula": "service_bays * 20000..80000 + lifts * 8000..30000",
+      "opexFormula": "monthlyFixed 600..2200",
+      "effects": [
+        "service_bays +1..3",
+        "lifts +1..2",
+        "labor_hours_capacity_per_tick +15..45"
+      ],
+      "risk": {
+        "failureChance": 0.12,
+        "failureMode": "Underutilized bays if staffing lags.",
+        "downtimeWeeks": 1
+      }
+    },
+    {
+      "nicheId": "repairShop",
+      "code": "parts_supplier_diversification",
+      "name": "Parts Supplier Diversification",
+      "timing": "next_tick",
+      "leadTimeWeeks": 1,
+      "capexFormula": "capex 0",
+      "opexFormula": "parts_cost * 1.02..1.08",
+      "effects": [
+        "parts_fill_rate +0.10..0.25",
+        "supplier_lead_time_ticks -20..40%",
+        "parts_stockouts_count -30..70%"
+      ],
+      "risk": {
+        "failureChance": 0.08,
+        "failureMode": "Higher parts costs compress margins."
+      }
+    },
+    {
+      "nicheId": "repairShop",
+      "code": "technician_training_program",
+      "name": "Technician Training Program",
+      "timing": "multi_tick",
+      "leadTimeWeeks": 3,
+      "capexFormula": "capex 2000..20000",
+      "opexFormula": "monthlyFixed 300..1500",
+      "effects": [
+        "comeback_rate -10..35%",
+        "labor_hours_per_job -5..15%"
+      ],
+      "risk": {
+        "failureChance": 0.1,
+        "failureMode": "Short-term capacity dip during training.",
+        "downtimeWeeks": 1
+      }
+    },
+    {
+      "nicheId": "repairShop",
+      "code": "advanced_diagnostics_suite",
+      "name": "Advanced Diagnostics Suite",
+      "timing": "multi_tick",
+      "leadTimeWeeks": 3,
+      "capexFormula": "capex 10000..80000",
+      "opexFormula": "monthlyFixed 200..1200",
+      "effects": [
+        "diagnostic_tools_level +1",
+        "unlock diagnostics_advanced_unit",
+        "comeback_rate -3..10%"
+      ],
+      "risk": {
+        "failureChance": 0.12,
+        "failureMode": "Tool calibration downtime.",
+        "downtimeWeeks": 1
+      }
+    },
+    {
+      "nicheId": "repairShop",
+      "code": "ev_certification_high_voltage_tools",
+      "name": "EV Certification & High-Voltage Tools",
+      "timing": "multi_tick",
+      "leadTimeWeeks": 6,
+      "capexFormula": "capex 20000..150000",
+      "opexFormula": "monthlyFixed 300..2000",
+      "effects": [
+        "ev_tools_enabled true",
+        "compliance_score +0.10..0.20",
+        "unlock ev_repair_job_unit"
+      ],
+      "risk": {
+        "failureChance": 0.15,
+        "failureMode": "Audit failure delays EV certification.",
+        "downtimeWeeks": 2
+      }
+    },
+    {
+      "nicheId": "evServices",
+      "code": "site_permitting_pipeline",
+      "name": "Site Acquisition & Permitting Pipeline",
+      "timing": "multi_tick",
+      "leadTimeWeeks": 6,
+      "capexFormula": "site_count * 5000..60000",
+      "opexFormula": "monthlyFixed 300..1200",
+      "effects": ["site_count +1..2", "location_quality_score +0.05..0.20"],
+      "risk": {
+        "failureChance": 0.18,
+        "failureMode": "Permit delays or site rejection."
+      }
+    },
+    {
+      "nicheId": "evServices",
+      "code": "dc_fast_charger_expansion",
+      "name": "DC Fast Charger Expansion",
+      "timing": "multi_tick",
+      "leadTimeWeeks": 8,
+      "capexFormula": "chargers_dc_count * 60000..300000",
+      "opexFormula": "monthlyFixed 800..3500",
+      "effects": [
+        "chargers_dc_count +1..3",
+        "peak_demand_kw +40..120",
+        "utilization_rate +0.03..0.08"
+      ],
+      "risk": {
+        "failureChance": 0.2,
+        "failureMode": "Demand charges spike or underutilization."
+      }
+    },
+    {
+      "nicheId": "evServices",
+      "code": "smart_metering_dynamic_pricing",
+      "name": "Smart Metering & Dynamic Pricing",
+      "timing": "multi_tick",
+      "leadTimeWeeks": 4,
+      "capexFormula": "capex 2000..25000",
+      "opexFormula": "monthlyFixed 100..1000",
+      "effects": [
+        "metering_enabled true",
+        "unlock kwh_energy_sale_kwh",
+        "retail_price_eur_per_kwh_base -5..5%"
+      ],
+      "risk": {
+        "failureChance": 0.12,
+        "failureMode": "Customer backlash to price volatility."
+      }
+    },
+    {
+      "nicheId": "evServices",
+      "code": "maintenance_uptime_program",
+      "name": "Maintenance & Uptime Program",
+      "timing": "next_tick",
+      "leadTimeWeeks": 1,
+      "capexFormula": "capex 0",
+      "opexFormula": "monthlyFixed 500..6000",
+      "effects": [
+        "uptime_score +0.05..0.15",
+        "maintenance_backlog_units -15..40%",
+        "support_response_time_score +0.02..0.05"
+      ],
+      "risk": {
+        "failureChance": 0.1,
+        "failureMode": "Fixed cost burden if utilization is low."
+      }
+    },
+    {
+      "nicheId": "evServices",
+      "code": "onsite_battery_buffer",
+      "name": "Onsite Battery Buffer",
+      "timing": "multi_tick",
+      "leadTimeWeeks": 8,
+      "capexFormula": "capex 30000..500000",
+      "opexFormula": "monthlyFixed 400..2500",
+      "effects": [
+        "demand_charge_exposure_score -15..40%",
+        "grid_capacity_kw +20..80"
+      ],
+      "risk": {
+        "failureChance": 0.16,
+        "failureMode": "Storage underutilization and degradation."
+      }
+    },
+    {
+      "nicheId": "evServices",
+      "code": "crm_billing_system",
+      "name": "CRM & Billing Subscription System",
+      "timing": "multi_tick",
+      "leadTimeWeeks": 4,
+      "capexFormula": "capex 3000..40000",
+      "opexFormula": "monthlyFixed 200..2000",
+      "effects": [
+        "unlock charging_membership_monthly_unit",
+        "membership_active_count +100..400",
+        "support_response_time_score +0.04..0.10"
+      ],
+      "risk": {
+        "failureChance": 0.14,
+        "failureMode": "Implementation dip reduces throughput."
+      }
+    },
+    {
+      "nicheId": "evServices",
+      "code": "electrical_safety_program",
+      "name": "Electrical Safety & Compliance Program",
+      "timing": "multi_tick",
+      "leadTimeWeeks": 2,
+      "capexFormula": "capex 1000..20000",
+      "opexFormula": "monthlyFixed 100..1200",
+      "effects": [
+        "compliance_score +0.10..0.25",
+        "unlock dc_fast_charge_session_unit",
+        "uptime_score +0.02..0.05"
+      ],
+      "risk": {
+        "failureChance": 0.16,
+        "failureMode": "Audit failure lockout."
+      }
+    },
+    {
+      "nicheId": "evServices",
+      "code": "fleet_partnerships_program",
+      "name": "Fleet Partnerships Program",
+      "timing": "multi_tick",
+      "leadTimeWeeks": 5,
+      "capexFormula": "capex 5000..50000",
+      "opexFormula": "monthlyFixed 600..2500",
+      "effects": [
+        "unlock fleet_charging_contract_unit",
+        "fleet_contracts_active_count +1..3",
+        "reputation_score +0.03..0.08"
+      ],
+      "risk": {
+        "failureChance": 0.18,
+        "failureMode": "SLA penalties if uptime slips."
+      }
+    },
+    {
+      "nicheId": "mobility",
+      "code": "online_booking_dynamic_pricing",
+      "name": "Online Booking System & Dynamic Pricing",
+      "timing": "multi_tick",
+      "leadTimeWeeks": 3,
+      "capexFormula": "capex 5000..60000",
+      "opexFormula": "monthlyFixed 200..2000",
+      "effects": [
+        "booking_system_enabled true",
+        "retail_channel_score +0.10..0.30",
+        "cancellations_rate -5..15%",
+        "utilization_rate_target +0.05..0.15",
+        "unlock insurance_addon_day_unit"
+      ],
+      "risk": {
+        "failureChance": 0.12,
+        "failureMode": "Pricing backlash reduces reputation and conversion."
+      }
+    },
+    {
+      "nicheId": "mobility",
+      "code": "fleet_expansion_economy_program",
+      "name": "Fleet Expansion Program (Economy)",
+      "timing": "multi_tick",
+      "leadTimeWeeks": 4,
+      "capexFormula": "fleet_economy_count * 8000..22000",
+      "opexFormula": "monthlyFixed 400..1800",
+      "effects": [
+        "fleet_economy_count +3..8",
+        "bookings_pipeline_units +6..18"
+      ],
+      "risk": {
+        "failureChance": 0.14,
+        "failureMode": "Utilization drop if demand lags; financing pressure."
+      }
+    },
+    {
+      "nicheId": "mobility",
+      "code": "premium_fleet_acquisition",
+      "name": "Premium Fleet Acquisition",
+      "timing": "multi_tick",
+      "leadTimeWeeks": 5,
+      "capexFormula": "fleet_premium_count * 25000..75000",
+      "opexFormula": "monthlyFixed 600..2400",
+      "effects": [
+        "fleet_premium_count +1..4",
+        "reputation_score +0.03..0.08"
+      ],
+      "risk": {
+        "failureChance": 0.16,
+        "failureMode": "Claim severity and downtime rise if utilization is poor."
+      }
+    },
+    {
+      "nicheId": "mobility",
+      "code": "maintenance_turnaround_optimization",
+      "name": "Maintenance & Turnaround Optimization",
+      "timing": "next_tick",
+      "leadTimeWeeks": 1,
+      "capexFormula": "capex 0",
+      "opexFormula": "monthlyFixed 500..8000",
+      "effects": [
+        "downtime_pct -10..30%",
+        "cleaning_capacity_vehicles_per_tick +1..3",
+        "maintenance_backlog_units -10..30%"
+      ],
+      "risk": {
+        "failureChance": 0.08,
+        "failureMode": "Fixed cost pressure if utilization falls."
+      }
+    },
+    {
+      "nicheId": "mobility",
+      "code": "telematics_risk_scoring",
+      "name": "Telematics & Risk Scoring",
+      "timing": "multi_tick",
+      "leadTimeWeeks": 4,
+      "capexFormula": "capex 3000..40000",
+      "opexFormula": "per_vehicle_monthly 2..10",
+      "effects": [
+        "accident_rate_per_day -10..30%",
+        "fraud_risk_score -5..20%",
+        "insurance_eur_per_day_base -2..10%"
+      ],
+      "risk": {
+        "failureChance": 0.12,
+        "failureMode": "Privacy backlash reduces reputation."
+      }
+    },
+    {
+      "nicheId": "mobility",
+      "code": "corporate_contracting_sla_program",
+      "name": "Corporate Contracting & SLA Program",
+      "timing": "multi_tick",
+      "leadTimeWeeks": 5,
+      "capexFormula": "capex 5000..80000",
+      "opexFormula": "monthlyFixed 500..6000",
+      "effects": [
+        "unlock corporate_fleet_contract_unit",
+        "corporate_channel_score +0.10..0.30",
+        "reputation_score +0.02..0.06"
+      ],
+      "risk": {
+        "failureChance": 0.15,
+        "failureMode": "SLA penalties trigger contract churn."
+      }
+    },
+    {
+      "nicheId": "mobility",
+      "code": "delivery_partnerships_program",
+      "name": "Delivery Partnerships Program",
+      "timing": "multi_tick",
+      "leadTimeWeeks": 5,
+      "capexFormula": "capex 3000..50000",
+      "opexFormula": "monthlyFixed 200..3000",
+      "effects": [
+        "unlock delivery_mobility_day_unit",
+        "delivery_channel_score +0.10..0.35",
+        "utilization_rate_target +0.03..0.08",
+        "maintenance_backlog_units +1..3"
+      ],
+      "risk": {
+        "failureChance": 0.14,
+        "failureMode": "Wear-and-tear spikes and downtime increases."
+      }
+    },
+    {
+      "nicheId": "mobility",
+      "code": "insurance_structure_optimization",
+      "name": "Insurance Structure Optimization",
+      "timing": "next_tick",
+      "leadTimeWeeks": 1,
+      "capexFormula": "capex 0",
+      "opexFormula": "monthlyFixed 0",
+      "effects": [
+        "insurance_eur_per_day_base -4..12%",
+        "deductible_eur +500..1500"
+      ],
+      "risk": {
+        "failureChance": 0.1,
+        "failureMode": "Large claim shocks if reserves are thin."
+      }
+    }
+  ],
+  "unlocks": [
+    {
+      "nicheId": "carDealer",
+      "productSku": "used_car_unit",
+      "startingUnlocked": true,
+      "requirements": {}
+    },
+    {
+      "nicheId": "carDealer",
+      "productSku": "detailing_service_unit",
+      "startingUnlocked": false,
+      "requirements": {
+        "assets": [{ "assetId": "reconditioning_bays", "minCount": 1 }],
+        "staff": [{ "roleId": "service_staff", "minFTE": 1 }]
+      }
+    },
+    {
+      "nicheId": "carDealer",
+      "productSku": "trade_in_unit",
+      "startingUnlocked": false,
+      "requirements": {
+        "assets": [{ "assetId": "appraisal_tools", "minCount": 1 }],
+        "staff": [{ "roleId": "sales_staff", "minFTE": 1 }],
+        "minCashEur": 60000
+      }
+    },
+    {
+      "nicheId": "carDealer",
+      "productSku": "financing_contract_unit",
+      "startingUnlocked": false,
+      "requirements": {
+        "staff": [{ "roleId": "finance_staff", "minFTE": 1 }],
+        "minComplianceScore": 0.7,
+        "complianceAuditPassed": true
+      }
+    },
+    {
+      "nicheId": "carDealer",
+      "productSku": "extended_warranty_unit",
+      "startingUnlocked": false,
+      "requirements": {
+        "minComplianceScore": 0.75,
+        "minReputationScore": 0.55,
+        "anyOf": [
+          { "staff": [{ "roleId": "finance_staff", "minFTE": 1 }] },
+          { "staff": [{ "roleId": "service_manager", "minFTE": 1 }] }
+        ]
+      }
+    },
+    {
+      "nicheId": "carDealer",
+      "productSku": "new_car_unit",
+      "startingUnlocked": false,
+      "requirements": {
+        "assets": [
+          { "assetId": "showroom_m2", "minCount": 320 },
+          { "assetId": "inventory_slots", "minCount": 20 }
+        ],
+        "staff": [{ "roleId": "sales_staff", "minFTE": 2 }],
+        "upgrades": ["manufacturer_dealership_agreement"],
+        "minReputationScore": 0.6
+      }
+    },
+    {
+      "nicheId": "repairShop",
+      "productSku": "inspection_service_unit",
+      "startingUnlocked": true,
+      "requirements": {}
+    },
+    {
+      "nicheId": "repairShop",
+      "productSku": "oil_service_unit",
+      "startingUnlocked": false,
+      "requirements": {
+        "assets": [{ "assetId": "lifts", "minCount": 1 }],
+        "staff": [{ "roleId": "technician", "minFTE": 1 }]
+      }
+    },
+    {
+      "nicheId": "repairShop",
+      "productSku": "tires_service_unit",
+      "startingUnlocked": false,
+      "requirements": {
+        "assets": [{ "assetId": "lifts", "minCount": 1 }],
+        "staff": [{ "roleId": "technician", "minFTE": 2 }]
+      }
+    },
+    {
+      "nicheId": "repairShop",
+      "productSku": "brake_job_unit",
+      "startingUnlocked": false,
+      "requirements": {
+        "assets": [{ "assetId": "service_bays", "minCount": 2 }],
+        "staff": [{ "roleId": "technician", "minFTE": 2 }],
+        "minReputationScore": 0.45
+      }
+    },
+    {
+      "nicheId": "repairShop",
+      "productSku": "diagnostics_advanced_unit",
+      "startingUnlocked": false,
+      "requirements": {
+        "assets": [{ "assetId": "diagnostic_tools_level", "minCount": 2 }],
+        "staff": [{ "roleId": "master_tech", "minFTE": 1 }],
+        "minReputationScore": 0.55
+      }
+    },
+    {
+      "nicheId": "repairShop",
+      "productSku": "ev_repair_job_unit",
+      "startingUnlocked": false,
+      "requirements": {
+        "assets": [
+          { "assetId": "diagnostic_tools_level", "minCount": 3 },
+          { "assetId": "ev_tools_enabled", "minCount": 1 }
+        ],
+        "staff": [{ "roleId": "master_tech", "minFTE": 1 }],
+        "minComplianceScore": 0.75,
+        "minReputationScore": 0.6,
+        "upgrades": ["ev_certification_high_voltage_tools"]
+      }
+    },
+    {
+      "nicheId": "evServices",
+      "productSku": "ac_charge_session_unit",
+      "startingUnlocked": true,
+      "requirements": {}
+    },
+    {
+      "nicheId": "evServices",
+      "productSku": "kwh_energy_sale_kwh",
+      "startingUnlocked": false,
+      "requirements": {
+        "minComplianceScore": 0.55,
+        "anyOf": [
+          { "assets": [{ "assetId": "metering_enabled", "minCount": 1 }] },
+          { "upgrades": ["smart_metering_dynamic_pricing"] }
+        ]
+      }
+    },
+    {
+      "nicheId": "evServices",
+      "productSku": "dc_fast_charge_session_unit",
+      "startingUnlocked": false,
+      "requirements": {
+        "assets": [
+          { "assetId": "chargers_dc_count", "minCount": 1 },
+          { "assetId": "grid_capacity_kw", "minCount": 180 }
+        ],
+        "upgrades": ["electrical_safety_program"],
+        "minComplianceScore": 0.65
+      }
+    },
+    {
+      "nicheId": "evServices",
+      "productSku": "charging_membership_monthly_unit",
+      "startingUnlocked": false,
+      "requirements": {
+        "upgrades": ["crm_billing_system"],
+        "minReputationScore": 0.55,
+        "minUptimeScore": 0.85
+      }
+    },
+    {
+      "nicheId": "evServices",
+      "productSku": "fleet_charging_contract_unit",
+      "startingUnlocked": false,
+      "requirements": {
+        "upgrades": ["fleet_partnerships_program"],
+        "minComplianceScore": 0.7,
+        "minReputationScore": 0.6,
+        "minUptimeScore": 0.9,
+        "minChargersTotal": 6
+      }
+    },
+    {
+      "nicheId": "evServices",
+      "productSku": "installation_service_unit",
+      "startingUnlocked": false,
+      "requirements": {
+        "staff": [{ "roleId": "certified_installer", "minFTE": 1 }],
+        "upgrades": ["site_permitting_pipeline"],
+        "minComplianceScore": 0.75
+      }
+    },
+    {
+      "nicheId": "mobility",
+      "productSku": "economy_rental_day_unit",
+      "startingUnlocked": true,
+      "requirements": {}
+    },
+    {
+      "nicheId": "mobility",
+      "productSku": "insurance_addon_day_unit",
+      "startingUnlocked": false,
+      "requirements": {
+        "upgrades": ["online_booking_dynamic_pricing"],
+        "minReputationScore": 0.45
+      }
+    },
+    {
+      "nicheId": "mobility",
+      "productSku": "premium_rental_day_unit",
+      "startingUnlocked": false,
+      "requirements": {
+        "assets": [{ "assetId": "fleet_premium_count", "minCount": 2 }],
+        "staff": [{ "roleId": "customer_support_staff", "minFTE": 1 }],
+        "minReputationScore": 0.55
+      }
+    },
+    {
+      "nicheId": "mobility",
+      "productSku": "van_rental_day_unit",
+      "startingUnlocked": false,
+      "requirements": {
+        "assets": [{ "assetId": "fleet_van_count", "minCount": 2 }],
+        "staff": [{ "roleId": "logistics_staff", "minFTE": 1 }],
+        "minComplianceScore": 0.55
+      }
+    },
+    {
+      "nicheId": "mobility",
+      "productSku": "delivery_mobility_day_unit",
+      "startingUnlocked": false,
+      "requirements": {
+        "upgrades": ["delivery_partnerships_program"],
+        "assets": [
+          { "assetId": "fleet_van_count", "minCount": 2 },
+          { "assetId": "fleet_economy_count", "minCount": 6 }
+        ],
+        "staff": [{ "roleId": "logistics_staff", "minFTE": 1 }],
+        "minComplianceScore": 0.65,
+        "minUptimeScore": 0.85,
+        "minFleetTotal": 10
+      }
+    },
+    {
+      "nicheId": "mobility",
+      "productSku": "corporate_fleet_contract_unit",
+      "startingUnlocked": false,
+      "requirements": {
+        "upgrades": ["corporate_contracting_sla_program"],
+        "staff": [{ "roleId": "corporate_sales_staff", "minFTE": 1 }],
+        "minComplianceScore": 0.7,
+        "minReputationScore": 0.6,
+        "minUptimeScore": 0.9,
+        "minFleetTotal": 18
+      }
+    }
+  ],
+  "startingLoadouts": [
+    {
+      "nicheId": "carDealer",
+      "startingCash": 250000,
+      "assets": [
+        { "assetId": "showroom_m2", "count": 250 },
+        { "assetId": "inventory_slots", "count": 25 },
+        { "assetId": "storage_slots", "count": 15 },
+        { "assetId": "reconditioning_bays", "count": 1 },
+        { "assetId": "inventory_used_units", "count": 12 },
+        { "assetId": "inventory_new_units", "count": 0 },
+        { "assetId": "inventory_avg_cost_used_eur", "count": 15000 },
+        { "assetId": "inventory_avg_cost_new_eur", "count": 28000 },
+        { "assetId": "inventory_floorplan_apr", "count": 0.09 },
+        { "assetId": "reconditioning_queue_units", "count": 4 },
+        { "assetId": "service_hours_capacity_per_tick", "count": 40 },
+        { "assetId": "lead_pool", "count": 80 },
+        { "assetId": "conversion_rate", "count": 0.06 },
+        { "assetId": "compliance_score", "count": 0.5 },
+        { "assetId": "reputation_score", "count": 0.45 },
+        { "assetId": "warranty_claim_rate", "count": 0.04 },
+        { "assetId": "returns_rate", "count": 0.05 },
+        { "assetId": "appraisal_tools", "count": 0 }
+      ],
+      "staff": [
+        { "roleId": "sales_staff", "fte": 2 },
+        { "roleId": "service_staff", "fte": 1 },
+        { "roleId": "finance_staff", "fte": 0 },
+        { "roleId": "service_manager", "fte": 0 },
+        { "roleId": "manager", "fte": 1 }
+      ],
+      "unlockedProducts": ["used_car_unit"]
+    },
+    {
+      "nicheId": "repairShop",
+      "startingCash": 140000,
+      "assets": [
+        { "assetId": "service_bays", "count": 2 },
+        { "assetId": "lifts", "count": 2 },
+        { "assetId": "diagnostic_tools_level", "count": 1 },
+        { "assetId": "ev_tools_enabled", "count": 0 },
+        { "assetId": "shop_software_enabled", "count": 0 },
+        { "assetId": "labor_hours_capacity_per_tick", "count": 60 },
+        { "assetId": "queue_jobs_count", "count": 6 },
+        { "assetId": "average_wait_ticks", "count": 2 },
+        { "assetId": "max_queue_before_churn", "count": 18 },
+        { "assetId": "customer_satisfaction_score", "count": 0.55 },
+        { "assetId": "parts_inventory_value_eur", "count": 20000 },
+        { "assetId": "parts_fill_rate", "count": 0.75 },
+        { "assetId": "supplier_lead_time_ticks_min", "count": 1 },
+        { "assetId": "supplier_lead_time_ticks_max", "count": 3 },
+        { "assetId": "parts_price_index", "count": 1 },
+        { "assetId": "parts_stockouts_count", "count": 0 },
+        { "assetId": "comeback_rate", "count": 0.05 },
+        { "assetId": "warranty_reserve_eur", "count": 5000 },
+        { "assetId": "comeback_queue_jobs_count", "count": 0 },
+        { "assetId": "reputation_score", "count": 0.45 },
+        { "assetId": "compliance_score", "count": 0.55 }
+      ],
+      "staff": [
+        { "roleId": "technician", "fte": 2 },
+        { "roleId": "master_tech", "fte": 0 },
+        { "roleId": "service_advisor", "fte": 1 }
+      ],
+      "unlockedProducts": ["inspection_service_unit", "oil_service_unit"]
+    },
+    {
+      "nicheId": "evServices",
+      "startingCash": 220000,
+      "assets": [
+        { "assetId": "chargers_ac_count", "count": 4 },
+        { "assetId": "chargers_dc_count", "count": 0 },
+        { "assetId": "charger_power_ac_kw", "count": 11 },
+        { "assetId": "charger_power_dc_kw", "count": 100 },
+        { "assetId": "site_count", "count": 1 },
+        { "assetId": "parking_bays_count", "count": 6 },
+        { "assetId": "grid_capacity_kw", "count": 100 },
+        { "assetId": "peak_demand_kw", "count": 60 },
+        { "assetId": "uptime_score", "count": 0.82 },
+        { "assetId": "utilization_rate", "count": 0.35 },
+        { "assetId": "location_quality_score", "count": 0.45 },
+        { "assetId": "compliance_score", "count": 0.55 },
+        { "assetId": "reputation_score", "count": 0.45 },
+        { "assetId": "metering_enabled", "count": 0 },
+        { "assetId": "membership_active_count", "count": 0 },
+        { "assetId": "fleet_contracts_active_count", "count": 0 },
+        { "assetId": "maintenance_backlog_units", "count": 2 },
+        { "assetId": "demand_charge_exposure_score", "count": 0.55 },
+        { "assetId": "support_response_time_score", "count": 0.6 },
+        { "assetId": "energy_purchase_price_eur_per_kwh", "count": 0.28 },
+        { "assetId": "retail_price_eur_per_kwh_base", "count": 0.55 },
+        { "assetId": "grid_fee_eur_per_kwh_base", "count": 0.07 },
+        { "assetId": "payment_processing_pct", "count": 0.02 },
+        { "assetId": "average_session_kwh_ac", "count": 14 },
+        { "assetId": "average_session_kwh_dc", "count": 42 }
+      ],
+      "staff": [
+        { "roleId": "operations_tech", "fte": 1 },
+        { "roleId": "support_agent", "fte": 1 },
+        { "roleId": "certified_installer", "fte": 0 }
+      ],
+      "unlockedProducts": ["ac_charge_session_unit"]
+    },
+    {
+      "nicheId": "mobility",
+      "startingCash": 260000,
+      "assets": [
+        { "assetId": "fleet_economy_count", "count": 10 },
+        { "assetId": "fleet_premium_count", "count": 0 },
+        { "assetId": "fleet_van_count", "count": 1 },
+        { "assetId": "downtime_pct", "count": 0.1 },
+        { "assetId": "uptime_score", "count": 0.9 },
+        { "assetId": "utilization_rate_target", "count": 0.45 },
+        { "assetId": "utilization_rate_actual", "count": 0.35 },
+        { "assetId": "bookings_pipeline_units", "count": 12 },
+        { "assetId": "cancellations_rate", "count": 0.08 },
+        { "assetId": "workshop_capacity_vehicles_per_tick", "count": 2 },
+        { "assetId": "cleaning_capacity_vehicles_per_tick", "count": 6 },
+        { "assetId": "maintenance_backlog_units", "count": 3 },
+        { "assetId": "accident_rate_per_day", "count": 0.006 },
+        { "assetId": "claim_severity_eur_min", "count": 800 },
+        { "assetId": "claim_severity_eur_max", "count": 8000 },
+        { "assetId": "deductible_eur", "count": 1200 },
+        { "assetId": "insurance_reserve_eur", "count": 12000 },
+        { "assetId": "fraud_risk_score", "count": 0.35 },
+        { "assetId": "fleet_financing_apr", "count": 0.08 },
+        { "assetId": "residual_value_score", "count": 0.45 },
+        { "assetId": "retail_channel_score", "count": 0.35 },
+        { "assetId": "corporate_channel_score", "count": 0.1 },
+        { "assetId": "delivery_channel_score", "count": 0.05 },
+        { "assetId": "compliance_score", "count": 0.55 },
+        { "assetId": "reputation_score", "count": 0.45 },
+        { "assetId": "booking_system_enabled", "count": 0 },
+        { "assetId": "insurance_eur_per_day_base", "count": 7 }
+      ],
+      "staff": [
+        { "roleId": "ops_staff", "fte": 2 },
+        { "roleId": "customer_support_staff", "fte": 1 },
+        { "roleId": "corporate_sales_staff", "fte": 0 },
+        { "roleId": "logistics_staff", "fte": 0 }
+      ],
+      "unlockedProducts": ["economy_rental_day_unit"]
+    }
+  ]
+}

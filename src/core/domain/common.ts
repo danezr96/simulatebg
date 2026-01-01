@@ -38,6 +38,7 @@ export type BotId = Id<"BotId">;
 export type ProgramId = Id<"ProgramId">;
 export type UpgradeId = Id<"UpgradeId">;
 export type CompanyUpgradeId = Id<"CompanyUpgradeId">;
+export type AcquisitionOfferId = Id<"AcquisitionOfferId">;
 
 // ---- Time primitives ----
 /** ISO timestamp string (timestamptz). */

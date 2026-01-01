@@ -951,6 +951,86 @@ export type Database = {
         ];
       };
 
+      acquisition_offers: {
+        Row: {
+          id: string;
+          world_id: string;
+          company_id: string;
+          buyer_holding_id: string;
+          seller_holding_id: string;
+          status: string;
+          offer_price: number;
+          currency: string;
+          message: string | null;
+          turn: string;
+          last_action: string;
+          counter_count: number;
+          expires_year: number | null;
+          expires_week: number | null;
+          history: Json;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          world_id: string;
+          company_id: string;
+          buyer_holding_id: string;
+          seller_holding_id: string;
+          status?: string;
+          offer_price: number;
+          currency?: string;
+          message?: string | null;
+          turn?: string;
+          last_action?: string;
+          counter_count?: number;
+          expires_year?: number | null;
+          expires_week?: number | null;
+          history?: Json;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          status?: string;
+          offer_price?: number;
+          currency?: string;
+          message?: string | null;
+          turn?: string;
+          last_action?: string;
+          counter_count?: number;
+          expires_year?: number | null;
+          expires_week?: number | null;
+          history?: Json;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "acquisition_offers_world_id_fkey";
+            columns: ["world_id"];
+            referencedRelation: "worlds";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "acquisition_offers_company_id_fkey";
+            columns: ["company_id"];
+            referencedRelation: "companies";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "acquisition_offers_buyer_holding_id_fkey";
+            columns: ["buyer_holding_id"];
+            referencedRelation: "holdings";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "acquisition_offers_seller_holding_id_fkey";
+            columns: ["seller_holding_id"];
+            referencedRelation: "holdings";
+            referencedColumns: ["id"];
+          }
+        ];
+      };
+
       /* =========================
        * PROGRAMS & UPGRADES
        * ========================= */

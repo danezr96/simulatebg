@@ -36,6 +36,7 @@ begin
         'company_programs',
         'niche_upgrades',
         'company_upgrades',
+        'acquisition_offers',
         'loans',
         'properties',
         'investments',
@@ -103,6 +104,7 @@ alter table holding_decisions enable row level security;
 alter table company_programs enable row level security;
 alter table niche_upgrades enable row level security;
 alter table company_upgrades enable row level security;
+alter table acquisition_offers enable row level security;
 
 alter table loans enable row level security;
 alter table properties enable row level security;
@@ -192,6 +194,25 @@ on niche_upgrades for select
 to authenticated
 using (true);
 
+create policy "read_acquisition_offers"
+on acquisition_offers for select
+to authenticated
+using (
+  exists (
+    select 1
+    from public.holdings h
+    where h.id = acquisition_offers.buyer_holding_id
+      and h.player_id = public.current_player_id()
+  )
+  or
+  exists (
+    select 1
+    from public.holdings h
+    where h.id = acquisition_offers.seller_holding_id
+      and h.player_id = public.current_player_id()
+  )
+);
+
 create policy "read_skills"
 on skills for select
 to authenticated
@@ -262,6 +283,12 @@ with check (true);
 
 create policy "service_role_company_upgrades"
 on company_upgrades for all
+to service_role
+using (true)
+with check (true);
+
+create policy "service_role_acquisition_offers"
+on acquisition_offers for all
 to service_role
 using (true)
 with check (true);
@@ -583,6 +610,42 @@ with check (
     select 1 from v_user_companies vc
     where vc.company_id = company_upgrades.company_id
       and vc.user_id = auth.uid()
+  )
+);
+
+-- ============================================================
+-- ACQUISITIONS
+-- ============================================================
+
+create policy "acquisition_offers_buyer_insert"
+on acquisition_offers for insert
+to authenticated
+with check (
+  exists (
+    select 1
+    from public.holdings h
+    where h.id = acquisition_offers.buyer_holding_id
+      and h.player_id = public.current_player_id()
+  )
+);
+
+create policy "acquisition_offers_buyer_seller_update"
+on acquisition_offers for update
+to authenticated
+using (
+  exists (
+    select 1
+    from public.holdings h
+    where h.id in (acquisition_offers.buyer_holding_id, acquisition_offers.seller_holding_id)
+      and h.player_id = public.current_player_id()
+  )
+)
+with check (
+  exists (
+    select 1
+    from public.holdings h
+    where h.id in (acquisition_offers.buyer_holding_id, acquisition_offers.seller_holding_id)
+      and h.player_id = public.current_player_id()
   )
 );
 

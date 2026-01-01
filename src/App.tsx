@@ -6,11 +6,12 @@ import AuthPage from "./ui/pages/AuthPage";
 import ActivatePage from "./ui/pages/ActivatePage";
 import WorldSelectPage from "./ui/pages/WorldSelectPage";
 import GamePage from "./ui/pages/GamePage";
+import DecisionWizardPage from "./ui/pages/DecisionWizardPage";
+import DecisionsPanel from "./ui/panels/DecisionsPanel";
 
 import OverviewPanel from "./ui/panels/OverviewPanel";
 import CompaniesPanel from "./ui/panels/CompaniesPanel";
 import CompanyDetailPanel from "./ui/panels/CompanyDetailPanel";
-import DecisionsPanel from "./ui/panels/DecisionsPanel";
 import MarketPanel from "./ui/panels/MarketPanel";
 import FinancePanel from "./ui/panels/FinancePanel";
 import SocialPanel from "./ui/panels/SocialPanel";
@@ -62,6 +63,7 @@ export default function App() {
           <Route path="companies" element={<CompaniesPanel />} />
           <Route path="companies/:companyId" element={<CompanyDetailPanel />} />
           <Route path="decisions" element={<DecisionsPanel />} />
+          <Route path="decisions/wizard" element={<DecisionWizardPage />} />
           <Route path="market" element={<MarketPanel />} />
           <Route path="finance" element={<FinancePanel />} />
           <Route path="social" element={<SocialPanel />} />

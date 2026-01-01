@@ -11,6 +11,17 @@ create extension if not exists pgcrypto;
 drop trigger if exists trg_player_friends_updated on public.player_friends;
 drop trigger if exists trg_player_settings_updated on public.player_settings;
 drop trigger if exists trg_holding_policies_updated on public.holding_policies;
+do $$
+begin
+  if exists (
+    select 1
+    from information_schema.tables
+    where table_schema = 'public'
+      and table_name = 'acquisition_offers'
+  ) then
+    execute 'drop trigger if exists trg_acquisition_offers_updated on public.acquisition_offers';
+  end if;
+end $$;
 
 -- ============================================================
 -- Helpers
@@ -406,6 +417,43 @@ create table if not exists public.holding_decisions (
   payload jsonb not null,
   created_at timestamptz not null default now()
 );
+
+-- ============================================================
+-- ACQUISITIONS
+-- ============================================================
+
+create table if not exists public.acquisition_offers (
+  id uuid primary key default gen_random_uuid(),
+  world_id uuid not null references public.worlds(id) on delete cascade,
+  company_id uuid not null references public.companies(id) on delete cascade,
+  buyer_holding_id uuid not null references public.holdings(id) on delete cascade,
+  seller_holding_id uuid not null references public.holdings(id) on delete cascade,
+
+  status text not null default 'OPEN',
+  offer_price numeric(18,2) not null,
+  currency text not null default 'EUR',
+  message text,
+
+  turn text not null default 'SELLER',
+  last_action text not null default 'BUYER',
+  counter_count int not null default 0,
+
+  expires_year int,
+  expires_week int,
+  history jsonb not null default '[]'::jsonb,
+
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create index if not exists idx_acquisition_offers_world on public.acquisition_offers(world_id);
+create index if not exists idx_acquisition_offers_company on public.acquisition_offers(company_id);
+create index if not exists idx_acquisition_offers_buyer on public.acquisition_offers(buyer_holding_id);
+create index if not exists idx_acquisition_offers_seller on public.acquisition_offers(seller_holding_id);
+
+create trigger trg_acquisition_offers_updated
+before update on public.acquisition_offers
+for each row execute function public.set_updated_at();
 
 -- ============================================================
 -- PROGRAMS & UPGRADES

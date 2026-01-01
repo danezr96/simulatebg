@@ -1,0 +1,2858 @@
+{
+  "sector": {
+    "id": "BUILD",
+    "name": "Construction",
+    "description": "Contracting and project delivery shaped by crews, materials, and schedules."
+  },
+  "niches": [
+    {
+      "id": "commercialBuild",
+      "code": "BUILD_COMMERCIAL",
+      "name": "Commercial Build",
+      "description": "Large commercial projects with bid-driven backlogs."
+    },
+    {
+      "id": "electrical",
+      "code": "BUILD_ELECTRICAL",
+      "name": "Electrical",
+      "description": "Electrical installs and upgrades across project types."
+    },
+    {
+      "id": "engineering",
+      "code": "BUILD_ENGINEERING",
+      "name": "Engineering",
+      "description": "Design-led engineering and oversight services."
+    },
+    {
+      "id": "newBuilds",
+      "code": "BUILD_NEWBUILDS",
+      "name": "New Builds",
+      "description": "Greenfield construction with long schedules and financing risk."
+    },
+    {
+      "id": "plumbing",
+      "code": "BUILD_PLUMBING",
+      "name": "Plumbing",
+      "description": "Plumbing installs, repairs, and system retrofits."
+    },
+    {
+      "id": "renovation",
+      "code": "BUILD_RENOVATION",
+      "name": "Renovation",
+      "description": "Remodels and upgrades with change-order heavy scopes."
+    }
+  ],
+  "products": [
+    {
+      "nicheId": "commercialBuild",
+      "sku": "warehouse_shell_project_unit",
+      "name": "Warehouse Shell Project",
+      "unit": "unit",
+      "priceMin": 1500000,
+      "priceMax": 20000000,
+      "cogsPercent": 0.88,
+      "capacityDrivers": ["crew_fte", "equipment_units", "subcontractors"],
+      "base_contract_value_eur_range": { "min": 1500000, "max": 20000000 },
+      "gross_margin_pct_range": { "min": 0.08, "max": 0.16 },
+      "typical_duration_ticks_range": { "min": 16, "max": 52 },
+      "payment_terms_days_range": { "min": 45, "max": 90 },
+      "retention_pct_range": { "min": 0.06, "max": 0.1 },
+      "change_order_rate_range": { "min": 0.05, "max": 0.12 },
+      "bid_win_rate_modifier": 0.85,
+      "cost_model": {
+        "labor_hours_per_project_range": { "min": 1600, "max": 12000 },
+        "materials_cost_pct_range": { "min": 0.4, "max": 0.55 },
+        "subcontractor_cost_pct_range": { "min": 0.15, "max": 0.3 },
+        "equipment_days_per_project_range": { "min": 20, "max": 120 },
+        "mobilization_cost_eur_range": { "min": 25000, "max": 200000 },
+        "contingency_pct_range": { "min": 0.06, "max": 0.12 }
+      },
+      "risk_model": {
+        "delay_probability_range": { "min": 0.2, "max": 0.45 },
+        "delay_penalty_pct_range": { "min": 0.02, "max": 0.08 },
+        "safety_incident_rate_range": { "min": 0.012, "max": 0.04 },
+        "rework_pct_range": { "min": 0.02, "max": 0.06 }
+      },
+      "requirements": {
+        "crew_fte_min": 14,
+        "supervisor_fte_min": 2,
+        "estimator_fte_min": 1,
+        "equipment_requirements": ["excavator_access", "crane_access"],
+        "compliance_score_min": 0.55
+      },
+      "notes": "Large shell builds with heavy equipment and schedule risk."
+    },
+    {
+      "nicheId": "commercialBuild",
+      "sku": "office_fitout_project_unit",
+      "name": "Office Fit-Out Project",
+      "unit": "unit",
+      "priceMin": 250000,
+      "priceMax": 6000000,
+      "cogsPercent": 0.85,
+      "capacityDrivers": ["crew_fte", "equipment_units", "subcontractors"],
+      "base_contract_value_eur_range": { "min": 250000, "max": 6000000 },
+      "gross_margin_pct_range": { "min": 0.1, "max": 0.2 },
+      "typical_duration_ticks_range": { "min": 8, "max": 32 },
+      "payment_terms_days_range": { "min": 30, "max": 60 },
+      "retention_pct_range": { "min": 0.05, "max": 0.08 },
+      "change_order_rate_range": { "min": 0.08, "max": 0.2 },
+      "bid_win_rate_modifier": 0.95,
+      "cost_model": {
+        "labor_hours_per_project_range": { "min": 400, "max": 3000 },
+        "materials_cost_pct_range": { "min": 0.25, "max": 0.45 },
+        "subcontractor_cost_pct_range": { "min": 0.2, "max": 0.35 },
+        "equipment_days_per_project_range": { "min": 8, "max": 45 },
+        "mobilization_cost_eur_range": { "min": 8000, "max": 60000 },
+        "contingency_pct_range": { "min": 0.05, "max": 0.1 }
+      },
+      "risk_model": {
+        "delay_probability_range": { "min": 0.15, "max": 0.35 },
+        "delay_penalty_pct_range": { "min": 0.015, "max": 0.06 },
+        "safety_incident_rate_range": { "min": 0.008, "max": 0.03 },
+        "rework_pct_range": { "min": 0.03, "max": 0.08 }
+      },
+      "requirements": {
+        "crew_fte_min": 10,
+        "supervisor_fte_min": 2,
+        "estimator_fte_min": 1,
+        "equipment_requirements": ["scissor_lift_access"],
+        "reputation_score_min": 0.55
+      },
+      "notes": "High-change interior work gated by safety compliance."
+    },
+    {
+      "nicheId": "commercialBuild",
+      "sku": "retail_unit_project_unit",
+      "name": "Retail Unit Project",
+      "unit": "unit",
+      "priceMin": 150000,
+      "priceMax": 3000000,
+      "cogsPercent": 0.84,
+      "capacityDrivers": ["crew_fte", "equipment_units", "subcontractors"],
+      "base_contract_value_eur_range": { "min": 150000, "max": 3000000 },
+      "gross_margin_pct_range": { "min": 0.1, "max": 0.22 },
+      "typical_duration_ticks_range": { "min": 6, "max": 24 },
+      "payment_terms_days_range": { "min": 30, "max": 60 },
+      "retention_pct_range": { "min": 0.05, "max": 0.08 },
+      "change_order_rate_range": { "min": 0.1, "max": 0.22 },
+      "bid_win_rate_modifier": 1.1,
+      "cost_model": {
+        "labor_hours_per_project_range": { "min": 250, "max": 1800 },
+        "materials_cost_pct_range": { "min": 0.2, "max": 0.4 },
+        "subcontractor_cost_pct_range": { "min": 0.15, "max": 0.3 },
+        "equipment_days_per_project_range": { "min": 6, "max": 30 },
+        "mobilization_cost_eur_range": { "min": 5000, "max": 40000 },
+        "contingency_pct_range": { "min": 0.04, "max": 0.1 }
+      },
+      "risk_model": {
+        "delay_probability_range": { "min": 0.12, "max": 0.3 },
+        "delay_penalty_pct_range": { "min": 0.015, "max": 0.05 },
+        "safety_incident_rate_range": { "min": 0.008, "max": 0.025 },
+        "rework_pct_range": { "min": 0.03, "max": 0.07 }
+      },
+      "requirements": {
+        "crew_fte_min": 6,
+        "supervisor_fte_min": 1,
+        "estimator_fte_min": 1,
+        "equipment_requirements": ["scissor_lift_access"],
+        "reputation_score_min": 0.45
+      },
+      "notes": "Retail fit-outs with high change-order exposure."
+    },
+    {
+      "nicheId": "commercialBuild",
+      "sku": "industrial_extension_project_unit",
+      "name": "Industrial Extension Project",
+      "unit": "unit",
+      "priceMin": 800000,
+      "priceMax": 12000000,
+      "cogsPercent": 0.88,
+      "capacityDrivers": ["crew_fte", "equipment_units", "subcontractors"],
+      "base_contract_value_eur_range": { "min": 800000, "max": 12000000 },
+      "gross_margin_pct_range": { "min": 0.08, "max": 0.16 },
+      "typical_duration_ticks_range": { "min": 12, "max": 48 },
+      "payment_terms_days_range": { "min": 45, "max": 90 },
+      "retention_pct_range": { "min": 0.06, "max": 0.1 },
+      "change_order_rate_range": { "min": 0.08, "max": 0.18 },
+      "bid_win_rate_modifier": 0.9,
+      "cost_model": {
+        "labor_hours_per_project_range": { "min": 800, "max": 7000 },
+        "materials_cost_pct_range": { "min": 0.35, "max": 0.55 },
+        "subcontractor_cost_pct_range": { "min": 0.2, "max": 0.35 },
+        "equipment_days_per_project_range": { "min": 12, "max": 70 },
+        "mobilization_cost_eur_range": { "min": 15000, "max": 120000 },
+        "contingency_pct_range": { "min": 0.05, "max": 0.12 }
+      },
+      "risk_model": {
+        "delay_probability_range": { "min": 0.18, "max": 0.4 },
+        "delay_penalty_pct_range": { "min": 0.02, "max": 0.08 },
+        "safety_incident_rate_range": { "min": 0.01, "max": 0.035 },
+        "rework_pct_range": { "min": 0.02, "max": 0.06 }
+      },
+      "requirements": {
+        "crew_fte_min": 12,
+        "supervisor_fte_min": 2,
+        "estimator_fte_min": 1,
+        "equipment_requirements": ["forklift_access", "excavator_access"],
+        "compliance_score_min": 0.6
+      },
+      "notes": "Industrial expansions with compliance-heavy scheduling."
+    },
+    {
+      "nicheId": "commercialBuild",
+      "sku": "design_build_contract_unit",
+      "name": "Design-Build Contract",
+      "unit": "unit",
+      "priceMin": 2000000,
+      "priceMax": 35000000,
+      "cogsPercent": 0.86,
+      "capacityDrivers": ["crew_fte", "equipment_units", "subcontractors"],
+      "base_contract_value_eur_range": { "min": 2000000, "max": 35000000 },
+      "gross_margin_pct_range": { "min": 0.1, "max": 0.18 },
+      "typical_duration_ticks_range": { "min": 20, "max": 80 },
+      "payment_terms_days_range": { "min": 60, "max": 120 },
+      "retention_pct_range": { "min": 0.07, "max": 0.1 },
+      "change_order_rate_range": { "min": 0.12, "max": 0.3 },
+      "bid_win_rate_modifier": 0.8,
+      "cost_model": {
+        "labor_hours_per_project_range": { "min": 2000, "max": 15000 },
+        "materials_cost_pct_range": { "min": 0.3, "max": 0.55 },
+        "subcontractor_cost_pct_range": { "min": 0.2, "max": 0.35 },
+        "equipment_days_per_project_range": { "min": 20, "max": 120 },
+        "mobilization_cost_eur_range": { "min": 30000, "max": 250000 },
+        "contingency_pct_range": { "min": 0.06, "max": 0.14 }
+      },
+      "risk_model": {
+        "delay_probability_range": { "min": 0.25, "max": 0.5 },
+        "delay_penalty_pct_range": { "min": 0.03, "max": 0.1 },
+        "safety_incident_rate_range": { "min": 0.012, "max": 0.04 },
+        "rework_pct_range": { "min": 0.04, "max": 0.1 }
+      },
+      "requirements": {
+        "crew_fte_min": 16,
+        "supervisor_fte_min": 3,
+        "estimator_fte_min": 2,
+        "equipment_requirements": ["crane_access", "site_office_setup"],
+        "compliance_score_min": 0.65,
+        "reputation_score_min": 0.65
+      },
+      "notes": "Full-scope contracts with design liability and long cash cycles."
+    },
+    {
+      "nicheId": "commercialBuild",
+      "sku": "maintenance_repair_retain_unit",
+      "name": "Maintenance & Repair Retainer",
+      "unit": "unit",
+      "priceMin": 8000,
+      "priceMax": 80000,
+      "cogsPercent": 0.82,
+      "capacityDrivers": ["crew_fte", "service_van_access"],
+      "base_contract_value_eur_range": { "min": 8000, "max": 80000 },
+      "gross_margin_pct_range": { "min": 0.12, "max": 0.25 },
+      "typical_duration_ticks_range": { "min": 4, "max": 12 },
+      "payment_terms_days_range": { "min": 30, "max": 45 },
+      "retention_pct_range": { "min": 0.05, "max": 0.08 },
+      "change_order_rate_range": { "min": 0.02, "max": 0.08 },
+      "bid_win_rate_modifier": 1.2,
+      "cost_model": {
+        "labor_hours_per_project_range": { "min": 60, "max": 400 },
+        "materials_cost_pct_range": { "min": 0.1, "max": 0.25 },
+        "subcontractor_cost_pct_range": { "min": 0.05, "max": 0.15 },
+        "equipment_days_per_project_range": { "min": 2, "max": 8 },
+        "mobilization_cost_eur_range": { "min": 1000, "max": 8000 },
+        "contingency_pct_range": { "min": 0.02, "max": 0.06 }
+      },
+      "risk_model": {
+        "delay_probability_range": { "min": 0.05, "max": 0.15 },
+        "delay_penalty_pct_range": { "min": 0.005, "max": 0.03 },
+        "safety_incident_rate_range": { "min": 0.002, "max": 0.01 },
+        "rework_pct_range": { "min": 0.01, "max": 0.04 }
+      },
+      "requirements": {
+        "crew_fte_min": 4,
+        "supervisor_fte_min": 0.5,
+        "estimator_fte_min": 0,
+        "equipment_requirements": ["service_van_access"],
+        "compliance_score_min": 0.45
+      },
+      "notes": "Recurring maintenance contracts that stabilize cashflow."
+    },
+    {
+      "nicheId": "electrical",
+      "sku": "residential_wiring_job_unit",
+      "name": "Residential Wiring Job",
+      "unit": "unit",
+      "priceMin": 400,
+      "priceMax": 3500,
+      "cogsPercent": 0.78,
+      "capacityDrivers": ["electricians_fte", "materials_fill_rate"],
+      "base_price_eur_range": { "min": 400, "max": 3500 },
+      "gross_margin_pct_range": { "min": 0.12, "max": 0.28 },
+      "typical_duration_ticks_range": { "min": 1, "max": 3 },
+      "payment_terms_days_range": { "min": 7, "max": 30 },
+      "retention_pct_range": { "min": 0, "max": 0.02 },
+      "cost_model": {
+        "labor_hours_per_job_range": { "min": 6, "max": 40 },
+        "material_cost_eur_per_job_range": { "min": 80, "max": 900 },
+        "copper_sensitivity_score": 0.35,
+        "mobilization_cost_eur_range": { "min": 0, "max": 150 }
+      },
+      "quality_model": {
+        "inspection_required": false,
+        "inspection_fail_probability_range": { "min": 0.01, "max": 0.05 },
+        "callback_probability_range": { "min": 0.03, "max": 0.08 },
+        "callback_cost_pct_range": { "min": 0.05, "max": 0.12 }
+      },
+      "demand_model": {
+        "base_demand_weight": 0.38,
+        "seasonality_key": "weather_construction_seasonality",
+        "price_elasticity": 0.55,
+        "urgency_sensitivity": 0.35
+      },
+      "requirements": {
+        "electricians_fte_min": 1,
+        "master_electrician_fte_min": 0,
+        "scheduler_fte_min": 0,
+        "certification_level_min": 0
+      },
+      "notes": "Small residential wiring jobs with fast turnaround."
+    },
+    {
+      "nicheId": "electrical",
+      "sku": "commercial_fitout_electrical_job_unit",
+      "name": "Commercial Fit-Out Electrical Job",
+      "unit": "unit",
+      "priceMin": 8000,
+      "priceMax": 250000,
+      "cogsPercent": 0.85,
+      "capacityDrivers": ["electricians_fte", "master_electrician_fte", "scheduler_fte"],
+      "base_price_eur_range": { "min": 8000, "max": 250000 },
+      "gross_margin_pct_range": { "min": 0.1, "max": 0.2 },
+      "typical_duration_ticks_range": { "min": 2, "max": 8 },
+      "payment_terms_days_range": { "min": 30, "max": 60 },
+      "retention_pct_range": { "min": 0.03, "max": 0.07 },
+      "cost_model": {
+        "labor_hours_per_job_range": { "min": 80, "max": 1200 },
+        "material_cost_eur_per_job_range": { "min": 1500, "max": 60000 },
+        "copper_sensitivity_score": 0.6,
+        "subcontractor_pct_range": { "min": 0.05, "max": 0.2 },
+        "mobilization_cost_eur_range": { "min": 400, "max": 5000 }
+      },
+      "quality_model": {
+        "inspection_required": true,
+        "inspection_fail_probability_range": { "min": 0.04, "max": 0.12 },
+        "callback_probability_range": { "min": 0.03, "max": 0.08 },
+        "callback_cost_pct_range": { "min": 0.04, "max": 0.1 }
+      },
+      "demand_model": {
+        "base_demand_weight": 0.16,
+        "seasonality_key": "weather_construction_seasonality",
+        "price_elasticity": 0.4,
+        "urgency_sensitivity": 0.3
+      },
+      "requirements": {
+        "electricians_fte_min": 6,
+        "master_electrician_fte_min": 1,
+        "scheduler_fte_min": 1,
+        "certification_level_min": 2,
+        "compliance_score_min": 0.6,
+        "reputation_score_min": 0.55
+      },
+      "notes": "Commercial fit-out work with compliance and inspection gates."
+    },
+    {
+      "nicheId": "electrical",
+      "sku": "industrial_panel_upgrade_job_unit",
+      "name": "Industrial Panel Upgrade Job",
+      "unit": "unit",
+      "priceMin": 6000,
+      "priceMax": 180000,
+      "cogsPercent": 0.86,
+      "capacityDrivers": ["electricians_fte", "master_electrician_fte", "materials_fill_rate"],
+      "base_price_eur_range": { "min": 6000, "max": 180000 },
+      "gross_margin_pct_range": { "min": 0.1, "max": 0.18 },
+      "typical_duration_ticks_range": { "min": 2, "max": 7 },
+      "payment_terms_days_range": { "min": 30, "max": 75 },
+      "retention_pct_range": { "min": 0.04, "max": 0.08 },
+      "cost_model": {
+        "labor_hours_per_job_range": { "min": 60, "max": 900 },
+        "material_cost_eur_per_job_range": { "min": 1200, "max": 50000 },
+        "copper_sensitivity_score": 0.65,
+        "subcontractor_pct_range": { "min": 0.05, "max": 0.2 },
+        "mobilization_cost_eur_range": { "min": 300, "max": 4000 }
+      },
+      "quality_model": {
+        "inspection_required": true,
+        "inspection_fail_probability_range": { "min": 0.05, "max": 0.14 },
+        "callback_probability_range": { "min": 0.03, "max": 0.07 },
+        "callback_cost_pct_range": { "min": 0.05, "max": 0.12 }
+      },
+      "demand_model": {
+        "base_demand_weight": 0.14,
+        "seasonality_key": "weather_construction_seasonality",
+        "price_elasticity": 0.35,
+        "urgency_sensitivity": 0.25
+      },
+      "requirements": {
+        "electricians_fte_min": 5,
+        "master_electrician_fte_min": 1,
+        "scheduler_fte_min": 1,
+        "certification_level_min": 2,
+        "compliance_score_min": 0.7
+      },
+      "notes": "Industrial upgrades requiring testing and compliance."
+    },
+    {
+      "nicheId": "electrical",
+      "sku": "solar_inverter_install_job_unit",
+      "name": "Solar Inverter Install Job",
+      "unit": "unit",
+      "priceMin": 2500,
+      "priceMax": 25000,
+      "cogsPercent": 0.83,
+      "capacityDrivers": ["electricians_fte", "master_electrician_fte", "materials_fill_rate"],
+      "base_price_eur_range": { "min": 2500, "max": 25000 },
+      "gross_margin_pct_range": { "min": 0.12, "max": 0.22 },
+      "typical_duration_ticks_range": { "min": 1, "max": 4 },
+      "payment_terms_days_range": { "min": 20, "max": 45 },
+      "retention_pct_range": { "min": 0.02, "max": 0.06 },
+      "cost_model": {
+        "labor_hours_per_job_range": { "min": 12, "max": 80 },
+        "material_cost_eur_per_job_range": { "min": 800, "max": 12000 },
+        "copper_sensitivity_score": 0.5,
+        "mobilization_cost_eur_range": { "min": 100, "max": 900 }
+      },
+      "quality_model": {
+        "inspection_required": true,
+        "inspection_fail_probability_range": { "min": 0.04, "max": 0.1 },
+        "callback_probability_range": { "min": 0.03, "max": 0.08 },
+        "callback_cost_pct_range": { "min": 0.04, "max": 0.1 }
+      },
+      "demand_model": {
+        "base_demand_weight": 0.12,
+        "seasonality_key": "weather_construction_seasonality",
+        "price_elasticity": 0.4,
+        "urgency_sensitivity": 0.35
+      },
+      "requirements": {
+        "electricians_fte_min": 3,
+        "master_electrician_fte_min": 1,
+        "scheduler_fte_min": 0,
+        "certification_level_min": 1,
+        "compliance_score_min": 0.6,
+        "reputation_score_min": 0.55
+      },
+      "notes": "Solar inverter installs gated by safety certification."
+    },
+    {
+      "nicheId": "electrical",
+      "sku": "emergency_callout_job_unit",
+      "name": "Emergency Callout Job",
+      "unit": "unit",
+      "priceMin": 120,
+      "priceMax": 950,
+      "cogsPercent": 0.7,
+      "capacityDrivers": ["electricians_fte", "overtime_enabled"],
+      "base_price_eur_range": { "min": 120, "max": 950 },
+      "gross_margin_pct_range": { "min": 0.2, "max": 0.4 },
+      "typical_duration_ticks_range": { "min": 1, "max": 2 },
+      "payment_terms_days_range": { "min": 0, "max": 14 },
+      "retention_pct_range": { "min": 0, "max": 0.01 },
+      "cost_model": {
+        "labor_hours_per_job_range": { "min": 2, "max": 10 },
+        "material_cost_eur_per_job_range": { "min": 30, "max": 300 },
+        "copper_sensitivity_score": 0.2,
+        "mobilization_cost_eur_range": { "min": 0, "max": 120 }
+      },
+      "quality_model": {
+        "inspection_required": false,
+        "inspection_fail_probability_range": { "min": 0.01, "max": 0.04 },
+        "callback_probability_range": { "min": 0.08, "max": 0.18 },
+        "callback_cost_pct_range": { "min": 0.08, "max": 0.18 }
+      },
+      "demand_model": {
+        "base_demand_weight": 0.22,
+        "seasonality_key": "winter_emergency_seasonality",
+        "price_elasticity": 0.3,
+        "urgency_sensitivity": 0.9
+      },
+      "requirements": {
+        "electricians_fte_min": 2,
+        "master_electrician_fte_min": 0,
+        "scheduler_fte_min": 0,
+        "certification_level_min": 0,
+        "reputation_score_min": 0.45
+      },
+      "notes": "Emergency callouts with overtime and callback risk."
+    },
+    {
+      "nicheId": "electrical",
+      "sku": "annual_maintenance_contract_unit",
+      "name": "Annual Maintenance Contract",
+      "unit": "unit",
+      "priceMin": 300,
+      "priceMax": 6000,
+      "cogsPercent": 0.78,
+      "capacityDrivers": ["electricians_fte", "scheduler_fte", "inspection_pass_rate"],
+      "base_price_eur_range": { "min": 300, "max": 6000 },
+      "gross_margin_pct_range": { "min": 0.15, "max": 0.3 },
+      "typical_duration_ticks_range": { "min": 4, "max": 12 },
+      "payment_terms_days_range": { "min": 15, "max": 45 },
+      "retention_pct_range": { "min": 0, "max": 0.04 },
+      "cost_model": {
+        "labor_hours_per_job_range": { "min": 4, "max": 28 },
+        "material_cost_eur_per_job_range": { "min": 50, "max": 800 },
+        "copper_sensitivity_score": 0.25,
+        "mobilization_cost_eur_range": { "min": 0, "max": 100 }
+      },
+      "quality_model": {
+        "inspection_required": true,
+        "inspection_fail_probability_range": { "min": 0.02, "max": 0.08 },
+        "callback_probability_range": { "min": 0.02, "max": 0.06 },
+        "callback_cost_pct_range": { "min": 0.03, "max": 0.08 }
+      },
+      "demand_model": {
+        "base_demand_weight": 0.18,
+        "seasonality_key": "weather_construction_seasonality",
+        "price_elasticity": 0.35,
+        "urgency_sensitivity": 0.2
+      },
+      "requirements": {
+        "electricians_fte_min": 3,
+        "master_electrician_fte_min": 1,
+        "scheduler_fte_min": 1,
+        "certification_level_min": 1,
+        "compliance_score_min": 0.6,
+        "reputation_score_min": 0.6
+      },
+      "notes": "Recurring maintenance contracts with inspection gate."
+    }
+    ,
+    {
+      "nicheId": "engineering",
+      "sku": "structural_design_package_unit",
+      "name": "Structural Design Package",
+      "unit": "unit",
+      "priceMin": 8000,
+      "priceMax": 250000,
+      "cogsPercent": 0.6,
+      "capacityDrivers": ["engineers_fte", "senior_engineers_fte", "project_managers_fte"],
+      "pricing_model": {
+        "model_type": "fixed_fee",
+        "base_fee_eur_range": { "min": 8000, "max": 250000 },
+        "hourly_rate_eur_range": { "min": 90, "max": 150 },
+        "typical_billable_hours_range": { "min": 80, "max": 1200 }
+      },
+      "gross_margin_pct_range": { "min": 0.3, "max": 0.55 },
+      "typical_duration_ticks_range": { "min": 3, "max": 12 },
+      "payment_terms_days_range": { "min": 30, "max": 75 },
+      "retention_pct_range": { "min": 0.03, "max": 0.08 },
+      "cost_model": {
+        "staff_hours_by_role_range": {
+          "engineer_hours_range": { "min": 120, "max": 1400 },
+          "senior_engineer_hours_range": { "min": 40, "max": 400 },
+          "pm_hours_range": { "min": 20, "max": 160 },
+          "drafter_hours_range": { "min": 40, "max": 320 }
+        },
+        "software_cost_eur_per_tick_range": { "min": 200, "max": 1200 },
+        "insurance_cost_pct_of_revenue_range": { "min": 0.02, "max": 0.05 },
+        "subcontractor_cost_pct_range": { "min": 0.02, "max": 0.08 }
+      },
+      "liability_model": {
+        "revision_rounds_range": { "min": 1, "max": 4 },
+        "error_probability_range": { "min": 0.04, "max": 0.12 },
+        "liability_claim_probability_range": { "min": 0.002, "max": 0.01 },
+        "claim_severity_eur_range": { "min": 25000, "max": 750000 },
+        "rework_hours_pct_range": { "min": 0.05, "max": 0.18 }
+      },
+      "demand_model": {
+        "base_demand_weight": 0.2,
+        "seasonality_key": "public_tender_cycle_seasonality",
+        "price_elasticity": 0.35,
+        "reputation_sensitivity": 0.7
+      },
+      "requirements": {
+        "engineers_fte_min": 2,
+        "senior_engineers_fte_min": 1,
+        "project_manager_fte_min": 0,
+        "bim_specialist_fte_min": 0,
+        "certification_level_min": 0,
+        "reputation_score_min": 0.5
+      },
+      "notes": "Core structural design with high QA and liability exposure."
+    },
+    {
+      "nicheId": "engineering",
+      "sku": "mep_design_package_unit",
+      "name": "MEP Design Package",
+      "unit": "unit",
+      "priceMin": 10000,
+      "priceMax": 300000,
+      "cogsPercent": 0.62,
+      "capacityDrivers": ["engineers_fte", "senior_engineers_fte", "project_managers_fte"],
+      "pricing_model": {
+        "model_type": "mixed",
+        "base_fee_eur_range": { "min": 10000, "max": 300000 },
+        "hourly_rate_eur_range": { "min": 85, "max": 160 },
+        "typical_billable_hours_range": { "min": 140, "max": 1600 }
+      },
+      "gross_margin_pct_range": { "min": 0.28, "max": 0.5 },
+      "typical_duration_ticks_range": { "min": 4, "max": 14 },
+      "payment_terms_days_range": { "min": 30, "max": 75 },
+      "retention_pct_range": { "min": 0.04, "max": 0.08 },
+      "cost_model": {
+        "staff_hours_by_role_range": {
+          "engineer_hours_range": { "min": 180, "max": 1800 },
+          "senior_engineer_hours_range": { "min": 60, "max": 500 },
+          "pm_hours_range": { "min": 30, "max": 220 },
+          "drafter_hours_range": { "min": 60, "max": 400 }
+        },
+        "software_cost_eur_per_tick_range": { "min": 250, "max": 1400 },
+        "insurance_cost_pct_of_revenue_range": { "min": 0.02, "max": 0.06 },
+        "subcontractor_cost_pct_range": { "min": 0.03, "max": 0.1 }
+      },
+      "liability_model": {
+        "revision_rounds_range": { "min": 2, "max": 5 },
+        "error_probability_range": { "min": 0.05, "max": 0.15 },
+        "liability_claim_probability_range": { "min": 0.003, "max": 0.015 },
+        "claim_severity_eur_range": { "min": 30000, "max": 900000 },
+        "rework_hours_pct_range": { "min": 0.06, "max": 0.2 }
+      },
+      "demand_model": {
+        "base_demand_weight": 0.18,
+        "seasonality_key": "public_tender_cycle_seasonality",
+        "price_elasticity": 0.32,
+        "reputation_sensitivity": 0.65
+      },
+      "requirements": {
+        "engineers_fte_min": 3,
+        "senior_engineers_fte_min": 1,
+        "project_manager_fte_min": 1,
+        "bim_specialist_fte_min": 0,
+        "certification_level_min": 1,
+        "compliance_score_min": 0.6
+      },
+      "notes": "Complex MEP design with longer reviews and higher senior load."
+    },
+    {
+      "nicheId": "engineering",
+      "sku": "geotechnical_survey_unit",
+      "name": "Geotechnical Survey",
+      "unit": "unit",
+      "priceMin": 2000,
+      "priceMax": 60000,
+      "cogsPercent": 0.7,
+      "capacityDrivers": ["engineers_fte", "senior_engineers_fte", "subcontractors"],
+      "pricing_model": {
+        "model_type": "fixed_fee",
+        "base_fee_eur_range": { "min": 2000, "max": 60000 },
+        "hourly_rate_eur_range": { "min": 70, "max": 120 },
+        "typical_billable_hours_range": { "min": 20, "max": 300 }
+      },
+      "gross_margin_pct_range": { "min": 0.25, "max": 0.45 },
+      "typical_duration_ticks_range": { "min": 1, "max": 4 },
+      "payment_terms_days_range": { "min": 20, "max": 45 },
+      "retention_pct_range": { "min": 0, "max": 0.03 },
+      "cost_model": {
+        "staff_hours_by_role_range": {
+          "engineer_hours_range": { "min": 20, "max": 160 },
+          "senior_engineer_hours_range": { "min": 10, "max": 120 },
+          "pm_hours_range": { "min": 6, "max": 40 },
+          "drafter_hours_range": { "min": 10, "max": 80 }
+        },
+        "software_cost_eur_per_tick_range": { "min": 100, "max": 700 },
+        "insurance_cost_pct_of_revenue_range": { "min": 0.015, "max": 0.04 },
+        "subcontractor_cost_pct_range": { "min": 0.3, "max": 0.6 }
+      },
+      "liability_model": {
+        "revision_rounds_range": { "min": 1, "max": 3 },
+        "error_probability_range": { "min": 0.03, "max": 0.1 },
+        "liability_claim_probability_range": { "min": 0.001, "max": 0.006 },
+        "claim_severity_eur_range": { "min": 10000, "max": 250000 },
+        "rework_hours_pct_range": { "min": 0.04, "max": 0.12 }
+      },
+      "demand_model": {
+        "base_demand_weight": 0.16,
+        "seasonality_key": "weather_construction_seasonality",
+        "price_elasticity": 0.4,
+        "reputation_sensitivity": 0.5
+      },
+      "requirements": {
+        "engineers_fte_min": 1,
+        "senior_engineers_fte_min": 0,
+        "project_manager_fte_min": 0,
+        "bim_specialist_fte_min": 0,
+        "certification_level_min": 0,
+        "compliance_score_min": 0.55
+      },
+      "notes": "Subcontractor-heavy surveys with lower liability exposure."
+    },
+    {
+      "nicheId": "engineering",
+      "sku": "permitting_and_code_review_unit",
+      "name": "Permitting & Code Review",
+      "unit": "unit",
+      "priceMin": 1500,
+      "priceMax": 45000,
+      "cogsPercent": 0.55,
+      "capacityDrivers": ["engineers_fte", "senior_engineers_fte"],
+      "pricing_model": {
+        "model_type": "tm_hourly",
+        "base_fee_eur_range": { "min": 1500, "max": 45000 },
+        "hourly_rate_eur_range": { "min": 65, "max": 130 },
+        "typical_billable_hours_range": { "min": 10, "max": 200 }
+      },
+      "gross_margin_pct_range": { "min": 0.3, "max": 0.55 },
+      "typical_duration_ticks_range": { "min": 1, "max": 6 },
+      "payment_terms_days_range": { "min": 15, "max": 45 },
+      "retention_pct_range": { "min": 0, "max": 0.04 },
+      "cost_model": {
+        "staff_hours_by_role_range": {
+          "engineer_hours_range": { "min": 12, "max": 160 },
+          "senior_engineer_hours_range": { "min": 8, "max": 120 },
+          "pm_hours_range": { "min": 6, "max": 80 },
+          "drafter_hours_range": { "min": 4, "max": 50 }
+        },
+        "software_cost_eur_per_tick_range": { "min": 80, "max": 600 },
+        "insurance_cost_pct_of_revenue_range": { "min": 0.015, "max": 0.04 },
+        "subcontractor_cost_pct_range": { "min": 0.02, "max": 0.08 }
+      },
+      "liability_model": {
+        "revision_rounds_range": { "min": 1, "max": 3 },
+        "error_probability_range": { "min": 0.02, "max": 0.08 },
+        "liability_claim_probability_range": { "min": 0.001, "max": 0.004 },
+        "claim_severity_eur_range": { "min": 10000, "max": 150000 },
+        "rework_hours_pct_range": { "min": 0.03, "max": 0.1 }
+      },
+      "demand_model": {
+        "base_demand_weight": 0.22,
+        "seasonality_key": "public_tender_cycle_seasonality",
+        "price_elasticity": 0.45,
+        "reputation_sensitivity": 0.55
+      },
+      "requirements": {
+        "engineers_fte_min": 1,
+        "senior_engineers_fte_min": 0,
+        "project_manager_fte_min": 0,
+        "bim_specialist_fte_min": 0,
+        "certification_level_min": 0,
+        "compliance_score_min": 0.5
+      },
+      "notes": "Fast permitting reviews with moderate compliance gating."
+    },
+    {
+      "nicheId": "engineering",
+      "sku": "bim_coordination_service_unit",
+      "name": "BIM Coordination Service",
+      "unit": "unit",
+      "priceMin": 6000,
+      "priceMax": 180000,
+      "cogsPercent": 0.58,
+      "capacityDrivers": ["engineers_fte", "bim_specialists_fte", "project_managers_fte"],
+      "pricing_model": {
+        "model_type": "mixed",
+        "base_fee_eur_range": { "min": 6000, "max": 180000 },
+        "hourly_rate_eur_range": { "min": 80, "max": 150 },
+        "typical_billable_hours_range": { "min": 60, "max": 900 }
+      },
+      "gross_margin_pct_range": { "min": 0.32, "max": 0.6 },
+      "typical_duration_ticks_range": { "min": 2, "max": 10 },
+      "payment_terms_days_range": { "min": 30, "max": 60 },
+      "retention_pct_range": { "min": 0.02, "max": 0.06 },
+      "cost_model": {
+        "staff_hours_by_role_range": {
+          "engineer_hours_range": { "min": 40, "max": 600 },
+          "senior_engineer_hours_range": { "min": 20, "max": 240 },
+          "pm_hours_range": { "min": 20, "max": 180 },
+          "drafter_hours_range": { "min": 50, "max": 500 }
+        },
+        "software_cost_eur_per_tick_range": { "min": 400, "max": 2500 },
+        "insurance_cost_pct_of_revenue_range": { "min": 0.02, "max": 0.05 },
+        "subcontractor_cost_pct_range": { "min": 0.02, "max": 0.08 }
+      },
+      "liability_model": {
+        "revision_rounds_range": { "min": 2, "max": 5 },
+        "error_probability_range": { "min": 0.04, "max": 0.12 },
+        "liability_claim_probability_range": { "min": 0.002, "max": 0.008 },
+        "claim_severity_eur_range": { "min": 20000, "max": 500000 },
+        "rework_hours_pct_range": { "min": 0.05, "max": 0.15 }
+      },
+      "demand_model": {
+        "base_demand_weight": 0.14,
+        "seasonality_key": "public_tender_cycle_seasonality",
+        "price_elasticity": 0.38,
+        "reputation_sensitivity": 0.75
+      },
+      "requirements": {
+        "engineers_fte_min": 1,
+        "senior_engineers_fte_min": 1,
+        "project_manager_fte_min": 0,
+        "bim_specialist_fte_min": 1,
+        "certification_level_min": 1,
+        "compliance_score_min": 0.55,
+        "reputation_score_min": 0.6
+      },
+      "notes": "High-reputation BIM coordination with software dependencies."
+    },
+    {
+      "nicheId": "engineering",
+      "sku": "owner_rep_project_management_unit",
+      "name": "Owner's Rep Project Management",
+      "unit": "unit",
+      "priceMin": 5000,
+      "priceMax": 120000,
+      "cogsPercent": 0.6,
+      "capacityDrivers": ["project_managers_fte", "senior_engineers_fte"],
+      "pricing_model": {
+        "model_type": "mixed",
+        "base_fee_eur_range": { "min": 5000, "max": 120000 },
+        "hourly_rate_eur_range": { "min": 90, "max": 160 },
+        "typical_billable_hours_range": { "min": 40, "max": 300 }
+      },
+      "gross_margin_pct_range": { "min": 0.25, "max": 0.5 },
+      "typical_duration_ticks_range": { "min": 4, "max": 16 },
+      "payment_terms_days_range": { "min": 30, "max": 75 },
+      "retention_pct_range": { "min": 0.05, "max": 0.1 },
+      "cost_model": {
+        "staff_hours_by_role_range": {
+          "engineer_hours_range": { "min": 20, "max": 200 },
+          "senior_engineer_hours_range": { "min": 20, "max": 180 },
+          "pm_hours_range": { "min": 60, "max": 520 },
+          "drafter_hours_range": { "min": 10, "max": 80 }
+        },
+        "software_cost_eur_per_tick_range": { "min": 200, "max": 1400 },
+        "insurance_cost_pct_of_revenue_range": { "min": 0.03, "max": 0.08 },
+        "subcontractor_cost_pct_range": { "min": 0.02, "max": 0.08 }
+      },
+      "liability_model": {
+        "revision_rounds_range": { "min": 2, "max": 6 },
+        "error_probability_range": { "min": 0.05, "max": 0.14 },
+        "liability_claim_probability_range": { "min": 0.004, "max": 0.02 },
+        "claim_severity_eur_range": { "min": 50000, "max": 1200000 },
+        "rework_hours_pct_range": { "min": 0.06, "max": 0.2 }
+      },
+      "demand_model": {
+        "base_demand_weight": 0.1,
+        "seasonality_key": "public_tender_cycle_seasonality",
+        "price_elasticity": 0.28,
+        "reputation_sensitivity": 0.8
+      },
+      "requirements": {
+        "engineers_fte_min": 1,
+        "senior_engineers_fte_min": 1,
+        "project_manager_fte_min": 1,
+        "bim_specialist_fte_min": 0,
+        "certification_level_min": 1,
+        "compliance_score_min": 0.7,
+        "reputation_score_min": 0.65
+      },
+      "notes": "Owner's rep oversight with high governance expectations."
+    }
+    ,
+    {
+      "nicheId": "plumbing",
+      "sku": "residential_repair_visit_job_unit",
+      "name": "Residential Repair Visit",
+      "unit": "unit",
+      "priceMin": 120,
+      "priceMax": 650,
+      "cogsPercent": 0.7,
+      "capacityDrivers": ["plumbers_fte", "parts_fill_rate"],
+      "base_price_eur_range": { "min": 120, "max": 650 },
+      "gross_margin_pct_range": { "min": 0.2, "max": 0.4 },
+      "typical_duration_ticks_range": { "min": 1, "max": 2 },
+      "payment_terms_days_range": { "min": 7, "max": 30 },
+      "retention_pct_range": { "min": 0, "max": 0.01 },
+      "cost_model": {
+        "labor_hours_per_job_range": { "min": 2, "max": 10 },
+        "parts_cost_eur_per_job_range": { "min": 20, "max": 220 },
+        "parts_fill_rate_sensitivity": 0.35,
+        "mobilization_cost_eur_range": { "min": 0, "max": 120 },
+        "overtime_cost_multiplier_range": { "min": 1.1, "max": 1.4 }
+      },
+      "quality_model": {
+        "inspection_required": false,
+        "inspection_fail_probability_range": { "min": 0.01, "max": 0.04 },
+        "callback_probability_range": { "min": 0.05, "max": 0.12 },
+        "callback_cost_pct_range": { "min": 0.08, "max": 0.18 },
+        "water_damage_claim_probability_range": { "min": 0.002, "max": 0.01 },
+        "claim_severity_eur_range": { "min": 2000, "max": 50000 }
+      },
+      "demand_model": {
+        "base_demand_weight": 0.32,
+        "seasonality_key": "weather_construction_seasonality",
+        "price_elasticity": 0.45,
+        "urgency_sensitivity": 0.4,
+        "reputation_sensitivity": 0.35
+      },
+      "requirements": {
+        "plumbers_fte_min": 1,
+        "master_plumber_fte_min": 0,
+        "apprentices_fte_min": 0,
+        "dispatcher_fte_min": 0,
+        "compliance_score_min": 0.45,
+        "reputation_score_min": 0.35
+      },
+      "notes": "High-volume residential fixes with moderate callback risk."
+    },
+    {
+      "nicheId": "plumbing",
+      "sku": "bathroom_installation_job_unit",
+      "name": "Bathroom Installation",
+      "unit": "unit",
+      "priceMin": 2500,
+      "priceMax": 18000,
+      "cogsPercent": 0.72,
+      "capacityDrivers": ["plumbers_fte", "master_plumber_fte", "parts_fill_rate"],
+      "base_price_eur_range": { "min": 2500, "max": 18000 },
+      "gross_margin_pct_range": { "min": 0.18, "max": 0.35 },
+      "typical_duration_ticks_range": { "min": 2, "max": 8 },
+      "payment_terms_days_range": { "min": 30, "max": 60 },
+      "retention_pct_range": { "min": 0.02, "max": 0.05 },
+      "cost_model": {
+        "labor_hours_per_job_range": { "min": 40, "max": 220 },
+        "parts_cost_eur_per_job_range": { "min": 800, "max": 6000 },
+        "parts_fill_rate_sensitivity": 0.55,
+        "subcontractor_cost_pct_range": { "min": 0.04, "max": 0.15 },
+        "mobilization_cost_eur_range": { "min": 150, "max": 1200 },
+        "overtime_cost_multiplier_range": { "min": 1.15, "max": 1.5 }
+      },
+      "quality_model": {
+        "inspection_required": true,
+        "inspection_fail_probability_range": { "min": 0.04, "max": 0.12 },
+        "callback_probability_range": { "min": 0.06, "max": 0.14 },
+        "callback_cost_pct_range": { "min": 0.1, "max": 0.2 },
+        "water_damage_claim_probability_range": { "min": 0.004, "max": 0.02 },
+        "claim_severity_eur_range": { "min": 5000, "max": 120000 }
+      },
+      "demand_model": {
+        "base_demand_weight": 0.16,
+        "seasonality_key": "weather_construction_seasonality",
+        "price_elasticity": 0.35,
+        "urgency_sensitivity": 0.3,
+        "reputation_sensitivity": 0.55
+      },
+      "requirements": {
+        "plumbers_fte_min": 3,
+        "master_plumber_fte_min": 1,
+        "apprentices_fte_min": 1,
+        "compliance_score_min": 0.6,
+        "reputation_score_min": 0.5,
+        "parts_inventory_value_eur_min": 12000,
+        "tooling_requirements": ["pressure_test_kit", "press_tool"]
+      },
+      "notes": "Install work with inspections and higher parts spend."
+    },
+    {
+      "nicheId": "plumbing",
+      "sku": "commercial_fitout_plumbing_job_unit",
+      "name": "Commercial Fit-Out Plumbing",
+      "unit": "unit",
+      "priceMin": 6000,
+      "priceMax": 120000,
+      "cogsPercent": 0.78,
+      "capacityDrivers": ["plumbers_fte", "master_plumber_fte", "dispatcher_fte"],
+      "base_price_eur_range": { "min": 6000, "max": 120000 },
+      "gross_margin_pct_range": { "min": 0.15, "max": 0.28 },
+      "typical_duration_ticks_range": { "min": 3, "max": 12 },
+      "payment_terms_days_range": { "min": 45, "max": 90 },
+      "retention_pct_range": { "min": 0.05, "max": 0.1 },
+      "cost_model": {
+        "labor_hours_per_job_range": { "min": 80, "max": 600 },
+        "parts_cost_eur_per_job_range": { "min": 2000, "max": 40000 },
+        "parts_fill_rate_sensitivity": 0.6,
+        "subcontractor_cost_pct_range": { "min": 0.1, "max": 0.25 },
+        "mobilization_cost_eur_range": { "min": 500, "max": 6000 },
+        "overtime_cost_multiplier_range": { "min": 1.2, "max": 1.6 }
+      },
+      "quality_model": {
+        "inspection_required": true,
+        "inspection_fail_probability_range": { "min": 0.06, "max": 0.15 },
+        "callback_probability_range": { "min": 0.05, "max": 0.12 },
+        "callback_cost_pct_range": { "min": 0.08, "max": 0.18 },
+        "water_damage_claim_probability_range": { "min": 0.006, "max": 0.025 },
+        "claim_severity_eur_range": { "min": 20000, "max": 500000 }
+      },
+      "demand_model": {
+        "base_demand_weight": 0.12,
+        "seasonality_key": "weather_construction_seasonality",
+        "price_elasticity": 0.3,
+        "urgency_sensitivity": 0.2,
+        "reputation_sensitivity": 0.65
+      },
+      "requirements": {
+        "plumbers_fte_min": 4,
+        "master_plumber_fte_min": 1,
+        "dispatcher_fte_min": 1,
+        "compliance_score_min": 0.7,
+        "reputation_score_min": 0.6,
+        "parts_inventory_value_eur_min": 20000,
+        "tooling_requirements": ["press_tool", "drain_camera", "pressure_test_kit"]
+      },
+      "notes": "Commercial installs with retention and inspection gates."
+    },
+    {
+      "nicheId": "plumbing",
+      "sku": "boiler_heatpump_plumbing_service_job_unit",
+      "name": "Boiler / Heat Pump Plumbing Service",
+      "unit": "unit",
+      "priceMin": 350,
+      "priceMax": 7500,
+      "cogsPercent": 0.72,
+      "capacityDrivers": ["plumbers_fte", "master_plumber_fte", "parts_fill_rate"],
+      "base_price_eur_range": { "min": 350, "max": 7500 },
+      "gross_margin_pct_range": { "min": 0.2, "max": 0.4 },
+      "typical_duration_ticks_range": { "min": 1, "max": 4 },
+      "payment_terms_days_range": { "min": 20, "max": 45 },
+      "retention_pct_range": { "min": 0, "max": 0.03 },
+      "cost_model": {
+        "labor_hours_per_job_range": { "min": 6, "max": 60 },
+        "parts_cost_eur_per_job_range": { "min": 150, "max": 2500 },
+        "parts_fill_rate_sensitivity": 0.5,
+        "subcontractor_cost_pct_range": { "min": 0.02, "max": 0.1 },
+        "mobilization_cost_eur_range": { "min": 0, "max": 300 },
+        "overtime_cost_multiplier_range": { "min": 1.1, "max": 1.4 }
+      },
+      "quality_model": {
+        "inspection_required": true,
+        "inspection_fail_probability_range": { "min": 0.04, "max": 0.12 },
+        "callback_probability_range": { "min": 0.05, "max": 0.12 },
+        "callback_cost_pct_range": { "min": 0.08, "max": 0.18 },
+        "water_damage_claim_probability_range": { "min": 0.003, "max": 0.015 },
+        "claim_severity_eur_range": { "min": 5000, "max": 120000 }
+      },
+      "demand_model": {
+        "base_demand_weight": 0.18,
+        "seasonality_key": "winter_emergency_seasonality",
+        "price_elasticity": 0.35,
+        "urgency_sensitivity": 0.5,
+        "reputation_sensitivity": 0.5
+      },
+      "requirements": {
+        "plumbers_fte_min": 2,
+        "master_plumber_fte_min": 1,
+        "compliance_score_min": 0.6,
+        "parts_inventory_value_eur_min": 8000,
+        "tooling_requirements": ["press_tool"]
+      },
+      "notes": "Heating system plumbing with winter demand spikes."
+    },
+    {
+      "nicheId": "plumbing",
+      "sku": "emergency_leak_callout_job_unit",
+      "name": "Emergency Leak Callout",
+      "unit": "unit",
+      "priceMin": 160,
+      "priceMax": 1250,
+      "cogsPercent": 0.65,
+      "capacityDrivers": ["plumbers_fte", "on_call_enabled"],
+      "base_price_eur_range": { "min": 160, "max": 1250 },
+      "gross_margin_pct_range": { "min": 0.25, "max": 0.45 },
+      "typical_duration_ticks_range": { "min": 1, "max": 2 },
+      "payment_terms_days_range": { "min": 0, "max": 14 },
+      "retention_pct_range": { "min": 0, "max": 0.01 },
+      "cost_model": {
+        "labor_hours_per_job_range": { "min": 2, "max": 12 },
+        "parts_cost_eur_per_job_range": { "min": 50, "max": 400 },
+        "parts_fill_rate_sensitivity": 0.3,
+        "mobilization_cost_eur_range": { "min": 0, "max": 150 },
+        "overtime_cost_multiplier_range": { "min": 1.3, "max": 1.8 }
+      },
+      "quality_model": {
+        "inspection_required": false,
+        "inspection_fail_probability_range": { "min": 0.01, "max": 0.05 },
+        "callback_probability_range": { "min": 0.1, "max": 0.22 },
+        "callback_cost_pct_range": { "min": 0.1, "max": 0.22 },
+        "water_damage_claim_probability_range": { "min": 0.006, "max": 0.03 },
+        "claim_severity_eur_range": { "min": 5000, "max": 150000 }
+      },
+      "demand_model": {
+        "base_demand_weight": 0.22,
+        "seasonality_key": "winter_emergency_seasonality",
+        "price_elasticity": 0.25,
+        "urgency_sensitivity": 0.9,
+        "reputation_sensitivity": 0.4
+      },
+      "requirements": {
+        "plumbers_fte_min": 2,
+        "master_plumber_fte_min": 0,
+        "compliance_score_min": 0.5,
+        "reputation_score_min": 0.45,
+        "on_call_enabled": true
+      },
+      "notes": "High-margin emergency work with schedule chaos."
+    },
+    {
+      "nicheId": "plumbing",
+      "sku": "property_maintenance_contract_unit",
+      "name": "Property Maintenance Contract",
+      "unit": "unit",
+      "priceMin": 900,
+      "priceMax": 22000,
+      "cogsPercent": 0.72,
+      "capacityDrivers": ["plumbers_fte", "dispatcher_fte", "callback_rate"],
+      "base_price_eur_range": { "min": 900, "max": 22000 },
+      "gross_margin_pct_range": { "min": 0.18, "max": 0.35 },
+      "typical_duration_ticks_range": { "min": 4, "max": 12 },
+      "payment_terms_days_range": { "min": 30, "max": 60 },
+      "retention_pct_range": { "min": 0, "max": 0.03 },
+      "cost_model": {
+        "labor_hours_per_job_range": { "min": 10, "max": 80 },
+        "parts_cost_eur_per_job_range": { "min": 120, "max": 1500 },
+        "parts_fill_rate_sensitivity": 0.45,
+        "mobilization_cost_eur_range": { "min": 0, "max": 200 },
+        "overtime_cost_multiplier_range": { "min": 1.05, "max": 1.3 }
+      },
+      "quality_model": {
+        "inspection_required": true,
+        "inspection_fail_probability_range": { "min": 0.03, "max": 0.1 },
+        "callback_probability_range": { "min": 0.03, "max": 0.08 },
+        "callback_cost_pct_range": { "min": 0.05, "max": 0.12 },
+        "water_damage_claim_probability_range": { "min": 0.002, "max": 0.01 },
+        "claim_severity_eur_range": { "min": 5000, "max": 200000 }
+      },
+      "demand_model": {
+        "base_demand_weight": 0.1,
+        "seasonality_key": "weather_construction_seasonality",
+        "price_elasticity": 0.2,
+        "urgency_sensitivity": 0.2,
+        "reputation_sensitivity": 0.8
+      },
+      "requirements": {
+        "plumbers_fte_min": 2,
+        "master_plumber_fte_min": 1,
+        "dispatcher_fte_min": 1,
+        "compliance_score_min": 0.6,
+        "reputation_score_min": 0.6,
+        "parts_inventory_value_eur_min": 10000
+      },
+      "notes": "Stable contracts that punish poor callback performance."
+    }
+    ,
+    {
+      "nicheId": "renovation",
+      "sku": "small_repair_punchlist_job_unit",
+      "name": "Small Repair & Punch List",
+      "unit": "unit",
+      "priceMin": 300,
+      "priceMax": 2500,
+      "cogsPercent": 0.65,
+      "capacityDrivers": ["crew_fte", "materials_fill_rate"],
+      "base_price_eur_range": { "min": 300, "max": 2500 },
+      "gross_margin_pct_range": { "min": 0.25, "max": 0.45 },
+      "typical_duration_ticks_range": { "min": 1, "max": 2 },
+      "payment_terms_days_range": { "min": 7, "max": 30 },
+      "deposit_pct_range": { "min": 0.1, "max": 0.2 },
+      "retention_pct_range": { "min": 0, "max": 0.03 },
+      "cost_model": {
+        "labor_hours_per_job_range": { "min": 4, "max": 30 },
+        "materials_cost_eur_per_job_range": { "min": 80, "max": 600 },
+        "subcontractor_cost_pct_range": { "min": 0.02, "max": 0.08 },
+        "mobilization_cost_eur_range": { "min": 0, "max": 150 },
+        "overhead_cost_pct_range": { "min": 0.08, "max": 0.2 }
+      },
+      "scope_contract_model": {
+        "scope_creep_probability_range": { "min": 0.05, "max": 0.15 },
+        "scope_creep_cost_pct_range": { "min": 0.02, "max": 0.08 },
+        "change_order_acceptance_rate_range": { "min": 0.2, "max": 0.45 },
+        "change_order_margin_pct_range": { "min": 0.15, "max": 0.3 },
+        "milestone_billing_enabled": false
+      },
+      "hidden_defect_model": {
+        "hidden_defect_probability_range": { "min": 0.03, "max": 0.1 },
+        "defect_detection_sensitivity": 0.35,
+        "defect_rework_cost_eur_range": { "min": 200, "max": 2500 },
+        "defect_delay_ticks_range": { "min": 0, "max": 1 }
+      },
+      "quality_warranty_model": {
+        "defect_rate_range": { "min": 0.02, "max": 0.08 },
+        "warranty_claim_rate_range": { "min": 0.01, "max": 0.04 },
+        "warranty_claim_severity_eur_range": { "min": 300, "max": 4000 }
+      },
+      "demand_model": {
+        "base_demand_weight": 0.3,
+        "seasonality_key": "winter_indoor_project_seasonality",
+        "price_elasticity": 0.45,
+        "reputation_sensitivity": 0.35
+      },
+      "requirements": {
+        "crew_fte_min": 2,
+        "site_managers_fte_min": 0,
+        "project_manager_fte_min": 0,
+        "compliance_score_min": 0.45,
+        "reputation_score_min": 0.35
+      },
+      "notes": "Quick punch-list repairs with low defect exposure."
+    },
+    {
+      "nicheId": "renovation",
+      "sku": "kitchen_renovation_job_unit",
+      "name": "Kitchen Renovation",
+      "unit": "unit",
+      "priceMin": 8000,
+      "priceMax": 45000,
+      "cogsPercent": 0.72,
+      "capacityDrivers": ["crew_fte", "site_managers_fte", "subcontractors"],
+      "base_price_eur_range": { "min": 8000, "max": 45000 },
+      "gross_margin_pct_range": { "min": 0.2, "max": 0.4 },
+      "typical_duration_ticks_range": { "min": 2, "max": 10 },
+      "payment_terms_days_range": { "min": 30, "max": 60 },
+      "deposit_pct_range": { "min": 0.2, "max": 0.3 },
+      "retention_pct_range": { "min": 0.04, "max": 0.08 },
+      "cost_model": {
+        "labor_hours_per_job_range": { "min": 80, "max": 420 },
+        "materials_cost_eur_per_job_range": { "min": 3000, "max": 22000 },
+        "subcontractor_cost_pct_range": { "min": 0.12, "max": 0.28 },
+        "mobilization_cost_eur_range": { "min": 200, "max": 1800 },
+        "overhead_cost_pct_range": { "min": 0.1, "max": 0.25 }
+      },
+      "scope_contract_model": {
+        "scope_creep_probability_range": { "min": 0.2, "max": 0.45 },
+        "scope_creep_cost_pct_range": { "min": 0.05, "max": 0.18 },
+        "change_order_acceptance_rate_range": { "min": 0.35, "max": 0.7 },
+        "change_order_margin_pct_range": { "min": 0.2, "max": 0.4 },
+        "milestone_billing_enabled": true
+      },
+      "hidden_defect_model": {
+        "hidden_defect_probability_range": { "min": 0.08, "max": 0.22 },
+        "defect_detection_sensitivity": 0.45,
+        "defect_rework_cost_eur_range": { "min": 1500, "max": 12000 },
+        "defect_delay_ticks_range": { "min": 1, "max": 4 }
+      },
+      "quality_warranty_model": {
+        "defect_rate_range": { "min": 0.03, "max": 0.1 },
+        "warranty_claim_rate_range": { "min": 0.02, "max": 0.06 },
+        "warranty_claim_severity_eur_range": { "min": 1500, "max": 15000 }
+      },
+      "demand_model": {
+        "base_demand_weight": 0.18,
+        "seasonality_key": "spring_renovation_seasonality",
+        "price_elasticity": 0.32,
+        "reputation_sensitivity": 0.55
+      },
+      "requirements": {
+        "crew_fte_min": 4,
+        "site_managers_fte_min": 0,
+        "project_manager_fte_min": 0,
+        "compliance_score_min": 0.5,
+        "reputation_score_min": 0.5,
+        "contract_discipline_score_min": 0.45
+      },
+      "notes": "High-margin kitchens with scope creep pressure."
+    },
+    {
+      "nicheId": "renovation",
+      "sku": "bathroom_renovation_job_unit",
+      "name": "Bathroom Renovation",
+      "unit": "unit",
+      "priceMin": 7000,
+      "priceMax": 35000,
+      "cogsPercent": 0.72,
+      "capacityDrivers": ["crew_fte", "subcontractors", "site_managers_fte"],
+      "base_price_eur_range": { "min": 7000, "max": 35000 },
+      "gross_margin_pct_range": { "min": 0.2, "max": 0.38 },
+      "typical_duration_ticks_range": { "min": 2, "max": 9 },
+      "payment_terms_days_range": { "min": 30, "max": 60 },
+      "deposit_pct_range": { "min": 0.2, "max": 0.3 },
+      "retention_pct_range": { "min": 0.04, "max": 0.08 },
+      "cost_model": {
+        "labor_hours_per_job_range": { "min": 70, "max": 360 },
+        "materials_cost_eur_per_job_range": { "min": 2500, "max": 16000 },
+        "subcontractor_cost_pct_range": { "min": 0.12, "max": 0.28 },
+        "mobilization_cost_eur_range": { "min": 200, "max": 1500 },
+        "overhead_cost_pct_range": { "min": 0.1, "max": 0.25 }
+      },
+      "scope_contract_model": {
+        "scope_creep_probability_range": { "min": 0.18, "max": 0.4 },
+        "scope_creep_cost_pct_range": { "min": 0.05, "max": 0.16 },
+        "change_order_acceptance_rate_range": { "min": 0.35, "max": 0.65 },
+        "change_order_margin_pct_range": { "min": 0.18, "max": 0.38 },
+        "milestone_billing_enabled": true
+      },
+      "hidden_defect_model": {
+        "hidden_defect_probability_range": { "min": 0.1, "max": 0.28 },
+        "defect_detection_sensitivity": 0.5,
+        "defect_rework_cost_eur_range": { "min": 1500, "max": 15000 },
+        "defect_delay_ticks_range": { "min": 1, "max": 5 }
+      },
+      "quality_warranty_model": {
+        "defect_rate_range": { "min": 0.04, "max": 0.12 },
+        "warranty_claim_rate_range": { "min": 0.03, "max": 0.08 },
+        "warranty_claim_severity_eur_range": { "min": 2000, "max": 20000 }
+      },
+      "demand_model": {
+        "base_demand_weight": 0.2,
+        "seasonality_key": "spring_renovation_seasonality",
+        "price_elasticity": 0.34,
+        "reputation_sensitivity": 0.6
+      },
+      "requirements": {
+        "crew_fte_min": 4,
+        "site_managers_fte_min": 0,
+        "project_manager_fte_min": 0,
+        "compliance_score_min": 0.5,
+        "reputation_score_min": 0.45,
+        "defect_detection_score_min": 0.35
+      },
+      "notes": "Bathrooms with higher water defect exposure."
+    },
+    {
+      "nicheId": "renovation",
+      "sku": "whole_home_renovation_job_unit",
+      "name": "Whole-Home Renovation",
+      "unit": "unit",
+      "priceMin": 60000,
+      "priceMax": 450000,
+      "cogsPercent": 0.78,
+      "capacityDrivers": ["crew_fte", "site_managers_fte", "project_managers_fte"],
+      "base_price_eur_range": { "min": 60000, "max": 450000 },
+      "gross_margin_pct_range": { "min": 0.18, "max": 0.35 },
+      "typical_duration_ticks_range": { "min": 8, "max": 30 },
+      "payment_terms_days_range": { "min": 45, "max": 90 },
+      "deposit_pct_range": { "min": 0.25, "max": 0.35 },
+      "retention_pct_range": { "min": 0.05, "max": 0.1 },
+      "cost_model": {
+        "labor_hours_per_job_range": { "min": 600, "max": 3600 },
+        "materials_cost_eur_per_job_range": { "min": 25000, "max": 250000 },
+        "subcontractor_cost_pct_range": { "min": 0.15, "max": 0.32 },
+        "mobilization_cost_eur_range": { "min": 2000, "max": 20000 },
+        "overhead_cost_pct_range": { "min": 0.12, "max": 0.3 }
+      },
+      "scope_contract_model": {
+        "scope_creep_probability_range": { "min": 0.15, "max": 0.35 },
+        "scope_creep_cost_pct_range": { "min": 0.06, "max": 0.2 },
+        "change_order_acceptance_rate_range": { "min": 0.3, "max": 0.6 },
+        "change_order_margin_pct_range": { "min": 0.18, "max": 0.35 },
+        "milestone_billing_enabled": true
+      },
+      "hidden_defect_model": {
+        "hidden_defect_probability_range": { "min": 0.12, "max": 0.3 },
+        "defect_detection_sensitivity": 0.55,
+        "defect_rework_cost_eur_range": { "min": 8000, "max": 80000 },
+        "defect_delay_ticks_range": { "min": 2, "max": 8 }
+      },
+      "quality_warranty_model": {
+        "defect_rate_range": { "min": 0.03, "max": 0.1 },
+        "warranty_claim_rate_range": { "min": 0.02, "max": 0.06 },
+        "warranty_claim_severity_eur_range": { "min": 5000, "max": 60000 }
+      },
+      "demand_model": {
+        "base_demand_weight": 0.1,
+        "seasonality_key": "spring_renovation_seasonality",
+        "price_elasticity": 0.25,
+        "reputation_sensitivity": 0.7
+      },
+      "requirements": {
+        "crew_fte_min": 6,
+        "site_managers_fte_min": 1,
+        "project_manager_fte_min": 1,
+        "compliance_score_min": 0.6,
+        "reputation_score_min": 0.65,
+        "contract_discipline_score_min": 0.6,
+        "defect_detection_score_min": 0.45
+      },
+      "notes": "Large-scale renovations with strict delivery control."
+    },
+    {
+      "nicheId": "renovation",
+      "sku": "tenant_turnover_renovation_contract_unit",
+      "name": "Tenant Turnover Renovation Contract",
+      "unit": "unit",
+      "priceMin": 2500,
+      "priceMax": 60000,
+      "cogsPercent": 0.8,
+      "capacityDrivers": ["crew_fte", "project_managers_fte", "schedule_slip_score"],
+      "base_price_eur_range": { "min": 2500, "max": 60000 },
+      "gross_margin_pct_range": { "min": 0.15, "max": 0.3 },
+      "typical_duration_ticks_range": { "min": 2, "max": 8 },
+      "payment_terms_days_range": { "min": 30, "max": 60 },
+      "deposit_pct_range": { "min": 0.1, "max": 0.2 },
+      "retention_pct_range": { "min": 0.03, "max": 0.06 },
+      "cost_model": {
+        "labor_hours_per_job_range": { "min": 60, "max": 280 },
+        "materials_cost_eur_per_job_range": { "min": 2000, "max": 20000 },
+        "subcontractor_cost_pct_range": { "min": 0.12, "max": 0.28 },
+        "mobilization_cost_eur_range": { "min": 200, "max": 1500 },
+        "overhead_cost_pct_range": { "min": 0.1, "max": 0.24 }
+      },
+      "scope_contract_model": {
+        "scope_creep_probability_range": { "min": 0.08, "max": 0.2 },
+        "scope_creep_cost_pct_range": { "min": 0.03, "max": 0.1 },
+        "change_order_acceptance_rate_range": { "min": 0.25, "max": 0.5 },
+        "change_order_margin_pct_range": { "min": 0.12, "max": 0.28 },
+        "milestone_billing_enabled": true
+      },
+      "hidden_defect_model": {
+        "hidden_defect_probability_range": { "min": 0.06, "max": 0.18 },
+        "defect_detection_sensitivity": 0.4,
+        "defect_rework_cost_eur_range": { "min": 1000, "max": 12000 },
+        "defect_delay_ticks_range": { "min": 1, "max": 4 }
+      },
+      "quality_warranty_model": {
+        "defect_rate_range": { "min": 0.03, "max": 0.08 },
+        "warranty_claim_rate_range": { "min": 0.02, "max": 0.05 },
+        "warranty_claim_severity_eur_range": { "min": 1500, "max": 15000 }
+      },
+      "demand_model": {
+        "base_demand_weight": 0.12,
+        "seasonality_key": "winter_indoor_project_seasonality",
+        "price_elasticity": 0.22,
+        "reputation_sensitivity": 0.75
+      },
+      "requirements": {
+        "crew_fte_min": 4,
+        "site_managers_fte_min": 0,
+        "project_manager_fte_min": 1,
+        "compliance_score_min": 0.55,
+        "reputation_score_min": 0.6,
+        "contract_discipline_score_min": 0.5
+      },
+      "notes": "High-volume tenant turnovers with tight SLAs."
+    },
+    {
+      "nicheId": "renovation",
+      "sku": "insurance_restoration_job_unit",
+      "name": "Insurance Restoration Job",
+      "unit": "unit",
+      "priceMin": 5000,
+      "priceMax": 120000,
+      "cogsPercent": 0.82,
+      "capacityDrivers": ["crew_fte", "project_managers_fte", "compliance_score"],
+      "base_price_eur_range": { "min": 5000, "max": 120000 },
+      "gross_margin_pct_range": { "min": 0.12, "max": 0.28 },
+      "typical_duration_ticks_range": { "min": 3, "max": 14 },
+      "payment_terms_days_range": { "min": 45, "max": 90 },
+      "deposit_pct_range": { "min": 0.1, "max": 0.2 },
+      "retention_pct_range": { "min": 0.04, "max": 0.08 },
+      "cost_model": {
+        "labor_hours_per_job_range": { "min": 120, "max": 900 },
+        "materials_cost_eur_per_job_range": { "min": 4000, "max": 60000 },
+        "subcontractor_cost_pct_range": { "min": 0.15, "max": 0.35 },
+        "mobilization_cost_eur_range": { "min": 500, "max": 5000 },
+        "overhead_cost_pct_range": { "min": 0.12, "max": 0.28 }
+      },
+      "scope_contract_model": {
+        "scope_creep_probability_range": { "min": 0.08, "max": 0.2 },
+        "scope_creep_cost_pct_range": { "min": 0.03, "max": 0.12 },
+        "change_order_acceptance_rate_range": { "min": 0.2, "max": 0.45 },
+        "change_order_margin_pct_range": { "min": 0.1, "max": 0.25 },
+        "milestone_billing_enabled": true
+      },
+      "hidden_defect_model": {
+        "hidden_defect_probability_range": { "min": 0.1, "max": 0.25 },
+        "defect_detection_sensitivity": 0.5,
+        "defect_rework_cost_eur_range": { "min": 3000, "max": 40000 },
+        "defect_delay_ticks_range": { "min": 1, "max": 6 }
+      },
+      "quality_warranty_model": {
+        "defect_rate_range": { "min": 0.04, "max": 0.12 },
+        "warranty_claim_rate_range": { "min": 0.03, "max": 0.08 },
+        "warranty_claim_severity_eur_range": { "min": 2500, "max": 30000 }
+      },
+      "demand_model": {
+        "base_demand_weight": 0.1,
+        "seasonality_key": "winter_indoor_project_seasonality",
+        "price_elasticity": 0.18,
+        "reputation_sensitivity": 0.65
+      },
+      "requirements": {
+        "crew_fte_min": 4,
+        "site_managers_fte_min": 0,
+        "project_manager_fte_min": 1,
+        "compliance_score_min": 0.7,
+        "reputation_score_min": 0.5,
+        "documentation_process_enabled": true
+      },
+      "notes": "Insurance restoration with strict documentation and slow pay."
+    }
+  ],
+  "upgrades": [
+    {
+      "nicheId": "commercialBuild",
+      "code": "estimating_team_expansion",
+      "name": "Estimating Team Expansion",
+      "timing": "multi_tick",
+      "leadTimeWeeks": 2,
+      "capexFormula": "capex 2000..15000",
+      "opexFormula": "per_estimator_monthly 3500..6500",
+      "effects": [
+        "estimators_fte +1..2",
+        "bids_capacity_per_tick +0.6..1.6",
+        "bid_win_rate_base +0.02..0.05"
+      ],
+      "risk": {
+        "failureChance": 0.12,
+        "failureMode": "Overhead rises if lead pool is thin."
+      }
+    },
+    {
+      "nicheId": "commercialBuild",
+      "code": "safety_program_certification",
+      "name": "Safety Program & Certification",
+      "timing": "multi_tick",
+      "leadTimeWeeks": 4,
+      "capexFormula": "capex 3000..30000",
+      "opexFormula": "monthlyFixed 200..2000",
+      "effects": [
+        "compliance_score +0.10..0.25",
+        "safety_incident_rate -10..40%",
+        "unlock office_fitout_project_unit"
+      ],
+      "risk": {
+        "failureChance": 0.14,
+        "failureMode": "Training downtime reduces throughput for 1-2 ticks."
+      }
+    },
+    {
+      "nicheId": "commercialBuild",
+      "code": "equipment_access_framework",
+      "name": "Equipment Access (Owned + Rental Framework)",
+      "timing": "multi_tick",
+      "leadTimeWeeks": 3,
+      "capexFormula": "capex 10000..250000",
+      "opexFormula": "monthlyFixed 500..5000",
+      "effects": [
+        "forklift_access +1..2",
+        "scissor_lift_access +1..2",
+        "excavator_access +0..1",
+        "crane_access +0..1",
+        "wip_burn_value_eur_per_tick +5..25%"
+      ],
+      "risk": {
+        "failureChance": 0.12,
+        "failureMode": "Idle equipment costs and maintenance downtime."
+      }
+    },
+    {
+      "nicheId": "commercialBuild",
+      "code": "subcontractor_network_sla",
+      "name": "Subcontractor Network & SLA",
+      "timing": "multi_tick",
+      "leadTimeWeeks": 3,
+      "capexFormula": "capex 2000..20000",
+      "opexFormula": "monthlyFixed 500..3000",
+      "effects": [
+        "subcontractor_dependency_score -0.10..0.25",
+        "delay_probability -10..30%",
+        "subcontractor_cost_pct +0.01..0.03"
+      ],
+      "risk": {
+        "failureChance": 0.12,
+        "failureMode": "SLA disputes and subcontractor price pressure."
+      }
+    },
+    {
+      "nicheId": "commercialBuild",
+      "code": "materials_procurement_hedging",
+      "name": "Materials Procurement & Hedging",
+      "timing": "next_tick",
+      "leadTimeWeeks": 1,
+      "capexFormula": "capex 0..15000",
+      "opexFormula": "materials_hedge_fee_pct 0.2..1.0%",
+      "effects": [
+        "materials_cost_pct -3..10%",
+        "materials_volatility -10..30%"
+      ],
+      "risk": {
+        "failureChance": 0.1,
+        "failureMode": "Hedge mismatch increases costs during shocks."
+      }
+    },
+    {
+      "nicheId": "commercialBuild",
+      "code": "project_controls_scheduling_system",
+      "name": "Project Controls / Scheduling System",
+      "timing": "multi_tick",
+      "leadTimeWeeks": 4,
+      "capexFormula": "capex 5000..60000",
+      "opexFormula": "monthlyFixed 200..2000",
+      "effects": [
+        "schedule_slip_score -0.10..0.25",
+        "delay_probability -10..30%",
+        "rework_pct -5..20%"
+      ],
+      "risk": {
+        "failureChance": 0.12,
+        "failureMode": "Implementation dip for 1 tick."
+      }
+    },
+    {
+      "nicheId": "commercialBuild",
+      "code": "working_capital_facility",
+      "name": "Working Capital Facility (Credit Line)",
+      "timing": "immediate",
+      "leadTimeWeeks": 0,
+      "capexFormula": "capex 0",
+      "opexFormula": "interest_on_utilized_credit 6..12%",
+      "effects": [
+        "credit_limit_eur +150000..600000",
+        "interest_rate_pct 0.06..0.12"
+      ],
+      "risk": {
+        "failureChance": 0.16,
+        "failureMode": "Leverage spiral and covenant risk."
+      }
+    },
+    {
+      "nicheId": "commercialBuild",
+      "code": "design_coordination_capability",
+      "name": "Design Coordination Capability",
+      "timing": "multi_tick",
+      "leadTimeWeeks": 6,
+      "capexFormula": "capex 10000..120000",
+      "opexFormula": "per_designer_monthly 4000..9000",
+      "effects": [
+        "unlock design_build_contract_unit",
+        "bid_win_rate_base +0.02..0.06",
+        "change_order_rate -5..15%"
+      ],
+      "risk": {
+        "failureChance": 0.14,
+        "failureMode": "Design liability and rework exposure."
+      }
+    },
+    {
+      "nicheId": "electrical",
+      "code": "safety_certification_compliance_pack",
+      "name": "Safety Certification & Compliance Pack",
+      "timing": "multi_tick",
+      "leadTimeWeeks": 4,
+      "capexFormula": "capex 1000..20000",
+      "opexFormula": "monthlyFixed 100..1200",
+      "effects": [
+        "compliance_score +0.10..0.25",
+        "inspection_fail_probability -3..15%",
+        "callback_probability -2..10%",
+        "unlock solar_inverter_install_job_unit"
+      ],
+      "risk": {
+        "failureChance": 0.12,
+        "failureMode": "Training downtime reduces throughput for 1 tick."
+      }
+    },
+    {
+      "nicheId": "electrical",
+      "code": "scheduling_software_dispatch",
+      "name": "Scheduling Software & Dispatch",
+      "timing": "multi_tick",
+      "leadTimeWeeks": 3,
+      "capexFormula": "capex 2000..35000",
+      "opexFormula": "monthlyFixed 150..1500",
+      "effects": [
+        "utilization_actual +0.05..0.20",
+        "average_wait_ticks -0.5..2.0",
+        "unlock annual_maintenance_contract_unit"
+      ],
+      "risk": {
+        "failureChance": 0.12,
+        "failureMode": "Implementation dip for 1 tick."
+      }
+    },
+    {
+      "nicheId": "electrical",
+      "code": "apprenticeship_program",
+      "name": "Apprenticeship Program",
+      "timing": "multi_tick",
+      "leadTimeWeeks": 6,
+      "capexFormula": "capex 500..8000",
+      "opexFormula": "per_apprentice_monthly 1200..2200",
+      "effects": [
+        "apprentices_fte +1..3",
+        "labor_hours_capacity_per_tick +10..25",
+        "certification_training_progress +0.1..0.3"
+      ],
+      "risk": {
+        "failureChance": 0.14,
+        "failureMode": "Callbacks rise without strong supervision."
+      }
+    },
+    {
+      "nicheId": "electrical",
+      "code": "testing_commissioning_tools",
+      "name": "Testing & Commissioning Tools",
+      "timing": "multi_tick",
+      "leadTimeWeeks": 4,
+      "capexFormula": "capex 3000..60000",
+      "opexFormula": "monthlyFixed 150..900",
+      "effects": [
+        "inspection_fail_probability -10..35%",
+        "reputation_score +0.02..0.06",
+        "unlock industrial_panel_upgrade_job_unit"
+      ],
+      "risk": {
+        "failureChance": 0.12,
+        "failureMode": "Calibration downtime and maintenance costs."
+      }
+    },
+    {
+      "nicheId": "electrical",
+      "code": "materials_procurement_copper_hedging",
+      "name": "Materials Procurement & Copper Hedging",
+      "timing": "next_tick",
+      "leadTimeWeeks": 1,
+      "capexFormula": "capex 0..20000",
+      "opexFormula": "copper_hedge_fee_pct 0.2..1.0%",
+      "effects": [
+        "materials_fill_rate +0.05..0.20",
+        "copper_price_volatility -10..30%"
+      ],
+      "risk": {
+        "failureChance": 0.1,
+        "failureMode": "Hedge mismatch increases costs during shocks."
+      }
+    },
+    {
+      "nicheId": "electrical",
+      "code": "on_call_team_setup",
+      "name": "On-Call Team Setup (Emergency)",
+      "timing": "next_tick",
+      "leadTimeWeeks": 1,
+      "capexFormula": "capex 0..10000",
+      "opexFormula": "overtime_premium_pct 0.1..0.35",
+      "effects": [
+        "overtime_enabled true",
+        "emergency_demand +15..40%",
+        "unlock emergency_callout_job_unit"
+      ],
+      "risk": {
+        "failureChance": 0.14,
+        "failureMode": "Burnout increases callbacks if overtime too high."
+      }
+    },
+    {
+      "nicheId": "electrical",
+      "code": "quality_process_checklist_system",
+      "name": "Quality Process & Checklist System",
+      "timing": "next_tick",
+      "leadTimeWeeks": 1,
+      "capexFormula": "capex 0..12000",
+      "opexFormula": "monthlyFixed 100..900",
+      "effects": [
+        "callback_probability -10..40%",
+        "warranty_reserve_eur -10..30%",
+        "inspection_pass_rate +0.02..0.08"
+      ],
+      "risk": {
+        "failureChance": 0.12,
+        "failureMode": "Admin overhead reduces capacity slightly."
+      }
+    },
+    {
+      "nicheId": "electrical",
+      "code": "hire_master_electrician",
+      "name": "Crew Expansion (Hire Master Electrician)",
+      "timing": "multi_tick",
+      "leadTimeWeeks": 2,
+      "capexFormula": "capex 500..8000",
+      "opexFormula": "per_master_electrician_monthly 4500..8500",
+      "effects": [
+        "master_electrician_fte +1",
+        "certification_level +1",
+        "labor_hours_capacity_per_tick +15..35"
+      ],
+      "risk": {
+        "failureChance": 0.12,
+        "failureMode": "Overhead pressure if demand is soft."
+      }
+    }
+    ,
+    {
+      "nicheId": "engineering",
+      "code": "qa_baseline_checklist",
+      "name": "QA Baseline Checklist & Peer Review",
+      "timing": "next_tick",
+      "leadTimeWeeks": 1,
+      "capexFormula": "capex 0..8000",
+      "opexFormula": "monthlyFixed 0..600",
+      "effects": [
+        "qa_process_maturity +0.10..0.25",
+        "error_probability -10..35%",
+        "liability_claim_probability -10..25%",
+        "billable_hours_capacity_per_tick -8..-3",
+        "unlock structural_design_package_unit"
+      ],
+      "risk": {
+        "failureChance": 0.12,
+        "failureMode": "Admin overhead reduces utilization."
+      }
+    },
+    {
+      "nicheId": "engineering",
+      "code": "software_stack_cad_bim",
+      "name": "Software Stack (CAD/BIM Licenses)",
+      "timing": "multi_tick",
+      "leadTimeWeeks": 4,
+      "capexFormula": "capex 3000..60000",
+      "opexFormula": "monthlyFixed 200..2500",
+      "effects": [
+        "billable_hours_capacity_per_tick +5..18",
+        "revision_rounds -5..15%",
+        "unlock bim_coordination_service_unit"
+      ],
+      "risk": {
+        "failureChance": 0.14,
+        "failureMode": "Onboarding dip reduces output for 1 tick."
+      }
+    },
+    {
+      "nicheId": "engineering",
+      "code": "proposal_engine_crm",
+      "name": "Proposal Engine (Templates + CRM)",
+      "timing": "multi_tick",
+      "leadTimeWeeks": 4,
+      "capexFormula": "capex 1000..25000",
+      "opexFormula": "monthlyFixed 100..1200",
+      "effects": [
+        "proposals_capacity_per_tick +0.6..1.6",
+        "win_rate_base +0.02..0.10"
+      ],
+      "risk": {
+        "failureChance": 0.14,
+        "failureMode": "Overhead rises if lead pool is thin."
+      }
+    },
+    {
+      "nicheId": "engineering",
+      "code": "hire_senior_engineer",
+      "name": "Hire Senior Engineer",
+      "timing": "multi_tick",
+      "leadTimeWeeks": 2,
+      "capexFormula": "capex 500..10000",
+      "opexFormula": "per_senior_engineer_monthly 5500..11000",
+      "effects": [
+        "senior_engineers_fte +1",
+        "certification_level +1",
+        "win_rate_base +0.02..0.06"
+      ],
+      "risk": {
+        "failureChance": 0.12,
+        "failureMode": "Overhead and utilization pressure."
+      }
+    },
+    {
+      "nicheId": "engineering",
+      "code": "subcontractor_framework_specialty",
+      "name": "Subcontractor Framework (Geo + Specialty)",
+      "timing": "next_tick",
+      "leadTimeWeeks": 1,
+      "capexFormula": "capex 0..10000",
+      "opexFormula": "subcontractor_margin_pct 0.02..0.05",
+      "effects": [
+        "unlock geotechnical_survey_unit",
+        "subcontractor_cost_pct +0.02..0.05",
+        "delivery_risk -2..10%"
+      ],
+      "risk": {
+        "failureChance": 0.12,
+        "failureMode": "Margin compression and quality variance."
+      }
+    },
+    {
+      "nicheId": "engineering",
+      "code": "professional_indemnity_upgrade",
+      "name": "Professional Indemnity Upgrade (Insurance)",
+      "timing": "next_tick",
+      "leadTimeWeeks": 1,
+      "capexFormula": "capex 0..5000",
+      "opexFormula": "premium_pct_of_revenue 0.5..1.5%",
+      "effects": [
+        "liability_risk_score -0.12..-0.04",
+        "insurance_reserve_eur +2000..8000"
+      ],
+      "risk": {
+        "failureChance": 0.1,
+        "failureMode": "Fixed cost pressure."
+      }
+    },
+    {
+      "nicheId": "engineering",
+      "code": "permitting_fast_track_relationships",
+      "name": "Permitting Fast-Track Relationships",
+      "timing": "multi_tick",
+      "leadTimeWeeks": 6,
+      "capexFormula": "capex 2000..30000",
+      "opexFormula": "monthlyFixed 200..1500",
+      "effects": [
+        "permitting_delay_ticks -1.2..-0.4",
+        "review_cycle_delay_probability -0.15..-0.05"
+      ],
+      "risk": {
+        "failureChance": 0.14,
+        "failureMode": "Dependency risk if key contacts churn."
+      }
+    },
+    {
+      "nicheId": "engineering",
+      "code": "governance_reporting_process",
+      "name": "Governance & Reporting Process",
+      "timing": "multi_tick",
+      "leadTimeWeeks": 5,
+      "capexFormula": "capex 2000..40000",
+      "opexFormula": "monthlyFixed 150..2000",
+      "effects": [
+        "unlock owner_rep_project_management_unit",
+        "reputation_score +0.03..0.08",
+        "scope_creep_rate -5..15%"
+      ],
+      "risk": {
+        "failureChance": 0.14,
+        "failureMode": "Admin overhead reduces utilization."
+      }
+    },
+    {
+      "nicheId": "engineering",
+      "code": "knowledge_base_reusable_ip",
+      "name": "Knowledge Base & Reusable IP Library",
+      "timing": "multi_tick",
+      "leadTimeWeeks": 4,
+      "capexFormula": "capex 1000..20000",
+      "opexFormula": "monthlyFixed 100..800",
+      "effects": [
+        "typical_billable_hours -5..15%",
+        "gross_margin_target +0.02..0.06"
+      ],
+      "risk": {
+        "failureChance": 0.12,
+        "failureMode": "Short-term output dip during documentation."
+      }
+    }
+    ,
+    {
+      "nicheId": "plumbing",
+      "code": "on_call_rotation_setup",
+      "name": "On-Call Rotation Setup",
+      "timing": "next_tick",
+      "leadTimeWeeks": 1,
+      "capexFormula": "capex 0..8000",
+      "opexFormula": "overtime_premium_pct 0.1..0.35",
+      "effects": [
+        "on_call_enabled true",
+        "emergency_demand_uplift +0.15..0.40",
+        "unlock emergency_leak_callout_job_unit"
+      ],
+      "risk": {
+        "failureChance": 0.14,
+        "failureMode": "Burnout increases callbacks if utilization is high."
+      }
+    },
+    {
+      "nicheId": "plumbing",
+      "code": "parts_inventory_system",
+      "name": "Parts Inventory System & Reorder Points",
+      "timing": "multi_tick",
+      "leadTimeWeeks": 4,
+      "capexFormula": "capex 1000..25000",
+      "opexFormula": "inventory_carry_pct 0.5..1.5%",
+      "effects": [
+        "parts_fill_rate +0.05..0.20",
+        "parts_inventory_value_eur +4000..18000",
+        "critical_parts_stockouts_modifier -50..-20%"
+      ],
+      "risk": {
+        "failureChance": 0.14,
+        "failureMode": "Cash tied up and overstock waste risk."
+      }
+    },
+    {
+      "nicheId": "plumbing",
+      "code": "hire_master_plumber",
+      "name": "Hire Master Plumber",
+      "timing": "multi_tick",
+      "leadTimeWeeks": 2,
+      "capexFormula": "capex 500..8000",
+      "opexFormula": "per_master_plumber_monthly 4200..7800",
+      "effects": [
+        "master_plumber_fte +1",
+        "inspection_fail_probability_modifier -30..-10%",
+        "unlock bathroom_installation_job_unit",
+        "unlock commercial_fitout_plumbing_job_unit",
+        "unlock boiler_heatpump_plumbing_service_job_unit"
+      ],
+      "risk": {
+        "failureChance": 0.12,
+        "failureMode": "Overhead rises if demand is soft."
+      }
+    },
+    {
+      "nicheId": "plumbing",
+      "code": "quality_checklist_pressure_testing",
+      "name": "Quality Checklist + Pressure Testing",
+      "timing": "next_tick",
+      "leadTimeWeeks": 1,
+      "capexFormula": "capex 0..12000",
+      "opexFormula": "quality_admin_pct 0.2..0.8%",
+      "effects": [
+        "callback_probability_modifier -40..-10%",
+        "water_damage_claim_probability_modifier -40..-15%",
+        "labor_hours_capacity_per_tick -8..-3"
+      ],
+      "risk": {
+        "failureChance": 0.12,
+        "failureMode": "Extra review time reduces throughput."
+      }
+    },
+    {
+      "nicheId": "plumbing",
+      "code": "dispatcher_routing_discipline",
+      "name": "Dispatcher & Routing Discipline",
+      "timing": "multi_tick",
+      "leadTimeWeeks": 3,
+      "capexFormula": "capex 1000..20000",
+      "opexFormula": "dispatcher_monthly 2800..5200",
+      "effects": [
+        "utilization_actual +0.05..0.20",
+        "average_wait_ticks -2.0..-0.5"
+      ],
+      "risk": {
+        "failureChance": 0.14,
+        "failureMode": "Implementation dip reduces capacity for 1 tick."
+      }
+    },
+    {
+      "nicheId": "plumbing",
+      "code": "commercial_compliance_pack",
+      "name": "Commercial Compliance Pack",
+      "timing": "multi_tick",
+      "leadTimeWeeks": 4,
+      "capexFormula": "capex 2000..40000",
+      "opexFormula": "monthlyFixed 150..2000",
+      "effects": [
+        "compliance_score +0.10..0.25",
+        "unlock commercial_fitout_plumbing_job_unit"
+      ],
+      "risk": {
+        "failureChance": 0.14,
+        "failureMode": "Admin overhead and audit disruption."
+      }
+    },
+    {
+      "nicheId": "plumbing",
+      "code": "tooling_upgrade_pipe_press_camera",
+      "name": "Tooling Upgrade (Pipe Press + Drain Camera)",
+      "timing": "multi_tick",
+      "leadTimeWeeks": 3,
+      "capexFormula": "capex 3000..60000",
+      "opexFormula": "tool_maintenance_pct 0.3..1.2%",
+      "effects": [
+        "labor_hours_per_job_modifier -15..-5%",
+        "inspection_fail_probability_modifier -20..-5%",
+        "unlock boiler_heatpump_plumbing_service_job_unit"
+      ],
+      "risk": {
+        "failureChance": 0.12,
+        "failureMode": "Calibration and maintenance downtime risk."
+      }
+    },
+    {
+      "nicheId": "plumbing",
+      "code": "warranty_reserve_policy",
+      "name": "Warranty Reserve Policy & Analytics",
+      "timing": "next_tick",
+      "leadTimeWeeks": 1,
+      "capexFormula": "capex 0..10000",
+      "opexFormula": "analytics_tools_pct 0.2..0.8%",
+      "effects": [
+        "warranty_reserve_eur_target +2000..6000",
+        "claim_severity_modifier -10..-2%"
+      ],
+      "risk": {
+        "failureChance": 0.12,
+        "failureMode": "Under-reserving can trigger large claim shocks."
+      }
+    },
+    {
+      "nicheId": "plumbing",
+      "code": "property_manager_sales_engine",
+      "name": "Property Manager Sales Engine",
+      "timing": "multi_tick",
+      "leadTimeWeeks": 4,
+      "capexFormula": "capex 2000..50000",
+      "opexFormula": "monthlyFixed 200..3000",
+      "effects": [
+        "lead_pool_count +3..8",
+        "pricing_power_score +0.02..0.08",
+        "unlock property_maintenance_contract_unit"
+      ],
+      "risk": {
+        "failureChance": 0.14,
+        "failureMode": "High callbacks erode contract reputation fast."
+      }
+    },
+    {
+      "nicheId": "plumbing",
+      "code": "project_controls_system",
+      "name": "Project Controls & Documentation",
+      "timing": "multi_tick",
+      "leadTimeWeeks": 4,
+      "capexFormula": "capex 1500..25000",
+      "opexFormula": "monthlyFixed 150..1200",
+      "effects": [
+        "average_wait_ticks -1.5..-0.4",
+        "inspection_fail_probability_modifier -15..-5%"
+      ],
+      "risk": {
+        "failureChance": 0.12,
+        "failureMode": "Documentation overhead slows delivery."
+      }
+    }
+    ,
+    {
+      "nicheId": "renovation",
+      "code": "contract_discipline_system",
+      "name": "Contract Discipline System (Deposits + Change Orders)",
+      "timing": "next_tick",
+      "leadTimeWeeks": 1,
+      "capexFormula": "capex 0..15000",
+      "opexFormula": "admin_pct 0.2..0.8%",
+      "effects": [
+        "contract_discipline_score +0.10..0.30",
+        "change_order_acceptance_rate +0.05..0.20",
+        "scope_creep_rate_modifier -0.20..-0.05"
+      ],
+      "risk": {
+        "failureChance": 0.14,
+        "failureMode": "Close rate drops if clients resist strict terms."
+      }
+    },
+    {
+      "nicheId": "renovation",
+      "code": "preinspection_hidden_defect_detection",
+      "name": "Pre-Inspection & Hidden Defect Detection Kit",
+      "timing": "multi_tick",
+      "leadTimeWeeks": 2,
+      "capexFormula": "capex 500..18000",
+      "opexFormula": "inspection_tools_pct 0.2..0.6%",
+      "effects": [
+        "defect_detection_score +0.15..0.40",
+        "hidden_defect_probability_modifier -0.25..-0.10"
+      ],
+      "risk": {
+        "failureChance": 0.14,
+        "failureMode": "Quote cycle slows as inspections add steps."
+      }
+    },
+    {
+      "nicheId": "renovation",
+      "code": "project_controls_milestone_billing",
+      "name": "Project Controls & Milestone Billing Toolkit",
+      "timing": "multi_tick",
+      "leadTimeWeeks": 4,
+      "capexFormula": "capex 2000..40000",
+      "opexFormula": "monthlyFixed 150..2000",
+      "effects": [
+        "schedule_slip_score -0.25..-0.10",
+        "payment_delay_ticks_modifier -0.15..-0.05"
+      ],
+      "risk": {
+        "failureChance": 0.14,
+        "failureMode": "Implementation dip reduces capacity for 1 tick."
+      }
+    },
+    {
+      "nicheId": "renovation",
+      "code": "supplier_framework_fixtures",
+      "name": "Supplier Framework (Fixtures/Cabinets/Tiles)",
+      "timing": "multi_tick",
+      "leadTimeWeeks": 4,
+      "capexFormula": "capex 2000..35000",
+      "opexFormula": "inventory_carry_pct 0.4..1.2%",
+      "effects": [
+        "materials_fill_rate +0.05..0.20",
+        "supplier_lead_time_ticks_modifier -0.25..-0.10",
+        "materials_inventory_value_eur +5000..20000"
+      ],
+      "risk": {
+        "failureChance": 0.14,
+        "failureMode": "Cash tied up in inventory and overstock waste."
+      }
+    },
+    {
+      "nicheId": "renovation",
+      "code": "preferred_subcontractor_network",
+      "name": "Preferred Subcontractor Network (Plumbing/Electrical)",
+      "timing": "multi_tick",
+      "leadTimeWeeks": 3,
+      "capexFormula": "capex 1000..25000",
+      "opexFormula": "subcontractor_premium_pct 0.5..1.5%",
+      "effects": [
+        "subcontractor_delay_probability -0.20..-0.05",
+        "subcontractor_cost_pct +0.02..0.06",
+        "subcontractor_dependency_score -0.12..-0.04"
+      ],
+      "risk": {
+        "failureChance": 0.14,
+        "failureMode": "Cost pressure rises as preferred subs charge more."
+      }
+    },
+    {
+      "nicheId": "renovation",
+      "code": "design_freeze_client_signoff",
+      "name": "Design Freeze & Client Sign-Off Process",
+      "timing": "next_tick",
+      "leadTimeWeeks": 1,
+      "capexFormula": "capex 0..8000",
+      "opexFormula": "admin_pct 0.1..0.6%",
+      "effects": [
+        "design_freeze_compliance +0.15..0.35",
+        "scope_creep_rate_modifier -0.25..-0.05"
+      ],
+      "risk": {
+        "failureChance": 0.12,
+        "failureMode": "Client happiness dips if applied too aggressively."
+      }
+    },
+    {
+      "nicheId": "renovation",
+      "code": "portfolio_marketing_engine",
+      "name": "Portfolio Marketing (Before/After Engine)",
+      "timing": "multi_tick",
+      "leadTimeWeeks": 4,
+      "capexFormula": "capex 1000..40000",
+      "opexFormula": "monthlyFixed 150..3000",
+      "effects": [
+        "lead_pool_count +4..12",
+        "pricing_power_score +0.05..0.25",
+        "close_rate_base +0.02..0.10"
+      ],
+      "risk": {
+        "failureChance": 0.14,
+        "failureMode": "Overpromising backfires if defect rates stay high."
+      }
+    },
+    {
+      "nicheId": "renovation",
+      "code": "quality_punch_warranty_system",
+      "name": "Quality Punch & Warranty System",
+      "timing": "next_tick",
+      "leadTimeWeeks": 1,
+      "capexFormula": "capex 0..20000",
+      "opexFormula": "quality_admin_pct 0.2..0.8%",
+      "effects": [
+        "defect_rate_modifier -0.35..-0.10",
+        "warranty_claim_rate_modifier -0.30..-0.10",
+        "reputation_score +0.02..0.06",
+        "labor_hours_capacity_per_tick -8..-3"
+      ],
+      "risk": {
+        "failureChance": 0.12,
+        "failureMode": "Punch list overhead reduces throughput."
+      }
+    },
+    {
+      "nicheId": "renovation",
+      "code": "property_manager_sales_engine",
+      "name": "Property Manager Sales Engine (Tenant Turnover)",
+      "timing": "multi_tick",
+      "leadTimeWeeks": 4,
+      "capexFormula": "capex 2000..60000",
+      "opexFormula": "monthlyFixed 200..4000",
+      "effects": [
+        "lead_pool_count +3..10",
+        "unlock tenant_turnover_renovation_contract_unit"
+      ],
+      "risk": {
+        "failureChance": 0.14,
+        "failureMode": "SLA penalties hit hard if slip stays high."
+      }
+    },
+    {
+      "nicheId": "renovation",
+      "code": "insurance_documentation_compliance_pack",
+      "name": "Insurance Documentation & Compliance Pack",
+      "timing": "multi_tick",
+      "leadTimeWeeks": 6,
+      "capexFormula": "capex 3000..70000",
+      "opexFormula": "monthlyFixed 200..3000",
+      "effects": [
+        "documentation_process_enabled true",
+        "compliance_score +0.10..0.25",
+        "unlock insurance_restoration_job_unit"
+      ],
+      "risk": {
+        "failureChance": 0.14,
+        "failureMode": "Admin overhead drags utilization without added staff."
+      }
+    }
+  ],
+  "unlocks": [
+    {
+      "nicheId": "commercialBuild",
+      "productSku": "maintenance_repair_retain_unit",
+      "startingUnlocked": true,
+      "requirements": {}
+    },
+    {
+      "nicheId": "commercialBuild",
+      "productSku": "retail_unit_project_unit",
+      "startingUnlocked": false,
+      "requirements": {
+        "minCrewFte": 6,
+        "minSupervisorFte": 1,
+        "minReputationScore": 0.45
+      }
+    },
+    {
+      "nicheId": "commercialBuild",
+      "productSku": "office_fitout_project_unit",
+      "startingUnlocked": false,
+      "requirements": {
+        "upgrades": ["safety_program_certification"],
+        "minCrewFte": 10,
+        "minSupervisorFte": 2,
+        "minReputationScore": 0.55
+      }
+    },
+    {
+      "nicheId": "commercialBuild",
+      "productSku": "warehouse_shell_project_unit",
+      "startingUnlocked": false,
+      "requirements": {
+        "minCrewFte": 14,
+        "minSupervisorFte": 2,
+        "minEstimatorFte": 1,
+        "minComplianceScore": 0.55,
+        "minCashEur": 350000,
+        "anyOf": [
+          { "assets": [{ "assetId": "excavator_access", "minCount": 1 }] },
+          { "assets": [{ "assetId": "crane_access", "minCount": 1 }] }
+        ]
+      }
+    },
+    {
+      "nicheId": "commercialBuild",
+      "productSku": "industrial_extension_project_unit",
+      "startingUnlocked": false,
+      "requirements": {
+        "minCrewFte": 12,
+        "minSupervisorFte": 2,
+        "minEstimatorFte": 1,
+        "minComplianceScore": 0.6,
+        "anyOf": [
+          { "maxSubcontractorDependencyScore": 0.5 },
+          { "upgrades": ["subcontractor_network_sla"] }
+        ]
+      }
+    },
+    {
+      "nicheId": "commercialBuild",
+      "productSku": "design_build_contract_unit",
+      "startingUnlocked": false,
+      "requirements": {
+        "upgrades": ["design_coordination_capability"],
+        "minCrewFte": 16,
+        "minSupervisorFte": 3,
+        "minEstimatorFte": 2,
+        "minComplianceScore": 0.65,
+        "minReputationScore": 0.65
+      }
+    },
+    {
+      "nicheId": "electrical",
+      "productSku": "residential_wiring_job_unit",
+      "startingUnlocked": true,
+      "requirements": {}
+    },
+    {
+      "nicheId": "electrical",
+      "productSku": "emergency_callout_job_unit",
+      "startingUnlocked": false,
+      "requirements": {
+        "minElectriciansFte": 2,
+        "minReputationScore": 0.45,
+        "anyOf": [
+          { "assets": [{ "assetId": "overtime_enabled", "minCount": 1 }] },
+          { "upgrades": ["on_call_team_setup"] }
+        ]
+      }
+    },
+    {
+      "nicheId": "electrical",
+      "productSku": "solar_inverter_install_job_unit",
+      "startingUnlocked": false,
+      "requirements": {
+        "upgrades": ["safety_certification_compliance_pack"],
+        "minCertificationLevel": 1,
+        "minComplianceScore": 0.6
+      }
+    },
+    {
+      "nicheId": "electrical",
+      "productSku": "commercial_fitout_electrical_job_unit",
+      "startingUnlocked": false,
+      "requirements": {
+        "minElectriciansFte": 6,
+        "minMasterElectricianFte": 1,
+        "minSchedulerFte": 1,
+        "minCertificationLevel": 2,
+        "minReputationScore": 0.55
+      }
+    },
+    {
+      "nicheId": "electrical",
+      "productSku": "industrial_panel_upgrade_job_unit",
+      "startingUnlocked": false,
+      "requirements": {
+        "upgrades": ["testing_commissioning_tools"],
+        "minElectriciansFte": 5,
+        "minMasterElectricianFte": 1,
+        "minSchedulerFte": 1,
+        "minCertificationLevel": 2,
+        "minComplianceScore": 0.7
+      }
+    },
+    {
+      "nicheId": "electrical",
+      "productSku": "annual_maintenance_contract_unit",
+      "startingUnlocked": false,
+      "requirements": {
+        "upgrades": ["scheduling_software_dispatch"],
+        "minInspectionPassRate": 0.9,
+        "minReputationScore": 0.6
+      }
+    }
+    ,
+    {
+      "nicheId": "engineering",
+      "productSku": "permitting_and_code_review_unit",
+      "startingUnlocked": true,
+      "requirements": {}
+    },
+    {
+      "nicheId": "engineering",
+      "productSku": "geotechnical_survey_unit",
+      "startingUnlocked": false,
+      "requirements": {
+        "minComplianceScore": 0.55,
+        "anyOf": [
+          { "upgrades": ["subcontractor_framework_specialty"] },
+          { "minSeniorEngineersFte": 1 }
+        ]
+      }
+    },
+    {
+      "nicheId": "engineering",
+      "productSku": "structural_design_package_unit",
+      "startingUnlocked": false,
+      "requirements": {
+        "upgrades": ["qa_baseline_checklist"],
+        "minEngineersFte": 2,
+        "minSeniorEngineersFte": 1,
+        "minReputationScore": 0.5
+      }
+    },
+    {
+      "nicheId": "engineering",
+      "productSku": "mep_design_package_unit",
+      "startingUnlocked": false,
+      "requirements": {
+        "minEngineersFte": 3,
+        "minSeniorEngineersFte": 1,
+        "minProjectManagerFte": 1,
+        "minCertificationLevel": 1,
+        "minComplianceScore": 0.6
+      }
+    },
+    {
+      "nicheId": "engineering",
+      "productSku": "bim_coordination_service_unit",
+      "startingUnlocked": false,
+      "requirements": {
+        "upgrades": ["software_stack_cad_bim"],
+        "minBimSpecialistFte": 1,
+        "minReputationScore": 0.6
+      }
+    },
+    {
+      "nicheId": "engineering",
+      "productSku": "owner_rep_project_management_unit",
+      "startingUnlocked": false,
+      "requirements": {
+        "upgrades": ["governance_reporting_process"],
+        "minProjectManagerFte": 1,
+        "minComplianceScore": 0.7,
+        "minReputationScore": 0.65
+      }
+    }
+    ,
+    {
+      "nicheId": "plumbing",
+      "productSku": "residential_repair_visit_job_unit",
+      "startingUnlocked": true,
+      "requirements": {}
+    },
+    {
+      "nicheId": "plumbing",
+      "productSku": "emergency_leak_callout_job_unit",
+      "startingUnlocked": false,
+      "requirements": {
+        "minPlumbersFte": 2,
+        "minReputationScore": 0.45,
+        "anyOf": [
+          { "assets": [{ "assetId": "on_call_enabled", "minCount": 1 }] },
+          { "upgrades": ["on_call_rotation_setup"] }
+        ]
+      }
+    },
+    {
+      "nicheId": "plumbing",
+      "productSku": "boiler_heatpump_plumbing_service_job_unit",
+      "startingUnlocked": false,
+      "requirements": {
+        "minComplianceScore": 0.6,
+        "anyOf": [
+          { "upgrades": ["tooling_upgrade_pipe_press_camera"] },
+          { "minMasterPlumberFte": 1 }
+        ]
+      }
+    },
+    {
+      "nicheId": "plumbing",
+      "productSku": "bathroom_installation_job_unit",
+      "startingUnlocked": false,
+      "requirements": {
+        "upgrades": ["quality_checklist_pressure_testing"],
+        "minPlumbersFte": 3,
+        "minMasterPlumberFte": 1,
+        "assets": [{ "assetId": "parts_inventory_value_eur", "minCount": 12000 }]
+      }
+    },
+    {
+      "nicheId": "plumbing",
+      "productSku": "property_maintenance_contract_unit",
+      "startingUnlocked": false,
+      "requirements": {
+        "minReputationScore": 0.6,
+        "maxCallbackRate": 0.08,
+        "anyOf": [
+          { "minDispatcherFte": 1 },
+          { "upgrades": ["dispatcher_routing_discipline"] }
+        ]
+      }
+    },
+    {
+      "nicheId": "plumbing",
+      "productSku": "commercial_fitout_plumbing_job_unit",
+      "startingUnlocked": false,
+      "requirements": {
+        "upgrades": ["project_controls_system"],
+        "minComplianceScore": 0.7,
+        "minMasterPlumberFte": 1,
+        "assets": [{ "assetId": "warranty_reserve_eur", "minCount": 8000 }]
+      }
+    }
+    ,
+    {
+      "nicheId": "renovation",
+      "productSku": "small_repair_punchlist_job_unit",
+      "startingUnlocked": true,
+      "requirements": {}
+    },
+    {
+      "nicheId": "renovation",
+      "productSku": "bathroom_renovation_job_unit",
+      "startingUnlocked": false,
+      "requirements": {
+        "minCrewFte": 4,
+        "minReputationScore": 0.45,
+        "assets": [{ "assetId": "materials_inventory_value_eur", "minCount": 12000 }],
+        "anyOf": [
+          { "minDefectDetectionScore": 0.35 },
+          { "upgrades": ["preinspection_hidden_defect_detection"] }
+        ]
+      }
+    },
+    {
+      "nicheId": "renovation",
+      "productSku": "kitchen_renovation_job_unit",
+      "startingUnlocked": false,
+      "requirements": {
+        "minCrewFte": 4,
+        "minReputationScore": 0.5,
+        "anyOf": [
+          {
+            "minContractDisciplineScore": 0.45,
+            "maxSubcontractorDependencyScore": 0.6
+          },
+          {
+            "minContractDisciplineScore": 0.45,
+            "upgrades": ["preferred_subcontractor_network"]
+          },
+          {
+            "upgrades": ["contract_discipline_system"],
+            "maxSubcontractorDependencyScore": 0.6
+          },
+          {
+            "upgrades": [
+              "contract_discipline_system",
+              "preferred_subcontractor_network"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "nicheId": "renovation",
+      "productSku": "tenant_turnover_renovation_contract_unit",
+      "startingUnlocked": false,
+      "requirements": {
+        "upgrades": ["property_manager_sales_engine"],
+        "minReputationScore": 0.6,
+        "maxScheduleSlipScore": 0.25,
+        "anyOf": [
+          { "minProjectManagerFte": 1 },
+          { "upgrades": ["project_controls_milestone_billing"] }
+        ]
+      }
+    },
+    {
+      "nicheId": "renovation",
+      "productSku": "insurance_restoration_job_unit",
+      "startingUnlocked": false,
+      "requirements": {
+        "upgrades": ["insurance_documentation_compliance_pack"],
+        "minComplianceScore": 0.7,
+        "assets": [
+          { "assetId": "documentation_process_enabled", "minCount": 1 },
+          { "assetId": "warranty_reserve_eur", "minCount": 6000 }
+        ]
+      }
+    },
+    {
+      "nicheId": "renovation",
+      "productSku": "whole_home_renovation_job_unit",
+      "startingUnlocked": false,
+      "requirements": {
+        "upgrades": ["project_controls_milestone_billing"],
+        "minProjectManagerFte": 1,
+        "minSiteManagersFte": 1,
+        "minContractDisciplineScore": 0.6,
+        "minDefectDetectionScore": 0.45,
+        "minReputationScore": 0.65
+      }
+    }
+  ],
+  "startingLoadouts": [
+    {
+      "nicheId": "commercialBuild",
+      "startingCash": 450000,
+      "assets": [
+        { "assetId": "reputation_score", "count": 0.45 },
+        { "assetId": "compliance_score", "count": 0.55 },
+        { "assetId": "lead_pool_count", "count": 8 },
+        { "assetId": "bids_in_progress_count", "count": 1 },
+        { "assetId": "bids_capacity_per_tick", "count": 1.4 },
+        { "assetId": "bid_cost_pct_of_contract_value", "count": 0.02 },
+        { "assetId": "bid_win_rate_base", "count": 0.24 },
+        { "assetId": "backlog_contract_value_eur", "count": 600000 },
+        { "assetId": "backlog_projects_count", "count": 2 },
+        { "assetId": "wip_active_projects_count", "count": 1 },
+        { "assetId": "wip_burn_value_eur_per_tick", "count": 80000 },
+        { "assetId": "wip_burn_cost_eur_per_tick", "count": 70000 },
+        { "assetId": "retention_pct", "count": 0.07 },
+        { "assetId": "accounts_receivable_eur", "count": 90000 },
+        { "assetId": "payment_delay_ticks_min", "count": 2 },
+        { "assetId": "payment_delay_ticks_max", "count": 6 },
+        { "assetId": "retention_held_eur", "count": 0 },
+        { "assetId": "invoicing_enabled", "count": 1 },
+        { "assetId": "subcontractor_dependency_score", "count": 0.6 },
+        { "assetId": "materials_price_index", "count": 1 },
+        { "assetId": "labor_wage_index", "count": 1 },
+        { "assetId": "schedule_slip_score", "count": 0.18 },
+        { "assetId": "safety_incidents_count", "count": 0 },
+        { "assetId": "rework_backlog_value_eur", "count": 0 },
+        { "assetId": "penalty_costs_eur_accum", "count": 0 },
+        { "assetId": "credit_limit_eur", "count": 0 },
+        { "assetId": "credit_interest_rate_pct", "count": 0 },
+        { "assetId": "safety_program_certified", "count": 0 },
+        { "assetId": "forklift_access", "count": 1 },
+        { "assetId": "scissor_lift_access", "count": 0 },
+        { "assetId": "excavator_access", "count": 0 },
+        { "assetId": "crane_access", "count": 0 },
+        { "assetId": "service_van_access", "count": 1 },
+        { "assetId": "site_office_setup", "count": 0 }
+      ],
+      "staff": [
+        { "roleId": "crew_fte", "fte": 8 },
+        { "roleId": "supervisors_fte", "fte": 1 },
+        { "roleId": "estimators_fte", "fte": 1 }
+      ],
+      "unlockedProducts": ["maintenance_repair_retain_unit"]
+    },
+    {
+      "nicheId": "electrical",
+      "startingCash": 180000,
+      "assets": [
+        { "assetId": "reputation_score", "count": 0.45 },
+        { "assetId": "compliance_score", "count": 0.55 },
+        { "assetId": "utilization_target", "count": 0.65 },
+        { "assetId": "utilization_actual", "count": 0.45 },
+        { "assetId": "labor_hours_capacity_per_tick", "count": 70 },
+        { "assetId": "job_queue_count", "count": 5 },
+        { "assetId": "average_wait_ticks", "count": 2 },
+        { "assetId": "overtime_enabled", "count": 0 },
+        { "assetId": "materials_inventory_value_eur", "count": 12000 },
+        { "assetId": "materials_fill_rate", "count": 0.75 },
+        { "assetId": "supplier_lead_time_ticks_min", "count": 1 },
+        { "assetId": "supplier_lead_time_ticks_max", "count": 3 },
+        { "assetId": "copper_price_index", "count": 1 },
+        { "assetId": "materials_waste_pct", "count": 0.04 },
+        { "assetId": "certification_level", "count": 0 },
+        { "assetId": "inspection_pass_rate", "count": 0.86 },
+        { "assetId": "callback_rate", "count": 0.06 },
+        { "assetId": "callbacks_queue_count", "count": 0 },
+        { "assetId": "warranty_reserve_eur", "count": 5000 },
+        { "assetId": "accounts_receivable_eur", "count": 12000 },
+        { "assetId": "payment_delay_ticks_min", "count": 1 },
+        { "assetId": "payment_delay_ticks_max", "count": 4 },
+        { "assetId": "retention_held_eur", "count": 0 }
+      ],
+      "staff": [
+        { "roleId": "electricians_fte", "fte": 2 },
+        { "roleId": "master_electrician_fte", "fte": 0 },
+        { "roleId": "apprentices_fte", "fte": 0 },
+        { "roleId": "scheduler_fte", "fte": 0 }
+      ],
+      "unlockedProducts": ["residential_wiring_job_unit"]
+    }
+    ,
+    {
+      "nicheId": "engineering",
+      "startingCash": 220000,
+      "assets": [
+        { "assetId": "reputation_score", "count": 0.45 },
+        { "assetId": "compliance_score", "count": 0.55 },
+        { "assetId": "utilization_target", "count": 0.7 },
+        { "assetId": "utilization_actual", "count": 0.5 },
+        { "assetId": "billable_hours_capacity_per_tick", "count": 90 },
+        { "assetId": "overtime_enabled", "count": 0 },
+        { "assetId": "lead_pool_count", "count": 10 },
+        { "assetId": "proposals_in_progress_count", "count": 1 },
+        { "assetId": "proposals_capacity_per_tick", "count": 1 },
+        { "assetId": "proposal_cost_pct_of_contract_value", "count": 0.025 },
+        { "assetId": "win_rate_base", "count": 0.3 },
+        { "assetId": "backlog_contract_value_eur", "count": 120000 },
+        { "assetId": "backlog_projects_count", "count": 3 },
+        { "assetId": "wip_active_projects_count", "count": 1 },
+        { "assetId": "wip_burn_value_eur_per_tick", "count": 30000 },
+        { "assetId": "wip_burn_cost_eur_per_tick", "count": 22000 },
+        { "assetId": "permitting_delay_ticks_min", "count": 1 },
+        { "assetId": "permitting_delay_ticks_max", "count": 4 },
+        { "assetId": "review_cycle_delay_probability", "count": 0.12 },
+        { "assetId": "scope_creep_rate", "count": 0.15 },
+        { "assetId": "qa_process_maturity", "count": 0.2 },
+        { "assetId": "revision_backlog_hours", "count": 18 },
+        { "assetId": "error_rate", "count": 0.1 },
+        { "assetId": "liability_risk_score", "count": 0.3 },
+        { "assetId": "insurance_reserve_eur", "count": 6000 },
+        { "assetId": "claims_count", "count": 0 },
+        { "assetId": "accounts_receivable_eur", "count": 20000 },
+        { "assetId": "payment_delay_ticks_min", "count": 1 },
+        { "assetId": "payment_delay_ticks_max", "count": 4 },
+        { "assetId": "retention_held_eur", "count": 0 },
+        { "assetId": "certification_level", "count": 0 }
+      ],
+      "staff": [
+        { "roleId": "engineers_fte", "fte": 2 },
+        { "roleId": "senior_engineers_fte", "fte": 0 },
+        { "roleId": "drafters_fte", "fte": 1 },
+        { "roleId": "project_managers_fte", "fte": 0 },
+        { "roleId": "bim_specialists_fte", "fte": 0 }
+      ],
+      "unlockedProducts": ["permitting_and_code_review_unit"]
+    }
+    ,
+    {
+      "nicheId": "plumbing",
+      "startingCash": 140000,
+      "assets": [
+        { "assetId": "reputation_score", "count": 0.45 },
+        { "assetId": "compliance_score", "count": 0.55 },
+        { "assetId": "pricing_power_score", "count": 0.45 },
+        { "assetId": "utilization_target", "count": 0.65 },
+        { "assetId": "utilization_actual", "count": 0.45 },
+        { "assetId": "labor_hours_capacity_per_tick", "count": 70 },
+        { "assetId": "job_queue_count", "count": 6 },
+        { "assetId": "average_wait_ticks", "count": 2 },
+        { "assetId": "overtime_enabled", "count": 0 },
+        { "assetId": "on_call_enabled", "count": 0 },
+        { "assetId": "parts_inventory_value_eur", "count": 10000 },
+        { "assetId": "parts_fill_rate", "count": 0.7 },
+        { "assetId": "supplier_lead_time_ticks_min", "count": 1 },
+        { "assetId": "supplier_lead_time_ticks_max", "count": 3 },
+        { "assetId": "parts_waste_pct", "count": 0.04 },
+        { "assetId": "critical_parts_stockouts_count", "count": 0 },
+        { "assetId": "callback_rate", "count": 0.1 },
+        { "assetId": "callbacks_queue_count", "count": 0 },
+        { "assetId": "inspection_required_rate", "count": 0.25 },
+        { "assetId": "inspection_fail_probability", "count": 0.1 },
+        { "assetId": "warranty_reserve_eur", "count": 2500 },
+        { "assetId": "water_damage_claim_probability", "count": 0.006 },
+        { "assetId": "accounts_receivable_eur", "count": 15000 },
+        { "assetId": "payment_delay_ticks_min", "count": 1 },
+        { "assetId": "payment_delay_ticks_max", "count": 4 },
+        { "assetId": "retention_held_eur", "count": 0 }
+      ],
+      "staff": [
+        { "roleId": "plumbers_fte", "fte": 2 },
+        { "roleId": "master_plumber_fte", "fte": 0 },
+        { "roleId": "apprentices_fte", "fte": 1 },
+        { "roleId": "dispatcher_fte", "fte": 0 }
+      ],
+      "unlockedProducts": ["residential_repair_visit_job_unit"]
+    }
+    ,
+    {
+      "nicheId": "renovation",
+      "startingCash": 120000,
+      "assets": [
+        { "assetId": "lead_pool_count", "count": 18 },
+        { "assetId": "quotes_sent_count", "count": 0 },
+        { "assetId": "quotes_capacity_per_tick", "count": 3 },
+        { "assetId": "close_rate_base", "count": 0.28 },
+        { "assetId": "avg_quote_cycle_ticks", "count": 2 },
+        { "assetId": "client_happiness_score", "count": 0.5 },
+        { "assetId": "reputation_score", "count": 0.45 },
+        { "assetId": "compliance_score", "count": 0.55 },
+        { "assetId": "pricing_power_score", "count": 0.45 },
+        { "assetId": "contract_discipline_score", "count": 0.35 },
+        { "assetId": "design_freeze_compliance", "count": 0.25 },
+        { "assetId": "scope_creep_rate", "count": 0.25 },
+        { "assetId": "change_order_acceptance_rate", "count": 0.45 },
+        { "assetId": "change_order_backlog_value_eur", "count": 0 },
+        { "assetId": "labor_hours_capacity_per_tick", "count": 140 },
+        { "assetId": "utilization_target", "count": 0.7 },
+        { "assetId": "utilization_actual", "count": 0.5 },
+        { "assetId": "active_projects_count", "count": 1 },
+        { "assetId": "project_queue_count", "count": 3 },
+        { "assetId": "schedule_slip_score", "count": 0.22 },
+        { "assetId": "hidden_defect_probability", "count": 0.16 },
+        { "assetId": "defect_detection_score", "count": 0.25 },
+        { "assetId": "rework_backlog_hours", "count": 0 },
+        { "assetId": "rework_cost_eur", "count": 0 },
+        { "assetId": "mold_rot_claim_probability", "count": 0.006 },
+        { "assetId": "materials_inventory_value_eur", "count": 14000 },
+        { "assetId": "materials_fill_rate", "count": 0.72 },
+        { "assetId": "supplier_lead_time_ticks_min", "count": 1 },
+        { "assetId": "supplier_lead_time_ticks_max", "count": 4 },
+        { "assetId": "subcontractor_dependency_score", "count": 0.55 },
+        { "assetId": "subcontractor_delay_probability", "count": 0.18 },
+        { "assetId": "subcontractor_cost_pct", "count": 0.22 },
+        { "assetId": "accounts_receivable_eur", "count": 18000 },
+        { "assetId": "payment_delay_ticks_min", "count": 1 },
+        { "assetId": "payment_delay_ticks_max", "count": 4 },
+        { "assetId": "deposit_pct", "count": 0.2 },
+        { "assetId": "retention_pct", "count": 0.05 },
+        { "assetId": "retention_held_eur", "count": 0 },
+        { "assetId": "warranty_reserve_eur", "count": 3000 },
+        { "assetId": "documentation_process_enabled", "count": 0 }
+      ],
+      "staff": [
+        { "roleId": "crew_fte", "fte": 4 },
+        { "roleId": "site_managers_fte", "fte": 0 },
+        { "roleId": "project_managers_fte", "fte": 0 }
+      ],
+      "unlockedProducts": ["small_repair_punchlist_job_unit"]
+    }
+  ]
+}

@@ -16,6 +16,7 @@ import { useWorld } from "../hooks/useWorld";
 import { useHolding } from "../hooks/useHolding";
 import { useCompanies } from "../hooks/useCompany";
 import { useCurrentPlayer } from "../hooks/useCurrentPlayer";
+import { useNotifications } from "../hooks/useNotifications";
 
 import { formatMoney } from "../../utils/money";
 
@@ -30,6 +31,8 @@ import { formatMoney } from "../../utils/money";
  */
 
 type Tab = { to: string; label: string; icon: React.ReactNode };
+type BadgeTone = "default" | "warning";
+type BadgeConfig = { count: number; tone: BadgeTone; label: string };
 
 const tabs: Tab[] = [
   { to: "/game/overview", label: "Overview", icon: <Home className="h-4 w-4" /> },
@@ -41,11 +44,14 @@ const tabs: Tab[] = [
   { to: "/game/profile", label: "Profile", icon: <User2 className="h-4 w-4" /> },
 ];
 
+const formatBadgeCount = (count: number) => (count > 99 ? "99+" : String(count));
+
 export default function WorldShell() {
   const { world, economy, isSyncing } = useWorld() as any;
   const { player } = useCurrentPlayer();
   const { holding } = useHolding();
   const { companies } = useCompanies();
+  const { counts } = useNotifications();
 
   const [showKpis, setShowKpis] = React.useState(true);
   const [tutorialOpen, setTutorialOpen] = React.useState(false);
@@ -108,6 +114,35 @@ export default function WorldShell() {
     }),
     [netWorth, cash, debt, companies]
   );
+
+  const badgeByRoute = React.useMemo<Record<string, BadgeConfig>>(
+    () => ({
+      "/game/decisions": {
+        count: counts.decisions,
+        tone: counts.budgetWarning > 0 ? "warning" : "default",
+        label: "decision alerts",
+      },
+      "/game/finance": {
+        count: counts.offers,
+        tone: "default",
+        label: "offer alerts",
+      },
+      "/game/social": {
+        count: counts.friendRequests,
+        tone: "default",
+        label: "friend requests",
+      },
+    }),
+    [counts]
+  );
+
+  const badgeClasses = (tone: BadgeTone) =>
+    cn(
+      "absolute -right-2 -top-1 flex h-5 min-w-[18px] items-center justify-center rounded-full px-1 text-[10px] font-semibold",
+      tone === "warning"
+        ? "bg-amber-500 text-amber-950"
+        : "bg-[color:var(--accent)] text-[color:var(--accent-ink)]"
+    );
 
   return (
     <div className="min-h-[calc(100vh-72px)]">
@@ -178,7 +213,17 @@ export default function WorldShell() {
                   )
                 }
               >
-                <span className="opacity-90">{t.icon}</span>
+                <span className="relative opacity-90">
+                  {t.icon}
+                  {badgeByRoute[t.to]?.count ? (
+                    <span
+                      className={badgeClasses(badgeByRoute[t.to]?.tone ?? "default")}
+                      title={`${badgeByRoute[t.to]?.count} ${badgeByRoute[t.to]?.label}`}
+                    >
+                      {formatBadgeCount(badgeByRoute[t.to]?.count ?? 0)}
+                    </span>
+                  ) : null}
+                </span>
                 <span className="font-medium">{t.label}</span>
               </NavLink>
             ))}

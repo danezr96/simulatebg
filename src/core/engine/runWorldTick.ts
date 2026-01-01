@@ -15,6 +15,9 @@ import type {
   GameEvent,
   Holding,
   HoldingDecision,
+  AcquisitionOffer,
+  AcquisitionOfferAction,
+  NicheProduct,
   Loan,
   Niche,
   Player,
@@ -29,7 +32,10 @@ import type {
   Year,
   WeekNumber,
   Timestamp,
+  SetProductPlanDecision,
 } from "../domain";
+
+import { asMoney, yearWeekKey } from "../domain";
 
 import { supabase } from "../persistence/supabaseClient";
 
@@ -40,6 +46,8 @@ import { financeRepo } from "../persistence/financeRepo";
 import { playerRepo } from "../persistence/playerRepo";
 import { programRepo } from "../persistence/programRepo";
 import { upgradeRepo } from "../persistence/upgradeRepo";
+import { acquisitionRepo } from "../persistence/acquisitionRepo";
+import { botRepo } from "../persistence/botRepo";
 
 import { macroEngine } from "./macroEngine";
 import { sectorEngine } from "./sectorEngine";
@@ -56,6 +64,13 @@ type SeasonLike =
       eventProbabilities?: unknown;
     }
   | null;
+
+type ProductPlanStats = {
+  avgPrice: number;
+  avgCost: number;
+  capacityMultiplier: number;
+  bufferWeeks: number;
+};
 
 type RunWorldTickResult = {
   worldRound: WorldRound;
@@ -151,6 +166,116 @@ function safeNumber(x: unknown, fallback = 0): number {
 }
 
 const WEEKS_PER_MONTH = 52 / 12;
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value));
+}
+
+async function listNicheProductsByNicheIds(nicheIds: string[]): Promise<NicheProduct[]> {
+  if (nicheIds.length === 0) return [];
+
+  const { data, error } = await supabase
+    .from("niche_products")
+    .select("*")
+    .in("niche_id", nicheIds);
+
+  if (error) throw new Error(`Failed to load niche_products: ${error.message}`);
+
+  return (data ?? []).map((row: any) => ({
+    id: row.id,
+    nicheId: row.niche_id,
+    sku: row.sku,
+    name: row.name,
+    unit: row.unit,
+    priceMinEur: safeNumber(row.price_min_eur),
+    priceMaxEur: safeNumber(row.price_max_eur),
+    cogsPctMin: safeNumber(row.cogs_pct_min),
+    cogsPctMax: safeNumber(row.cogs_pct_max),
+    capacityDriver: row.capacity_driver,
+    notes: row.notes,
+  }));
+}
+
+function computeProductPlanStats(
+  plan: SetProductPlanDecision,
+  products: NicheProduct[]
+): ProductPlanStats | null {
+  if (!plan || !Array.isArray(plan.items) || plan.items.length === 0 || products.length === 0) {
+    return null;
+  }
+
+  const productBySku = new Map(products.map((p) => [p.sku, p]));
+  const items = plan.items.filter((item) => item && productBySku.has(item.sku));
+  if (items.length === 0) return null;
+
+  let totalShare = 0;
+  for (const item of items) {
+    totalShare += Math.max(0, safeNumber(item.volumeShare, 0));
+  }
+  const weightTotal = totalShare > 0 ? totalShare : items.length;
+
+  let avgPrice = 0;
+  let avgCost = 0;
+  let avgBuffer = 0;
+
+  for (const item of items) {
+    const product = productBySku.get(item.sku);
+    if (!product) continue;
+    const weight = totalShare > 0 ? Math.max(0, safeNumber(item.volumeShare, 0)) : 1;
+    if (weight <= 0) continue;
+
+    const priceMin = safeNumber(product.priceMinEur, 0);
+    const priceMax = Math.max(priceMin, safeNumber(product.priceMaxEur, priceMin));
+    const baselinePrice = (priceMin + priceMax) / 2 || priceMin;
+    const price = clamp(safeNumber(item.priceEur, baselinePrice), priceMin, priceMax);
+
+    const cogsPct = clamp(
+      (safeNumber(product.cogsPctMin, 0) + safeNumber(product.cogsPctMax, 0)) / 2,
+      0,
+      300
+    );
+    const cost = price * (cogsPct / 100);
+
+    avgPrice += price * weight;
+    avgCost += cost * weight;
+    avgBuffer += clamp(safeNumber(item.bufferWeeks, 0), 0, 12) * weight;
+  }
+
+  avgPrice = avgPrice / weightTotal;
+  avgCost = avgCost / weightTotal;
+  avgBuffer = avgBuffer / weightTotal;
+
+  const capacityMultiplier = 1 + clamp(avgBuffer, 0, 8) * 0.05;
+
+  return {
+    avgPrice,
+    avgCost,
+    capacityMultiplier,
+    bufferWeeks: avgBuffer,
+  };
+}
+
+const ACQUISITION_OFFER_DEFAULT_EXPIRY_WEEKS = 4;
+
+function addWeeks(year: number, week: number, delta: number): { year: number; week: number } {
+  const base = (year - 1) * 52 + week;
+  const next = Math.max(1, base + delta);
+  const nextYear = Math.floor((next - 1) / 52) + 1;
+  const nextWeek = ((next - 1) % 52) + 1;
+  return { year: nextYear, week: nextWeek };
+}
+
+function isOfferExpired(offer: AcquisitionOffer, year: number, week: number): boolean {
+  if (!offer.expiresYear || !offer.expiresWeek) return false;
+  return yearWeekKey(offer.expiresYear as any, offer.expiresWeek as any) < yearWeekKey(year as any, week as any);
+}
+
+function estimateCompanyValue(financials: CompanyFinancials | null): number {
+  const revenue = safeNumber(financials?.revenue, 0);
+  const netProfit = safeNumber(financials?.netProfit, 0);
+  const equity = safeNumber((financials as any)?.equity, 0);
+  return Math.max(10_000, revenue * 1.1, netProfit * 6, equity * 1.2);
+}
 
 function pickRange(seedKey: string, min: unknown, max: unknown, fallback = 0): number {
   const lo = safeNumber(min, NaN);
@@ -749,6 +874,9 @@ async function runWorldTickInternal(
     companyById[String(company.id)] = company;
   }
 
+  const bots = await botRepo.listByWorld(worldId);
+  const botHoldingIds = new Set(bots.map((bot) => String(bot.holdingId)));
+
   // 4) Load sectors + niches
   const sectors = await sectorRepo.listSectors();
   const allNiches = await sectorRepo.listAllNiches();
@@ -757,6 +885,15 @@ async function runWorldTickInternal(
   for (const n of allNiches) {
     const id = String((n as unknown as { id: string }).id);
     if (id) nicheById[id] = n;
+  }
+
+  const nicheIds = Object.keys(nicheById);
+  const nicheProducts = await listNicheProductsByNicheIds(nicheIds);
+  const nicheProductsByNicheId = new Map<string, NicheProduct[]>();
+  for (const product of nicheProducts) {
+    const list = nicheProductsByNicheId.get(String(product.nicheId)) ?? [];
+    list.push(product);
+    nicheProductsByNicheId.set(String(product.nicheId), list);
   }
 
   // 5) Load world sector states
@@ -786,6 +923,25 @@ async function runWorldTickInternal(
     if (!holding.id) continue;
     const hid = String(holding.id);
     decisionsByHoldingId[hid] = await getHoldingDecisionsForWeek(worldId, holding.id, yearNum, weekNum, tickStartAt);
+  }
+
+  const acquisitionOffersById: Record<string, AcquisitionOffer> = {};
+  const acquisitionOffersByCompanyId: Record<string, AcquisitionOffer[]> = {};
+  const openAcquisitionOffers = await acquisitionRepo.listOpenByWorld(worldId);
+
+  for (const offer of openAcquisitionOffers) {
+    if (isOfferExpired(offer, yearNum, weekNum)) {
+      await acquisitionRepo.updateOffer(offer.id, {
+        status: "EXPIRED",
+        turn: "NONE",
+        lastAction: offer.lastAction,
+      });
+      continue;
+    }
+    acquisitionOffersById[String(offer.id)] = offer;
+    const list = acquisitionOffersByCompanyId[String(offer.companyId)] ?? [];
+    list.push(offer);
+    acquisitionOffersByCompanyId[String(offer.companyId)] = list;
   }
 
   const activePrograms = (await programRepo.listByWorld({ worldId, status: "ACTIVE" })).filter((p) =>
@@ -827,6 +983,7 @@ async function runWorldTickInternal(
 
   // 7) Apply decisions -> preSimStates (switch on payload.type)
   const preSimStates: Record<string, CompanyState> = {};
+  const productPlanByCompanyId: Record<string, SetProductPlanDecision | null> = {};
 
   for (const c of companies) {
     if (!c.id) continue;
@@ -860,10 +1017,16 @@ async function runWorldTickInternal(
     for (const d of decisions) {
       const payload = (d as unknown as { payload: CompanyDecisionPayload }).payload;
 
-      switch (payload.type) {
-        case "SET_PRICE":
-          next.priceLevel = safeNumber(payload.priceLevel, safeNumber(next.priceLevel, 1)) as any;
-          break;
+        switch (payload.type) {
+          case "SET_PRODUCT_PLAN": {
+            if (payload && Array.isArray(payload.items)) {
+              productPlanByCompanyId[cid] = payload as SetProductPlanDecision;
+            }
+            break;
+          }
+          case "SET_PRICE":
+            next.priceLevel = safeNumber(payload.priceLevel, safeNumber(next.priceLevel, 1)) as any;
+            break;
 
         case "SET_MARKETING":
           next.marketingLevel = safeNumber(payload.marketingLevel, safeNumber(next.marketingLevel, 0)) as any;
@@ -962,6 +1125,22 @@ async function runWorldTickInternal(
     next.week = week;
 
     preSimStates[cid] = next;
+  }
+
+  const productPlanStatsByCompanyId: Record<string, ProductPlanStats> = {};
+
+  for (const c of companies) {
+    if (!c.id) continue;
+    const cid = String(c.id);
+    const plan = productPlanByCompanyId[cid];
+    if (!plan) continue;
+    const nicheId = String((c as any)?.nicheId ?? "");
+    if (!nicheId) continue;
+    const products = nicheProductsByNicheId.get(nicheId) ?? [];
+    const stats = computeProductPlanStats(plan, products);
+    if (stats) {
+      productPlanStatsByCompanyId[cid] = stats;
+    }
   }
 
   const modifiersByCompanyId: Record<string, CompanyEffectModifiers> = {};
@@ -1133,6 +1312,7 @@ async function runWorldTickInternal(
       botPressure,
       modifiersByCompanyId,
       extraOpexByCompanyId,
+      productPlansByCompanyId: productPlanStatsByCompanyId,
       rng,
     } as unknown as Parameters<typeof companyEngine.simulate>[0]);
 
@@ -1141,6 +1321,148 @@ async function runWorldTickInternal(
   }
 
   // 10.5) Apply holding decisions (loans + acquisitions)
+  const cacheOpenOffer = (offer: AcquisitionOffer) => {
+    const id = String(offer.id);
+    acquisitionOffersById[id] = offer;
+    const companyId = String(offer.companyId);
+    const list = acquisitionOffersByCompanyId[companyId] ?? [];
+    const idx = list.findIndex((entry) => String(entry.id) === id);
+    if (idx >= 0) {
+      list[idx] = offer;
+    } else {
+      list.push(offer);
+    }
+    acquisitionOffersByCompanyId[companyId] = list;
+  };
+
+  const dropOpenOffer = (offer: AcquisitionOffer) => {
+    const id = String(offer.id);
+    delete acquisitionOffersById[id];
+    const companyId = String(offer.companyId);
+    const list = (acquisitionOffersByCompanyId[companyId] ?? []).filter(
+      (entry) => String(entry.id) !== id
+    );
+    if (list.length > 0) {
+      acquisitionOffersByCompanyId[companyId] = list;
+    } else {
+      delete acquisitionOffersByCompanyId[companyId];
+    }
+  };
+
+  const appendOfferHistory = (
+    offer: AcquisitionOffer,
+    input: { action: AcquisitionOfferAction; by: "BUYER" | "SELLER"; price: number; message?: string }
+  ) => {
+    const history = Array.isArray(offer.history) ? [...offer.history] : [];
+    history.push({
+      action: input.action,
+      by: input.by,
+      price: asMoney(input.price),
+      message: input.message,
+      year: year as any,
+      week: week as any,
+      at: nowIso(),
+    });
+    return history;
+  };
+
+  const acceptOffer = async (offer: AcquisitionOffer, acceptedBy: "BUYER" | "SELLER") => {
+    const buyerId = String(offer.buyerHoldingId);
+    const sellerId = String(offer.sellerHoldingId);
+    const companyId = String(offer.companyId);
+    const buyer = holdingById[buyerId];
+    const seller = holdingById[sellerId];
+    const company = companyById[companyId];
+
+    if (!buyer || !seller || !company) {
+      const updated = await acquisitionRepo.updateOffer(offer.id, {
+        status: "EXPIRED",
+        turn: "NONE",
+        lastAction: acceptedBy,
+        history: appendOfferHistory(offer, {
+          action: "EXPIRE",
+          by: acceptedBy,
+          price: safeNumber(offer.offerPrice, 0),
+        }),
+      });
+      dropOpenOffer(updated);
+      return;
+    }
+
+    if (String(company.holdingId) !== sellerId) {
+      const updated = await acquisitionRepo.updateOffer(offer.id, {
+        status: "EXPIRED",
+        turn: "NONE",
+        lastAction: acceptedBy,
+        history: appendOfferHistory(offer, {
+          action: "EXPIRE",
+          by: acceptedBy,
+          price: safeNumber(offer.offerPrice, 0),
+        }),
+      });
+      dropOpenOffer(updated);
+      return;
+    }
+
+    const price = safeNumber(offer.offerPrice, 0);
+    const buyerCash = safeNumber(buyer.cashBalance, 0);
+    if (buyerCash < price) {
+      const updated = await acquisitionRepo.updateOffer(offer.id, {
+        status: "FAILED_FUNDS",
+        turn: "NONE",
+        lastAction: acceptedBy,
+        history: appendOfferHistory(offer, {
+          action: "FAIL_FUNDS",
+          by: acceptedBy,
+          price,
+        }),
+      });
+      dropOpenOffer(updated);
+      return;
+    }
+
+    buyer.cashBalance = (buyerCash - price) as any;
+    const sellerCash = safeNumber(seller.cashBalance, 0);
+    seller.cashBalance = (sellerCash + price) as any;
+
+    company.holdingId = buyer.id as any;
+
+    const { error } = await supabase
+      .from("companies")
+      .update({ holding_id: String(buyer.id) })
+      .eq("id", String(company.id));
+
+    if (error) throw new Error(`Failed to transfer company: ${error.message}`);
+
+    const updated = await acquisitionRepo.updateOffer(offer.id, {
+      status: "ACCEPTED",
+      turn: "NONE",
+      lastAction: acceptedBy,
+      history: appendOfferHistory(offer, {
+        action: "ACCEPT",
+        by: acceptedBy,
+        price,
+      }),
+    });
+    dropOpenOffer(updated);
+
+    const competingOffers = acquisitionOffersByCompanyId[companyId] ?? [];
+    for (const other of competingOffers) {
+      if (String(other.id) === String(offer.id)) continue;
+      const closed = await acquisitionRepo.updateOffer(other.id, {
+        status: "EXPIRED",
+        turn: "NONE",
+        lastAction: other.lastAction,
+        history: appendOfferHistory(other, {
+          action: "EXPIRE",
+          by: other.lastAction,
+          price: safeNumber(other.offerPrice, 0),
+        }),
+      });
+      dropOpenOffer(closed);
+    }
+  };
+
   for (const holding of holdings) {
     if (!holding.id) continue;
     const hid = String(holding.id);
@@ -1176,6 +1498,172 @@ async function runWorldTickInternal(
           });
 
           holding.cashBalance = (availableCash - payment) as any;
+          break;
+        }
+
+        case "SUBMIT_ACQUISITION_OFFER": {
+          const companyId = String(payload.companyId ?? "");
+          const offerPrice = safeNumber(payload.offerPrice, 0);
+          if (!companyId || offerPrice <= 0) break;
+
+          const company = companyById[companyId];
+          if (!company) break;
+          if (String(company.status ?? "ACTIVE") !== "ACTIVE") break;
+
+          const sellerId = String(company.holdingId ?? "");
+          if (!sellerId || sellerId === hid) break;
+
+          const expiresIn = Math.max(
+            1,
+            Math.floor(safeNumber(payload.expiresInWeeks, ACQUISITION_OFFER_DEFAULT_EXPIRY_WEEKS))
+          );
+          const expiresAt = addWeeks(yearNum, weekNum, expiresIn);
+
+          const existingOffers = acquisitionOffersByCompanyId[companyId] ?? [];
+          const existing = existingOffers.find(
+            (offer) => String(offer.buyerHoldingId) === hid
+          );
+
+          const historyEntry = {
+            action: "SUBMIT",
+            by: "BUYER" as const,
+            price: offerPrice,
+            message: payload.message,
+            year: year as any,
+            week: week as any,
+            at: nowIso(),
+          };
+
+          if (existing) {
+            const updated = await acquisitionRepo.updateOffer(existing.id, {
+              status: "OPEN",
+              offerPrice,
+              message: payload.message ?? null,
+              turn: "SELLER",
+              lastAction: "BUYER",
+              counterCount: safeNumber(existing.counterCount, 0),
+              expiresYear: expiresAt.year,
+              expiresWeek: expiresAt.week,
+              history: [...(Array.isArray(existing.history) ? existing.history : []), historyEntry],
+            });
+            cacheOpenOffer(updated);
+            break;
+          }
+
+          const created = await acquisitionRepo.createOffer({
+            worldId,
+            companyId: company.id,
+            buyerHoldingId: holding.id as any,
+            sellerHoldingId: company.holdingId as any,
+            offerPrice,
+            message: payload.message,
+            turn: "SELLER",
+            lastAction: "BUYER",
+            expiresYear: expiresAt.year,
+            expiresWeek: expiresAt.week,
+            history: [historyEntry],
+          });
+          cacheOpenOffer(created);
+          break;
+        }
+
+        case "WITHDRAW_ACQUISITION_OFFER": {
+          const offerId = String(payload.offerId ?? "");
+          if (!offerId) break;
+          const offer = acquisitionOffersById[offerId];
+          if (!offer) break;
+          if (String(offer.buyerHoldingId) !== hid) break;
+
+          const updated = await acquisitionRepo.updateOffer(offer.id, {
+            status: "WITHDRAWN",
+            turn: "NONE",
+            lastAction: "BUYER",
+            history: appendOfferHistory(offer, {
+              action: "WITHDRAW",
+              by: "BUYER",
+              price: safeNumber(offer.offerPrice, 0),
+            }),
+          });
+          dropOpenOffer(updated);
+          break;
+        }
+
+        case "REJECT_ACQUISITION_OFFER": {
+          const offerId = String(payload.offerId ?? "");
+          if (!offerId) break;
+          const offer = acquisitionOffersById[offerId];
+          if (!offer) break;
+
+          const isBuyer = String(offer.buyerHoldingId) === hid;
+          const isSeller = String(offer.sellerHoldingId) === hid;
+          if (!isBuyer && !isSeller) break;
+          if (offer.turn === "BUYER" && !isBuyer) break;
+          if (offer.turn === "SELLER" && !isSeller) break;
+
+          const updated = await acquisitionRepo.updateOffer(offer.id, {
+            status: "REJECTED",
+            turn: "NONE",
+            lastAction: isSeller ? "SELLER" : "BUYER",
+            message: payload.reason ?? null,
+            history: appendOfferHistory(offer, {
+              action: "REJECT",
+              by: isSeller ? "SELLER" : "BUYER",
+              price: safeNumber(offer.offerPrice, 0),
+              message: payload.reason,
+            }),
+          });
+          dropOpenOffer(updated);
+          break;
+        }
+
+        case "COUNTER_ACQUISITION_OFFER": {
+          const offerId = String(payload.offerId ?? "");
+          const counterPrice = safeNumber(payload.counterPrice, 0);
+          if (!offerId || counterPrice <= 0) break;
+          const offer = acquisitionOffersById[offerId];
+          if (!offer) break;
+
+          const isBuyer = String(offer.buyerHoldingId) === hid;
+          const isSeller = String(offer.sellerHoldingId) === hid;
+          if (!isBuyer && !isSeller) break;
+          if (offer.turn === "BUYER" && !isBuyer) break;
+          if (offer.turn === "SELLER" && !isSeller) break;
+
+          const nextTurn = isBuyer ? "SELLER" : "BUYER";
+          const expiresAt = addWeeks(yearNum, weekNum, ACQUISITION_OFFER_DEFAULT_EXPIRY_WEEKS);
+          const updated = await acquisitionRepo.updateOffer(offer.id, {
+            status: "COUNTERED",
+            offerPrice: counterPrice,
+            message: payload.message ?? null,
+            turn: nextTurn,
+            lastAction: isBuyer ? "BUYER" : "SELLER",
+            counterCount: safeNumber(offer.counterCount, 0) + 1,
+            expiresYear: expiresAt.year,
+            expiresWeek: expiresAt.week,
+            history: appendOfferHistory(offer, {
+              action: "COUNTER",
+              by: isBuyer ? "BUYER" : "SELLER",
+              price: counterPrice,
+              message: payload.message,
+            }),
+          });
+          cacheOpenOffer(updated);
+          break;
+        }
+
+        case "ACCEPT_ACQUISITION_OFFER": {
+          const offerId = String(payload.offerId ?? "");
+          if (!offerId) break;
+          const offer = acquisitionOffersById[offerId];
+          if (!offer) break;
+
+          const isBuyer = String(offer.buyerHoldingId) === hid;
+          const isSeller = String(offer.sellerHoldingId) === hid;
+          if (!isBuyer && !isSeller) break;
+          if (offer.turn === "BUYER" && !isBuyer) break;
+          if (offer.turn === "SELLER" && !isSeller) break;
+
+          await acceptOffer(offer, isSeller ? "SELLER" : "BUYER");
           break;
         }
 
@@ -1216,6 +1704,78 @@ async function runWorldTickInternal(
           break;
       }
     }
+  }
+
+  for (const offer of Object.values(acquisitionOffersById)) {
+    if (offer.status !== "OPEN" && offer.status !== "COUNTERED") continue;
+    if (offer.turn !== "SELLER") continue;
+
+    const sellerId = String(offer.sellerHoldingId);
+    if (!botHoldingIds.has(sellerId)) continue;
+
+    const companyId = String(offer.companyId);
+    const company = companyById[companyId];
+    if (!company) continue;
+
+    const valuation = estimateCompanyValue(latestFinancialsByCompanyId[companyId] ?? null);
+    const price = safeNumber(offer.offerPrice, 0);
+    const counters = safeNumber(offer.counterCount, 0);
+
+    const acceptFloor = valuation * (counters >= 2 ? 0.95 : 1.05);
+    const rejectCeil = valuation * 0.7;
+
+    if (price >= acceptFloor) {
+      await acceptOffer(offer, "SELLER");
+      continue;
+    }
+
+    if (price <= rejectCeil) {
+      const updated = await acquisitionRepo.updateOffer(offer.id, {
+        status: "REJECTED",
+        turn: "NONE",
+        lastAction: "SELLER",
+        history: appendOfferHistory(offer, {
+          action: "REJECT",
+          by: "SELLER",
+          price,
+        }),
+      });
+      dropOpenOffer(updated);
+      continue;
+    }
+
+    if (counters >= 4) {
+      const updated = await acquisitionRepo.updateOffer(offer.id, {
+        status: "REJECTED",
+        turn: "NONE",
+        lastAction: "SELLER",
+        history: appendOfferHistory(offer, {
+          action: "REJECT",
+          by: "SELLER",
+          price,
+        }),
+      });
+      dropOpenOffer(updated);
+      continue;
+    }
+
+    const counterPrice = Math.max(price, valuation * (1.08 + rng() * 0.08));
+    const expiresAt = addWeeks(yearNum, weekNum, ACQUISITION_OFFER_DEFAULT_EXPIRY_WEEKS);
+    const updated = await acquisitionRepo.updateOffer(offer.id, {
+      status: "COUNTERED",
+      offerPrice: counterPrice,
+      turn: "BUYER",
+      lastAction: "SELLER",
+      counterCount: counters + 1,
+      expiresYear: expiresAt.year,
+      expiresWeek: expiresAt.week,
+      history: appendOfferHistory(offer, {
+        action: "COUNTER",
+        by: "SELLER",
+        price: counterPrice,
+      }),
+    });
+    cacheOpenOffer(updated);
   }
 
   // 11) Finance tick per holding (update prestige_level too)

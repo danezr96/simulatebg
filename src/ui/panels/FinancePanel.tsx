@@ -28,10 +28,11 @@ import { useCompanies } from "../hooks/useCompany";
 
 import { financeRepo } from "../../core/persistence/financeRepo";
 import { companyRepo } from "../../core/persistence/companyRepo";
+import { acquisitionRepo } from "../../core/persistence/acquisitionRepo";
 import { companyService } from "../../core/services/companyService";
 import { decisionService } from "../../core/services/decisionService";
 import { asCompanyId, asHoldingId, asWorldId } from "../../core/domain";
-import type { Loan } from "../../core/domain";
+import type { Loan, AcquisitionOffer } from "../../core/domain";
 
 import { formatMoney, money } from "../../utils/money";
 import { cn } from "../../utils/format";
@@ -61,12 +62,14 @@ type MarketRow = {
   price: number;
 };
 
-type OfferRow = {
+type CompanyDirectoryRow = {
   id: string;
-  companyId: string;
-  offerPrice: number;
-  createdAt?: string;
+  name: string;
+  sectorId: string;
+  nicheId: string;
+  region: string;
 };
+
 
 const emptyTotals: PortfolioTotals = {
   revenue: 0,
@@ -128,7 +131,10 @@ export const FinancePanel: React.FC = () => {
   const [marketError, setMarketError] = React.useState<string | null>(null);
   const [marketQuery, setMarketQuery] = React.useState("");
   const [marketSubmittingId, setMarketSubmittingId] = React.useState<string | null>(null);
-  const [offerRows, setOfferRows] = React.useState<OfferRow[]>([]);
+  const [companyDirectory, setCompanyDirectory] = React.useState<Record<string, CompanyDirectoryRow>>({});
+  const [offers, setOffers] = React.useState<AcquisitionOffer[]>([]);
+  const [offerDrafts, setOfferDrafts] = React.useState<Record<string, string>>({});
+  const [counterDrafts, setCounterDrafts] = React.useState<Record<string, string>>({});
   const [offerMessage, setOfferMessage] = React.useState<string | null>(null);
 
   const loadPortfolio = React.useCallback(async () => {
@@ -229,31 +235,19 @@ export const FinancePanel: React.FC = () => {
 
   const loadOffers = React.useCallback(async () => {
     if (!holdingId || !worldId) {
-      setOfferRows([]);
+      setOffers([]);
       return;
     }
     try {
-      const decisions = await decisionService.listHoldingDecisions({
+      const rows = await acquisitionRepo.listByHolding({
         worldId: asWorldId(worldId),
         holdingId: asHoldingId(holdingId),
-        year: currentYear as any,
-        week: currentWeek as any,
       });
-
-      const offers = (decisions ?? [])
-        .map((decision) => decision.payload as any)
-        .filter((payload) => payload?.type === "BUY_COMPANY")
-        .map((payload) => ({
-          id: payload?.companyId ? `${payload.companyId}-${payload.offerPrice}` : String(Math.random()),
-          companyId: String(payload.companyId ?? ""),
-          offerPrice: Number(payload.offerPrice ?? 0),
-        }));
-
-      setOfferRows(offers);
+      setOffers(rows ?? []);
     } catch {
-      setOfferRows([]);
+      setOffers([]);
     }
-  }, [holdingId, worldId, currentYear, currentWeek]);
+  }, [holdingId, worldId]);
 
   const loadMarketplace = React.useCallback(async () => {
     if (!worldId || !holdingId) {
@@ -269,6 +263,18 @@ export const FinancePanel: React.FC = () => {
         (row) => String(row.holdingId) !== String(holdingId) && String(row.status ?? "ACTIVE") === "ACTIVE"
       );
       const slice = candidates.slice(0, 18);
+
+      const directory: Record<string, CompanyDirectoryRow> = {};
+      for (const row of rows ?? []) {
+        if (!row?.id) continue;
+        directory[String(row.id)] = {
+          id: String(row.id),
+          name: String(row.name ?? "Company"),
+          sectorId: String(row.sectorId ?? ""),
+          nicheId: String(row.nicheId ?? ""),
+          region: String(row.region ?? ""),
+        };
+      }
 
       const financials = await Promise.all(
         slice.map((company) => companyService.getLatestFinancials(asCompanyId(String(company.id))))
@@ -294,6 +300,16 @@ export const FinancePanel: React.FC = () => {
       });
 
       setMarketRows(mapped);
+      setCompanyDirectory(directory);
+      setOfferDrafts((prev) => {
+        const next = { ...prev };
+        for (const row of mapped) {
+          if (next[row.id] === undefined) {
+            next[row.id] = String(Math.round(row.price));
+          }
+        }
+        return next;
+      });
       await loadOffers();
     } catch (error: any) {
       setMarketError(error?.message ?? "Failed to load acquisition market.");
@@ -455,7 +471,15 @@ export const FinancePanel: React.FC = () => {
       setOfferMessage("World or holding is missing.");
       return;
     }
-    if (cash < row.price) {
+
+    const raw = offerDrafts[row.id];
+    const offerPrice = Number(raw ?? row.price);
+    if (!Number.isFinite(offerPrice) || offerPrice <= 0) {
+      setOfferMessage("Enter a valid offer price.");
+      return;
+    }
+
+    if (cash < offerPrice) {
       setOfferMessage("Not enough cash to make a binding offer.");
       return;
     }
@@ -469,18 +493,127 @@ export const FinancePanel: React.FC = () => {
         week: currentWeek as any,
         source: "PLAYER" as any,
         payload: {
-          type: "BUY_COMPANY",
+          type: "SUBMIT_ACQUISITION_OFFER",
           companyId: row.id,
-          offerPrice: row.price,
+          offerPrice,
         } as any,
       });
 
-      setOfferMessage("Offer queued for the next tick.");
+      setOfferMessage("Offer submitted for review.");
       await loadOffers();
     } catch (error: any) {
       setOfferMessage(error?.message ?? "Failed to place offer.");
     } finally {
       setMarketSubmittingId(null);
+    }
+  };
+
+  const onAcceptOffer = async (offer: AcquisitionOffer) => {
+    setOfferMessage(null);
+    if (!worldId || !holdingId) {
+      setOfferMessage("World or holding is missing.");
+      return;
+    }
+    try {
+      await decisionService.submitHoldingDecision({
+        worldId: asWorldId(worldId),
+        holdingId: asHoldingId(holdingId),
+        year: currentYear as any,
+        week: currentWeek as any,
+        source: "PLAYER" as any,
+        payload: {
+          type: "ACCEPT_ACQUISITION_OFFER",
+          offerId: offer.id,
+        } as any,
+      });
+      setOfferMessage("Acceptance queued for the next tick.");
+      await loadOffers();
+    } catch (error: any) {
+      setOfferMessage(error?.message ?? "Failed to accept offer.");
+    }
+  };
+
+  const onRejectOffer = async (offer: AcquisitionOffer) => {
+    setOfferMessage(null);
+    if (!worldId || !holdingId) {
+      setOfferMessage("World or holding is missing.");
+      return;
+    }
+    try {
+      await decisionService.submitHoldingDecision({
+        worldId: asWorldId(worldId),
+        holdingId: asHoldingId(holdingId),
+        year: currentYear as any,
+        week: currentWeek as any,
+        source: "PLAYER" as any,
+        payload: {
+          type: "REJECT_ACQUISITION_OFFER",
+          offerId: offer.id,
+        } as any,
+      });
+      setOfferMessage("Rejection queued for the next tick.");
+      await loadOffers();
+    } catch (error: any) {
+      setOfferMessage(error?.message ?? "Failed to reject offer.");
+    }
+  };
+
+  const onWithdrawOffer = async (offer: AcquisitionOffer) => {
+    setOfferMessage(null);
+    if (!worldId || !holdingId) {
+      setOfferMessage("World or holding is missing.");
+      return;
+    }
+    try {
+      await decisionService.submitHoldingDecision({
+        worldId: asWorldId(worldId),
+        holdingId: asHoldingId(holdingId),
+        year: currentYear as any,
+        week: currentWeek as any,
+        source: "PLAYER" as any,
+        payload: {
+          type: "WITHDRAW_ACQUISITION_OFFER",
+          offerId: offer.id,
+        } as any,
+      });
+      setOfferMessage("Withdrawal queued for the next tick.");
+      await loadOffers();
+    } catch (error: any) {
+      setOfferMessage(error?.message ?? "Failed to withdraw offer.");
+    }
+  };
+
+  const onCounterOffer = async (offer: AcquisitionOffer) => {
+    setOfferMessage(null);
+    if (!worldId || !holdingId) {
+      setOfferMessage("World or holding is missing.");
+      return;
+    }
+
+    const raw = counterDrafts[String(offer.id)];
+    const counterPrice = Number(raw ?? offer.offerPrice);
+    if (!Number.isFinite(counterPrice) || counterPrice <= 0) {
+      setOfferMessage("Enter a valid counter price.");
+      return;
+    }
+
+    try {
+      await decisionService.submitHoldingDecision({
+        worldId: asWorldId(worldId),
+        holdingId: asHoldingId(holdingId),
+        year: currentYear as any,
+        week: currentWeek as any,
+        source: "PLAYER" as any,
+        payload: {
+          type: "COUNTER_ACQUISITION_OFFER",
+          offerId: offer.id,
+          counterPrice,
+        } as any,
+      });
+      setOfferMessage("Counter offer queued for the next tick.");
+      await loadOffers();
+    } catch (error: any) {
+      setOfferMessage(error?.message ?? "Failed to counter offer.");
     }
   };
 
@@ -490,6 +623,26 @@ export const FinancePanel: React.FC = () => {
     return marketRows.filter((row) => row.name.toLowerCase().includes(query));
   }, [marketRows, marketQuery]);
 
+  const incomingOffers = React.useMemo(
+    () => offers.filter((offer) => String(offer.sellerHoldingId) === String(holdingId)),
+    [offers, holdingId]
+  );
+
+  const outgoingOffers = React.useMemo(
+    () => offers.filter((offer) => String(offer.buyerHoldingId) === String(holdingId)),
+    [offers, holdingId]
+  );
+
+  const openOfferByCompanyId = React.useMemo(() => {
+    const map = new Map<string, AcquisitionOffer>();
+    for (const offer of outgoingOffers) {
+      if (offer.status !== "OPEN" && offer.status !== "COUNTERED") continue;
+      const key = String(offer.companyId);
+      if (!map.has(key)) map.set(key, offer);
+    }
+    return map;
+  }, [outgoingOffers]);
+
   const onTabChange = (nextTab: (typeof TAB_OPTIONS)[number]["key"]) => {
     setParams(nextTab === "overview" ? {} : { tab: nextTab });
   };
@@ -498,7 +651,7 @@ export const FinancePanel: React.FC = () => {
     setLoanMessage(null);
     setOfferMessage(null);
     setRepayMessage(null);
-    await Promise.all([loadPortfolio(), loadPortfolioSeries(), loadLoans()]);
+    await Promise.all([loadPortfolio(), loadPortfolioSeries(), loadLoans(), loadOffers()]);
     if (activeTab === "acquisitions") {
       await loadMarketplace();
     }
@@ -868,13 +1021,17 @@ export const FinancePanel: React.FC = () => {
                 <TH>Niche</TH>
                 <TH className="text-right">Revenue</TH>
                 <TH className="text-right">Profit</TH>
-                <TH className="text-right">Price</TH>
+                <TH className="text-right">Indicative</TH>
+                <TH className="text-right">Offer</TH>
                 <TH className="text-right">Action</TH>
               </TR>
             </THead>
             <TBody>
               {filteredMarketRows.map((row) => {
-                const canAfford = cash >= row.price;
+                const existingOffer = openOfferByCompanyId.get(row.id);
+                const offerValue = offerDrafts[row.id] ?? "";
+                const parsedOffer = Number(offerValue || row.price);
+                const canAfford = cash >= parsedOffer;
                 return (
                   <TR key={row.id}>
                     <TD className="font-semibold">{row.name}</TD>
@@ -897,6 +1054,29 @@ export const FinancePanel: React.FC = () => {
                       {formatMoney(row.price)}
                     </TD>
                     <TD className="text-right">
+                      <input
+                        type="number"
+                        min={0}
+                        step={1000}
+                        className={cn(
+                          "w-28 rounded-xl border border-[var(--border)] bg-[var(--card-2)] px-2 py-1 text-xs outline-none",
+                          "text-[var(--text)] text-right"
+                        )}
+                        value={offerValue}
+                        onChange={(e) =>
+                          setOfferDrafts((prev) => ({
+                            ...prev,
+                            [row.id]: e.target.value,
+                          }))
+                        }
+                      />
+                      {existingOffer ? (
+                        <div className="mt-1 text-[10px] text-[var(--text-muted)]">
+                          {existingOffer.status}
+                        </div>
+                      ) : null}
+                    </TD>
+                    <TD className="text-right">
                       <Button
                         variant="secondary"
                         size="sm"
@@ -904,7 +1084,7 @@ export const FinancePanel: React.FC = () => {
                         disabled={!canAfford || !worldId || !holdingId}
                         loading={marketSubmittingId === row.id}
                       >
-                        {canAfford ? "Make offer" : "Insufficient cash"}
+                        {canAfford ? (existingOffer ? "Update offer" : "Make offer") : "Insufficient cash"}
                       </Button>
                     </TD>
                   </TR>
@@ -926,24 +1106,157 @@ export const FinancePanel: React.FC = () => {
           ) : null}
 
           <Table
-            caption={`Offers this round (${offerRows.length})`}
-            isEmpty={offerRows.length === 0}
-            emptyMessage="No offers queued yet."
+            caption={`Incoming offers (${incomingOffers.length})`}
+            isEmpty={incomingOffers.length === 0}
+            emptyMessage="No inbound offers yet."
           >
             <THead>
               <TR>
                 <TH>Company</TH>
-                <TH className="text-right">Offer price</TH>
+                <TH>Status</TH>
+                <TH className="text-right">Offer</TH>
+                <TH className="text-right">Action</TH>
               </TR>
             </THead>
             <TBody>
-              {offerRows.map((offer) => {
-                const match = marketRows.find((row) => row.id === offer.companyId);
+              {incomingOffers.map((offer) => {
+                const company = companyDirectory[String(offer.companyId)];
+                const canRespond =
+                  (offer.status === "OPEN" || offer.status === "COUNTERED") && offer.turn === "SELLER";
                 return (
-                  <TR key={offer.id}>
-                    <TD className="font-semibold">{match?.name ?? offer.companyId}</TD>
+                  <TR key={String(offer.id)}>
+                    <TD className="font-semibold">{company?.name ?? String(offer.companyId)}</TD>
+                    <TD className="text-xs text-[var(--text-muted)]">
+                      {offer.status} • turn: {offer.turn}
+                    </TD>
                     <TD className="text-right" mono>
-                      {formatMoney(offer.offerPrice)}
+                      {formatMoney(Number(offer.offerPrice ?? 0))}
+                    </TD>
+                    <TD className="text-right">
+                      <div className="flex items-center justify-end gap-2">
+                        <input
+                          type="number"
+                          min={0}
+                          step={1000}
+                          placeholder={String(Math.round(Number(offer.offerPrice ?? 0)))}
+                          className={cn(
+                            "w-24 rounded-xl border border-[var(--border)] bg-[var(--card-2)] px-2 py-1 text-xs outline-none",
+                            "text-[var(--text)] text-right"
+                          )}
+                          value={counterDrafts[String(offer.id)] ?? ""}
+                          onChange={(e) =>
+                            setCounterDrafts((prev) => ({
+                              ...prev,
+                              [String(offer.id)]: e.target.value,
+                            }))
+                          }
+                          disabled={!canRespond}
+                        />
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          onClick={() => onAcceptOffer(offer)}
+                          disabled={!canRespond}
+                        >
+                          Accept
+                        </Button>
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          onClick={() => onCounterOffer(offer)}
+                          disabled={!canRespond}
+                        >
+                          Counter
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => onRejectOffer(offer)}
+                          disabled={!canRespond}
+                        >
+                          Reject
+                        </Button>
+                      </div>
+                    </TD>
+                  </TR>
+                );
+              })}
+            </TBody>
+          </Table>
+
+          <Table
+            caption={`Your offers (${outgoingOffers.length})`}
+            isEmpty={outgoingOffers.length === 0}
+            emptyMessage="No offers sent yet."
+          >
+            <THead>
+              <TR>
+                <TH>Company</TH>
+                <TH>Status</TH>
+                <TH className="text-right">Offer</TH>
+                <TH className="text-right">Action</TH>
+              </TR>
+            </THead>
+            <TBody>
+              {outgoingOffers.map((offer) => {
+                const company = companyDirectory[String(offer.companyId)];
+                const canRespond =
+                  (offer.status === "OPEN" || offer.status === "COUNTERED") && offer.turn === "BUYER";
+                const canWithdraw = offer.status === "OPEN" || offer.status === "COUNTERED";
+                return (
+                  <TR key={String(offer.id)}>
+                    <TD className="font-semibold">{company?.name ?? String(offer.companyId)}</TD>
+                    <TD className="text-xs text-[var(--text-muted)]">
+                      {offer.status} • turn: {offer.turn}
+                    </TD>
+                    <TD className="text-right" mono>
+                      {formatMoney(Number(offer.offerPrice ?? 0))}
+                    </TD>
+                    <TD className="text-right">
+                      <div className="flex items-center justify-end gap-2">
+                        <input
+                          type="number"
+                          min={0}
+                          step={1000}
+                          placeholder={String(Math.round(Number(offer.offerPrice ?? 0)))}
+                          className={cn(
+                            "w-24 rounded-xl border border-[var(--border)] bg-[var(--card-2)] px-2 py-1 text-xs outline-none",
+                            "text-[var(--text)] text-right"
+                          )}
+                          value={counterDrafts[String(offer.id)] ?? ""}
+                          onChange={(e) =>
+                            setCounterDrafts((prev) => ({
+                              ...prev,
+                              [String(offer.id)]: e.target.value,
+                            }))
+                          }
+                          disabled={!canRespond}
+                        />
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          onClick={() => onAcceptOffer(offer)}
+                          disabled={!canRespond}
+                        >
+                          Accept
+                        </Button>
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          onClick={() => onCounterOffer(offer)}
+                          disabled={!canRespond}
+                        >
+                          Counter
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => onWithdrawOffer(offer)}
+                          disabled={!canWithdraw}
+                        >
+                          Withdraw
+                        </Button>
+                      </div>
                     </TD>
                   </TR>
                 );

@@ -134,8 +134,17 @@ export const financeEngine = {
     }
 
     // 3) Update holding aggregates (simplified)
+    let holdingCashDelta = 0;
+    for (const company of input.companies) {
+      const cid = String(company.id);
+      const fin = nextCompanyFinancials[cid];
+      if (!fin) continue;
+      holdingCashDelta += Number(fin.cashChange ?? 0);
+    }
+
     const nextHolding: Holding = {
       ...input.holding,
+      cashBalance: (Number(input.holding.cashBalance ?? 0) + holdingCashDelta) as any,
       totalDebt: holdingDebtTotal as any,
     };
 
