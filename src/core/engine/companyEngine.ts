@@ -46,6 +46,32 @@ type ProductPlanStats = {
   bufferWeeks?: number;
 };
 
+type Range = {
+  min: number;
+  max: number;
+};
+
+type MarketAllocationConfig = {
+  elasticities: Record<string, number>;
+  priceFactorClamp: Range;
+  softmaxTemperature: number;
+  weights: {
+    price: number;
+    quality: number;
+    marketing: number;
+    reputation: number;
+    availability: number;
+  };
+};
+
+type MarketAllocationInput = {
+  segmentDemand: Record<string, number>;
+  segmentPricesByCompanyId: Record<string, Record<string, number>>;
+  segmentEligibilityByCompanyId?: Record<string, Record<string, boolean>>;
+  referencePricesBySegment: Record<string, number>;
+  config: MarketAllocationConfig;
+};
+
 export type CompanySimInput = {
   worldId: WorldId;
   year: Year;
@@ -62,6 +88,7 @@ export type CompanySimInput = {
   modifiersByCompanyId?: Record<string, CompanyEffectModifiers>;
   extraOpexByCompanyId?: Record<string, number>;
   productPlansByCompanyId?: Record<string, ProductPlanStats>;
+  marketAllocation?: MarketAllocationInput;
 };
 
 export type CompanySimOutput = {
@@ -89,6 +116,52 @@ function reputationScore(r: number): number {
   return clamp(r, 0.1, 1.5);
 }
 
+function availabilityScore(capacity: number, avgCapacity: number): number {
+  if (avgCapacity <= 0) return 1;
+  return clamp(capacity / avgCapacity, 0.4, 1.6);
+}
+
+function softmax(xs: number[], temperature: number): number[] {
+  if (xs.length === 0) return [];
+  const t = Math.max(0.0001, temperature);
+
+  const m = Math.max(...xs);
+  const exps = xs.map((x) => Math.exp((x - m) / t));
+  const denom = exps.reduce((a, b) => a + b, 0) || 1;
+  return exps.map((e) => e / denom);
+}
+
+function safeNumber(value: unknown, fallback = 0): number {
+  const n = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(n) ? n : fallback;
+}
+
+function qualityPctFromScore(qualityScore: number): number {
+  return clamp(qualityScore / 1.2, 0, 1) * 100;
+}
+
+function computeRefundPct(
+  qualityScore: number,
+  brackets: Array<{ min: number; max: number; refundRangePct: [number, number] }>
+): number {
+  if (!Array.isArray(brackets) || brackets.length === 0) return 0;
+  const qualityPct = qualityPctFromScore(qualityScore);
+
+  for (const bracket of brackets) {
+    const min = safeNumber((bracket as any)?.min, 0);
+    const max = Math.max(min, safeNumber((bracket as any)?.max, min));
+    if (qualityPct < min || qualityPct > max) continue;
+
+    const range = (bracket as any)?.refundRangePct;
+    const minRefund = Math.max(0, safeNumber(range?.[0], 0));
+    const maxRefund = Math.max(minRefund, safeNumber(range?.[1], minRefund));
+    const t = max > min ? clamp((qualityPct - min) / (max - min), 0, 1) : 0;
+    return lerp(maxRefund, minRefund, t);
+  }
+
+  return 0;
+}
+
 export const companyEngine = {
   simulate(input: CompanySimInput): CompanySimOutput {
     const weights = economyConfig.attractiveness.weights;
@@ -114,6 +187,7 @@ export const companyEngine = {
     } as const;
 
     const nicheCfg: any = input.niche.config ?? {};
+    const softStats = nicheCfg.softStats ?? null;
 
     const elasticity = Number(nicheCfg.priceElasticity ?? 1); // higher => price matters more
     const labourIntensity = Number(nicheCfg.labourIntensity ?? 1);
@@ -140,62 +214,202 @@ export const companyEngine = {
     const applyScalar = (base: number, delta?: number, mult?: number) =>
       (base + Number(delta ?? 0)) * Number(mult ?? 1);
 
-    // 1) Utility per company -> market shares
-    const utilities = input.companies.map((c) => {
-      const cid = String(c.id);
-      const s = input.statesByCompanyId[c.id] ?? null;
-      const mod = modifiers[c.id] ?? {};
-      const plan = input.productPlansByCompanyId?.[cid] ?? null;
-      const planCapacityMultiplier = Number.isFinite(Number(plan?.capacityMultiplier))
-        ? Number(plan?.capacityMultiplier)
-        : 1;
+    let marketShares: Record<string, number> = {};
+    let soldVolumes: Record<string, number> = {};
+    let revenueByCompany: Record<string, number> | null = null;
 
-      const priceLvl = applyScalar(Number(s?.priceLevel ?? 1), 0, mod.priceLevelMultiplier);
-      const cap =
-        Math.max(0, Number(s?.capacity ?? 0)) *
-        Number(mod.capacityMultiplier ?? 1) *
-        planCapacityMultiplier;
-      const q = applyScalar(Number(s?.qualityScore ?? 1), 0, mod.qualityMultiplier);
-      const m = applyScalar(
-        Number(s?.marketingLevel ?? 0),
-        Number(mod.marketingLevelDelta ?? 0),
-        mod.marketingMultiplier
+    if (input.marketAllocation && Object.keys(input.marketAllocation.segmentDemand ?? {}).length > 0) {
+      const allocation = input.marketAllocation;
+      const segDemandEntries = Object.entries(allocation.segmentDemand ?? {});
+
+      const capacityRemaining: Record<string, number> = {};
+      const companyScores: Record<
+        string,
+        { quality: number; marketing: number; reputation: number; capacity: number; awareness: number }
+      > = {};
+
+      let capSum = 0;
+      for (const c of input.companies) {
+        const cid = String(c.id);
+        const s = input.statesByCompanyId[c.id] ?? null;
+        const mod = modifiers[c.id] ?? {};
+        const plan = input.productPlansByCompanyId?.[cid] ?? null;
+        const planCapacityMultiplier = Number.isFinite(Number(plan?.capacityMultiplier))
+          ? Number(plan?.capacityMultiplier)
+          : 1;
+
+        const cap =
+          Math.max(0, Number(s?.capacity ?? 0)) *
+          Number(mod.capacityMultiplier ?? 1) *
+          planCapacityMultiplier;
+        capacityRemaining[cid] = cap;
+        capSum += cap;
+
+        const q = applyScalar(Number(s?.qualityScore ?? 1), 0, mod.qualityMultiplier);
+        const m = applyScalar(
+          Number(s?.marketingLevel ?? 0),
+          Number(mod.marketingLevelDelta ?? 0),
+          mod.marketingMultiplier
+        );
+        const rep = applyScalar(Number(s?.reputationScore ?? 0.5), 0, mod.reputationMultiplier);
+        const awareness = safeNumber((s as any)?.awarenessScore, 20);
+
+        companyScores[cid] = { quality: q, marketing: m, reputation: rep, capacity: cap, awareness };
+      }
+
+      const avgCap = capSum / Math.max(1, input.companies.length);
+      const soldByCompany: Record<string, number> = {};
+      const revenueMap: Record<string, number> = {};
+
+      const priceClamp = allocation.config.priceFactorClamp ?? { min: 0.65, max: 1.45 };
+      const weightsCfg = allocation.config.weights;
+      const softmaxTemp = allocation.config.softmaxTemperature ?? economyConfig.marketShare.softmaxTemperature;
+
+      for (const [segment, demandRaw] of segDemandEntries) {
+        const demand = Math.max(0, Number(demandRaw)) * botDemandFactor * priceDemandFactor;
+        if (demand <= 0) continue;
+
+        const segmentElasticity = Number(allocation.config.elasticities?.[segment] ?? elasticity);
+        let remainingDemand = demand;
+        let rounds = 0;
+
+        while (remainingDemand > 0.0001 && rounds < 4) {
+          const eligible: string[] = [];
+          const scores: number[] = [];
+          const prices: number[] = [];
+
+          for (const c of input.companies) {
+            const cid = String(c.id);
+            if (capacityRemaining[cid] <= 0) continue;
+
+            const eligibleMap = allocation.segmentEligibilityByCompanyId?.[cid];
+            if (eligibleMap && eligibleMap[segment] === false) continue;
+
+            const price = allocation.segmentPricesByCompanyId?.[cid]?.[segment];
+            if (!Number.isFinite(price)) continue;
+
+            const refPrice = Math.max(0.01, Number(allocation.referencePricesBySegment?.[segment] ?? price));
+            const priceIndex = price / refPrice;
+            const priceFactor = clamp(Math.pow(priceIndex, -segmentElasticity), priceClamp.min, priceClamp.max);
+
+            const scoreBase = companyScores[cid];
+            const availability = availabilityScore(capacityRemaining[cid], avgCap);
+            const reachFactor = softStats
+              ? clamp(0.1 + scoreBase.awareness / 125, 0.1, 0.9)
+              : 1;
+            const marketingTerm = marketingScore(scoreBase.marketing) * reachFactor;
+
+            const attractiveness =
+              weightsCfg.price * Math.log(Math.max(0.0001, priceFactor)) +
+              weightsCfg.quality * Math.log(Math.max(0.0001, qualityScore(scoreBase.quality))) +
+              weightsCfg.marketing * Math.log(Math.max(0.0001, marketingTerm)) +
+              weightsCfg.reputation * Math.log(Math.max(0.0001, reputationScore(scoreBase.reputation))) +
+              weightsCfg.availability * Math.log(Math.max(0.0001, availability));
+
+            eligible.push(cid);
+            scores.push(clamp(attractiveness, -20, 20));
+            prices.push(price);
+          }
+
+          if (eligible.length === 0) break;
+
+          const shares = softmax(scores, softmaxTemp);
+          let deliveredThisRound = 0;
+
+          for (let i = 0; i < eligible.length; i += 1) {
+            const cid = eligible[i];
+            const share = shares[i] ?? 0;
+            if (share <= 0) continue;
+
+            const allocated = remainingDemand * share;
+            const deliver = Math.min(allocated, capacityRemaining[cid]);
+            if (deliver <= 0) continue;
+
+            capacityRemaining[cid] -= deliver;
+            soldByCompany[cid] = (soldByCompany[cid] ?? 0) + deliver;
+            revenueMap[cid] = (revenueMap[cid] ?? 0) + deliver * prices[i];
+            deliveredThisRound += deliver;
+          }
+
+          remainingDemand -= deliveredThisRound;
+          if (deliveredThisRound <= 0.0001) break;
+          rounds += 1;
+        }
+      }
+
+      soldVolumes = soldByCompany;
+      revenueByCompany = revenueMap;
+
+      const totalDemand = segDemandEntries.reduce(
+        (sum, [, v]) => sum + Math.max(0, Number(v)) * botDemandFactor * priceDemandFactor,
+        0
       );
-      const rep = applyScalar(Number(s?.reputationScore ?? 0.5), 0, mod.reputationMultiplier);
+      marketShares = {};
+      for (const c of input.companies) {
+        const sold = soldVolumes[c.id] ?? 0;
+        marketShares[c.id] = totalDemand > 0 ? sold / totalDemand : 0;
+      }
+    } else {
+      // 1) Utility per company -> market shares
+      const utilities = input.companies.map((c) => {
+        const cid = String(c.id);
+        const s = input.statesByCompanyId[c.id] ?? null;
+        const mod = modifiers[c.id] ?? {};
+        const plan = input.productPlansByCompanyId?.[cid] ?? null;
+        const planCapacityMultiplier = Number.isFinite(Number(plan?.capacityMultiplier))
+          ? Number(plan?.capacityMultiplier)
+          : 1;
 
-      // Utility model (simple v0)
-      const u =
-        Math.pow(priceScore(priceLvl), 1 + elasticity) *
-        Math.pow(qualityScore(q), weights.quality) *
-        Math.pow(marketingScore(m), weights.marketing) *
-        Math.pow(reputationScore(rep), weights.reputation) *
-        (cap > 0 ? 1 : 0);
+        const priceLvl = applyScalar(Number(s?.priceLevel ?? 1), 0, mod.priceLevelMultiplier);
+        const cap =
+          Math.max(0, Number(s?.capacity ?? 0)) *
+          Number(mod.capacityMultiplier ?? 1) *
+          planCapacityMultiplier;
+        const q = applyScalar(Number(s?.qualityScore ?? 1), 0, mod.qualityMultiplier);
+        const m = applyScalar(
+          Number(s?.marketingLevel ?? 0),
+          Number(mod.marketingLevelDelta ?? 0),
+          mod.marketingMultiplier
+        );
+        const rep = applyScalar(Number(s?.reputationScore ?? 0.5), 0, mod.reputationMultiplier);
+        const awareness = safeNumber((s as any)?.awarenessScore, 20);
+        const reachFactor = softStats ? clamp(0.1 + awareness / 125, 0.1, 0.9) : 1;
+        const marketingTerm = Math.max(0.0001, marketingScore(m) * reachFactor);
 
-      return { id: c.id, utility: u };
-    });
+        // Utility model (simple v0)
+        const u =
+          Math.pow(priceScore(priceLvl), 1 + elasticity) *
+          Math.pow(qualityScore(q), weights.quality) *
+          Math.pow(marketingTerm, weights.marketing) *
+          Math.pow(reputationScore(rep), weights.reputation) *
+          (cap > 0 ? 1 : 0);
 
-    const marketShares = sectorEngine.computeMarketShares(utilities);
+        return { id: c.id, utility: u };
+      });
 
-    // 2) Demand -> sold volume (bounded by capacity)
-    const soldVolumes: Record<string, number> = {};
+      marketShares = sectorEngine.computeMarketShares(utilities);
 
-    for (const c of input.companies) {
-      const cid = String(c.id);
-      const share = marketShares[c.id] ?? 0;
-      const desired = effectiveDemand * share;
+      // 2) Demand -> sold volume (bounded by capacity)
+      soldVolumes = {};
 
-      const s = input.statesByCompanyId[c.id] ?? null;
-      const mod = modifiers[c.id] ?? {};
-      const plan = input.productPlansByCompanyId?.[cid] ?? null;
-      const planCapacityMultiplier = Number.isFinite(Number(plan?.capacityMultiplier))
-        ? Number(plan?.capacityMultiplier)
-        : 1;
-      const cap =
-        Math.max(0, Number(s?.capacity ?? 0)) *
-        Number(mod.capacityMultiplier ?? 1) *
-        planCapacityMultiplier;
+      for (const c of input.companies) {
+        const cid = String(c.id);
+        const share = marketShares[c.id] ?? 0;
+        const desired = effectiveDemand * share;
 
-      soldVolumes[c.id] = Math.min(desired, cap);
+        const s = input.statesByCompanyId[c.id] ?? null;
+        const mod = modifiers[c.id] ?? {};
+        const plan = input.productPlansByCompanyId?.[cid] ?? null;
+        const planCapacityMultiplier = Number.isFinite(Number(plan?.capacityMultiplier))
+          ? Number(plan?.capacityMultiplier)
+          : 1;
+        const cap =
+          Math.max(0, Number(s?.capacity ?? 0)) *
+          Number(mod.capacityMultiplier ?? 1) *
+          planCapacityMultiplier;
+
+        soldVolumes[c.id] = Math.min(desired, cap);
+      }
     }
 
     // 3) Financials + next state
@@ -211,24 +425,38 @@ export const companyEngine = {
       const basePriceLevel = Number(prev?.priceLevel ?? 1);
       const priceLvl = applyScalar(basePriceLevel, 0, mod.priceLevelMultiplier);
       const sold = Number(soldVolumes[c.id] ?? 0);
+      const qualityForRefunds = applyScalar(Number(prev?.qualityScore ?? 1), 0, mod.qualityMultiplier);
+      const prevAwareness = safeNumber((prev as any)?.awarenessScore, 20);
+      const prevEfficiency = safeNumber((prev as any)?.operationalEfficiencyScore, 50);
 
       // Pricing
       const basePrice = Number(nicheCfg.basePrice ?? DEFAULTS.pricing.defaultBasePrice);
       const planPrice = Number(plan?.avgPrice);
-      const unitPrice = Number.isFinite(planPrice) && planPrice > 0 ? planPrice : basePrice * priceLvl;
+      const revenueOverride = revenueByCompany ? revenueByCompany[cid] : null;
+      const unitPrice =
+        revenueOverride != null && sold > 0
+          ? revenueOverride / sold
+          : Number.isFinite(planPrice) && planPrice > 0
+            ? planPrice
+            : basePrice * priceLvl;
 
       // Variable cost per unit
       const baseVarCost = Number(prev?.variableCostPerUnit ?? nicheCfg.baseVariableCost ?? DEFAULTS.costs.defaultVarCost);
       const planCost = Number(plan?.avgCost);
       const rawVarCost = Number.isFinite(planCost) && planCost > 0 ? planCost : baseVarCost;
+      const efficiencyCostMultiplier = softStats
+        ? clamp(1.08 - prevEfficiency / 250, 0.7, 1.08)
+        : 1;
       const varCostPerUnit =
         rawVarCost *
         (1 + inflation) *
         energyCostFactor *
-        Number(mod.variableCostMultiplier ?? 1);
+        Number(mod.variableCostMultiplier ?? 1) *
+        efficiencyCostMultiplier;
 
       // Fixed costs
-      const fixedCosts = Number(prev?.fixedCosts ?? DEFAULTS.costs.defaultFixedCosts);
+      const fixedCostsBase = Number(prev?.fixedCosts ?? DEFAULTS.costs.defaultFixedCosts);
+      const fixedCosts = fixedCostsBase * efficiencyCostMultiplier;
 
       // Labour costs
       const employees = Number(prev?.employees ?? 0);
@@ -240,7 +468,8 @@ export const companyEngine = {
         labourIntensity *
         (0.8 + 0.4 * skillIntensity) *
         labourCostFactor *
-        Number(mod.labourCostMultiplier ?? 1);
+        Number(mod.labourCostMultiplier ?? 1) *
+        efficiencyCostMultiplier;
 
       // Marketing treated as weekly opex
       const baseMarketingLevel = Number(prev?.marketingLevel ?? 0);
@@ -249,8 +478,28 @@ export const companyEngine = {
         Number(mod.marketingLevelDelta ?? 0),
         mod.marketingMultiplier
       );
+      const statCaps = (softStats?.statDriftCapsPerTick ?? {}) as {
+        awarenessUp?: number;
+        awarenessDecay?: number;
+        efficiency?: number;
+      };
+      const awarenessUpCap = safeNumber(statCaps.awarenessUp, 0);
+      const awarenessDecay = safeNumber(statCaps.awarenessDecay, 0);
+      const awarenessSignal = Math.log(1 + Math.max(0, marketingSpend) / 40);
+      const awarenessDelta = clamp(0.06 * awarenessSignal, 0, awarenessUpCap) + awarenessDecay;
+      const nextAwareness = clamp(prevAwareness + awarenessDelta, 0, 100);
 
-      const revenue = unitPrice * sold;
+      const grossRevenue = revenueOverride != null && sold > 0 ? revenueOverride : unitPrice * sold;
+      const refundBrackets = Array.isArray(softStats?.qualityRefundsPctByScore)
+        ? (softStats?.qualityRefundsPctByScore as Array<{
+            min: number;
+            max: number;
+            refundRangePct: [number, number];
+          }>)
+        : [];
+      const refundPct = refundBrackets.length > 0 ? computeRefundPct(qualityForRefunds, refundBrackets) : 0;
+      const refundAmount = grossRevenue * (refundPct / 100);
+      const revenue = Math.max(0, grossRevenue - refundAmount);
       const cogs = varCostPerUnit * sold;
       const opex = fixedCosts + labourCost + marketingSpend + Number(extraOpex[c.id] ?? 0);
 
@@ -279,6 +528,15 @@ export const companyEngine = {
           : clamp(prevRepBase - DEFAULTS.reputation.lossPenalty, 0, 1.2);
 
       const nextRep = lerp(prevRepBase, repTarget, DEFAULTS.reputation.smoothing);
+      const repCap = safeNumber(softStats?.statDriftCapsPerTick?.reputation, 0);
+      const qualityPct = qualityPctFromScore(qualityForRefunds);
+      const reviewDeltaRaw = (qualityPct - 60) / 400 - refundPct / 200;
+      const reviewDelta = repCap > 0 ? clamp(reviewDeltaRaw, -repCap, repCap) : reviewDeltaRaw;
+      const nextRepReviewed = clamp(nextRep + reviewDelta, 0, 1.2);
+      const efficiencyCap = safeNumber(statCaps.efficiency, 0);
+      const efficiencyDeltaRaw = (utilisation - 0.6) * 0.5;
+      const efficiencyDelta = efficiencyCap > 0 ? clamp(efficiencyDeltaRaw, -efficiencyCap, efficiencyCap) : efficiencyDeltaRaw;
+      const nextEfficiency = clamp(prevEfficiency + efficiencyDelta, 0, 100);
 
       const nextState: CompanyState = {
         id: prev?.id ?? `state_${c.id}_${input.year}_${input.week}`,
@@ -291,10 +549,12 @@ export const companyEngine = {
         capacity: Math.max(0, Number(prev?.capacity ?? 0)) as any,
         qualityScore: Number(prev?.qualityScore ?? 1) as any,
         marketingLevel: baseMarketingLevel as any,
+        awarenessScore: nextAwareness as any,
         employees,
-        fixedCosts: fixedCosts as any,
+        fixedCosts: fixedCostsBase as any,
         variableCostPerUnit: baseVarCost as any,
-        reputationScore: nextRep as any,
+        reputationScore: nextRepReviewed as any,
+        operationalEfficiencyScore: nextEfficiency as any,
         utilisationRate: utilisation as any,
 
         createdAt: prev?.createdAt ?? (new Date().toISOString() as any),

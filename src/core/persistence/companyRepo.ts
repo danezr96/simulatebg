@@ -48,6 +48,7 @@ function mapCompanyState(row: CompanyStateRow): CompanyState {
     capacity: row.capacity as any,
     qualityScore: row.quality_score as any,
     marketingLevel: row.marketing_level as any,
+    awarenessScore: ((row as any).awareness_score ?? 20) as any,
     employees: row.employees,
 
     fixedCosts: row.fixed_costs as any,
@@ -59,6 +60,7 @@ function mapCompanyState(row: CompanyStateRow): CompanyState {
     // ✅ (optioneel) alias voor nieuwe naam zodat engines/UI alvast brandScore kunnen gebruiken
     brandScore: row.brand_score as any,
 
+    operationalEfficiencyScore: ((row as any).operational_efficiency_score ?? 50) as any,
     utilisationRate: row.utilisation_rate as any,
 
     createdAt: row.created_at as any,
@@ -225,6 +227,7 @@ export const companyRepo = {
       capacity: Number(state.capacity as any),
       quality_score: Number(state.qualityScore as any),
       marketing_level: Number(state.marketingLevel as any),
+      awareness_score: Number((state as any).awarenessScore ?? 20),
       employees: Number(state.employees),
 
       fixed_costs: Number(state.fixedCosts as any),
@@ -233,6 +236,7 @@ export const companyRepo = {
       brand_score: Number(
   (state as any).reputationScore ?? (state as any).brandScore ?? 0.5
 ),
+      operational_efficiency_score: Number((state as any).operationalEfficiencyScore ?? 50),
       utilisation_rate: Number((state as any).utilisationRate ?? 0),
     };
 

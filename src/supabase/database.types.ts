@@ -727,12 +727,14 @@ export type Database = {
           capacity: number;
           quality_score: number;
           marketing_level: number;
+          awareness_score: number;
           employees: number;
 
           fixed_costs: number;
           variable_cost_per_unit: number;
 
           brand_score: number;
+          operational_efficiency_score: number;
           utilisation_rate: number;
 
           created_at: string;
@@ -748,12 +750,14 @@ export type Database = {
           capacity?: number;
           quality_score?: number;
           marketing_level?: number;
+          awareness_score?: number;
           employees?: number;
 
           fixed_costs?: number;
           variable_cost_per_unit?: number;
 
           brand_score?: number;
+          operational_efficiency_score?: number;
           utilisation_rate?: number;
 
           created_at?: string;
@@ -763,12 +767,14 @@ export type Database = {
           capacity?: number;
           quality_score?: number;
           marketing_level?: number;
+          awareness_score?: number;
           employees?: number;
 
           fixed_costs?: number;
           variable_cost_per_unit?: number;
 
           brand_score?: number;
+          operational_efficiency_score?: number;
           utilisation_rate?: number;
         };
         Relationships: [

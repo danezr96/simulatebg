@@ -375,7 +375,7 @@ function applyUpgradeEffect(params: {
   modifiers: CompanyEffectModifiers;
 }): number {
   const { effect, seedKey, state, financials, modifiers } = params;
-  const variable = String(effect?.variable ?? "");
+  const variable = String(effect?.variable ?? effect?.key ?? "");
   if (!variable) return 0;
   const op = String(effect?.op ?? "mul");
   const range = Array.isArray(effect?.range) ? effect.range : [];
@@ -391,6 +391,7 @@ function applyUpgradeEffect(params: {
   const fixedCosts = safeNumber(state?.fixedCosts, 0);
   const baseOpex = safeNumber(financials?.opex, fixedCosts);
   const baseCapacity = safeNumber(state?.capacity, 0);
+  const baseQuality = safeNumber(state?.qualityScore, 0);
 
   // Approximate catalog effect variables onto engine modifiers.
   switch (variable) {
@@ -404,6 +405,11 @@ function applyUpgradeEffect(params: {
     }
     case "errorRate":
     case "unitCost":
+    case "unit_cost":
+      applyMultiplier("variableCostMultiplier", value);
+      return 0;
+    case "returns_rate":
+    case "refund_rate":
       applyMultiplier("variableCostMultiplier", value);
       return 0;
     case "incidentRate":
@@ -412,33 +418,53 @@ function applyUpgradeEffect(params: {
       applyMultiplier("labourCostMultiplier", value);
       return 0;
     case "avgTicket":
+    case "avg_ticket":
+    case "price_uplift":
       applyMultiplier("priceLevelMultiplier", value);
       return 0;
     case "conversionRate":
+    case "conversion_rate":
     case "baseDemand":
+    case "base_demand":
       applyMultiplier("marketingMultiplier", value);
       return 0;
     case "repeatRate":
+    case "repeat_rate":
       applyMultiplier("reputationMultiplier", value);
       return 0;
-    case "churnRate": {
+    case "churnRate":
+    case "churn_rate": {
       const boost = 1 + (1 - value) * 0.5;
       applyMultiplier("reputationMultiplier", boost);
       return 0;
     }
-    case "downtimeRate": {
+    case "downtimeRate":
+    case "downtime_rate": {
       const boost = 1 + (1 - value) * 0.5;
       applyMultiplier("capacityMultiplier", boost);
       return 0;
     }
-    case "fineChance": {
+    case "fineChance":
+    case "fine_chance": {
       const boost = 1 + (1 - value) * 0.1;
       applyMultiplier("reputationMultiplier", boost);
       return 0;
     }
-    case "reputation": {
+    case "reputation":
+    case "reputation_score":
+    case "brand_reputation_score": {
       const boost = op === "add" ? 1 + value / 100 : value;
       applyMultiplier("reputationMultiplier", boost);
+      return 0;
+    }
+    case "quality":
+    case "quality_score":
+    case "service_quality_score": {
+      if (op === "add" && baseQuality > 0) {
+        applyMultiplier("qualityMultiplier", (baseQuality + value) / baseQuality);
+      } else if (op === "mul") {
+        applyMultiplier("qualityMultiplier", value);
+      }
       return 0;
     }
     case "fixedCosts": {
@@ -456,6 +482,477 @@ function applyUpgradeEffect(params: {
     default:
       return 0;
   }
+}
+
+function lerp(a: number, b: number, t: number): number {
+  return a + (b - a) * t;
+}
+
+function getMonthIndexFromWeek(week: number): number {
+  const t = (week - 1) / 52;
+  return clamp(Math.floor(t * 12), 0, 11);
+}
+
+function computeEffectiveCapacity(
+  state: CompanyState | null,
+  modifiers: CompanyEffectModifiers | null,
+  plan?: ProductPlanStats | null
+): number {
+  if (!state) return 0;
+  const mod = modifiers ?? {};
+  const planMult = Number.isFinite(Number(plan?.capacityMultiplier))
+    ? Number(plan?.capacityMultiplier)
+    : 1;
+  return (
+    Math.max(0, safeNumber(state.capacity, 0)) *
+    safeNumber(mod.capacityMultiplier, 1) *
+    planMult
+  );
+}
+
+function readSegmentDemandFromSummary(
+  summary: Record<string, unknown> | null | undefined,
+  segment: string
+): number {
+  if (!summary || typeof summary !== "object") return 0;
+  const segmentDemand = (summary as any).segmentDemand;
+  if (segmentDemand && typeof segmentDemand === "object" && segment in segmentDemand) {
+    return safeNumber(segmentDemand[segment], 0);
+  }
+  switch (segment) {
+    case "interior_addon":
+      return safeNumber((summary as any).interiorAddOnDemand, 0);
+    case "detailing":
+      return safeNumber((summary as any).detailingDemand, 0);
+    case "fleet":
+      return safeNumber((summary as any).fleetDemand, 0);
+    default:
+      return 0;
+  }
+}
+
+function resolveOpsModifiers(params: {
+  niche: Niche;
+  state: CompanyState;
+  opsIntensity?: number;
+  availability?: number;
+}): { modifiers: CompanyEffectModifiers; extraOpex: number } | null {
+  const cfg = (params.niche.config as any)?.opsResolution;
+  if (!cfg || typeof cfg !== "object") return null;
+
+  const core = (params.niche.config as any)?.coreAssumptions ?? {};
+  const operations = (params.niche.config as any)?.operations ?? {};
+  const maintenance = (params.niche.config as any)?.maintenance ?? {};
+
+  const staffing = cfg.staffing ?? {};
+  const energyModes = cfg.energyModes ?? {};
+
+  const ticksPerWeek = Math.max(1, safeNumber(core.ticksPerWeek, 1008));
+  const laneThroughput = Math.max(0.1, safeNumber(operations?.laneThroughputPerTick?.base, 2));
+  const capacityPerLaneWeek = laneThroughput * ticksPerWeek;
+  const plannedCapacity = Math.max(0, safeNumber(params.state.capacity, 0));
+  const laneCount = Math.max(1, plannedCapacity / Math.max(1, capacityPerLaneWeek));
+
+  const laneFtePerLane = Math.max(0.1, safeNumber(staffing.laneFtePerLane, 1));
+  const staffNeeded = laneCount * laneFtePerLane;
+  const employees = Math.max(0, safeNumber(params.state.employees, 0));
+  const staffRatio = staffNeeded > 0 ? employees / staffNeeded : 1;
+  const staffFloor = clamp(safeNumber(staffing.staffShortageCapacityFloor, 0.4), 0.1, 1);
+  const staffFactor = clamp(staffRatio, staffFloor, 1);
+
+  const availability = params.availability != null ? clamp(params.availability, 0.4, 1.2) : 1;
+
+  const intensity = params.opsIntensity != null ? clamp(params.opsIntensity, 0, 1) : 0.5;
+  const energyKey = intensity <= 0.33 ? "eco" : intensity >= 0.75 ? "peak_avoid" : "normal";
+  const energy = energyModes[energyKey] ?? {};
+  const energyCostMult = safeNumber(energy.energyCostMultiplier, 1);
+  const energyThroughputMult = safeNumber(energy.throughputMultiplier, 1);
+  const energyQualityMult = safeNumber(energy.qualityMultiplier, 1);
+
+  const qualityScore = safeNumber(params.state.qualityScore, 0.6);
+  const qualityNorm = clamp((qualityScore - 0.4) / 0.6, 0, 1);
+  let maintenanceLevel = Math.round(qualityNorm * 3);
+  if (intensity > 0.75) maintenanceLevel = Math.max(0, maintenanceLevel - 1);
+
+  const levels = Array.isArray(maintenance.levels) ? maintenance.levels : [];
+  const levelCfg =
+    levels.find((level: any) => Number(level?.level) === maintenanceLevel) ?? levels[0] ?? {};
+  const breakdownChancePct = Math.max(0, safeNumber(levelCfg.breakdownChancePct, 0.2));
+  const downtimeRange = maintenance.downtimeTicksRange ?? {};
+  const avgDowntimeTicks =
+    (safeNumber(downtimeRange.min, 2) + safeNumber(downtimeRange.max, 12)) / 2;
+
+  const expectedDowntimeTicks =
+    laneCount * ticksPerWeek * (breakdownChancePct / 100) * avgDowntimeTicks;
+  const downtimeFactor = clamp(1 - expectedDowntimeTicks / Math.max(1, ticksPerWeek), 0, 1);
+
+  const maintenanceCostPerLaneTick = Math.max(0, safeNumber(levelCfg.costPerLanePerTick, 0));
+  const maintenanceCost = maintenanceCostPerLaneTick * laneCount * ticksPerWeek;
+
+  const overstaffBoost = staffRatio > 1 ? Math.min(0.06, (staffRatio - 1) * 0.05) : 0;
+
+  const mods: CompanyEffectModifiers = {
+    capacityMultiplier: (staffFactor * availability * energyThroughputMult * downtimeFactor) as any,
+    qualityMultiplier: (energyQualityMult * (1 + overstaffBoost)) as any,
+    variableCostMultiplier: energyCostMult as any,
+  };
+
+  return { modifiers: mods, extraOpex: maintenanceCost };
+}
+
+type CarwashZoneState = {
+  cars: number;
+  incomeIndex: number;
+  commuterIndex: number;
+  urbanity: number;
+  categoryAwareness: number;
+  categorySatisfaction: number;
+  categoryConvenience: number;
+  latentDemand: number;
+  addOnRate: number;
+  detailingRate: number;
+};
+
+type CarwashDemandState = {
+  carsTotal: number;
+  zones: CarwashZoneState[];
+};
+
+function pickWeighted(rng: () => number, weights: Record<string, number>): string {
+  const entries = Object.entries(weights);
+  if (entries.length === 0) return "";
+  const total = entries.reduce((sum, [, w]) => sum + Math.max(0, w), 0) || 1;
+  const roll = rng() * total;
+  let acc = 0;
+  for (const [key, weight] of entries) {
+    acc += Math.max(0, weight);
+    if (roll <= acc) return key;
+  }
+  return entries[entries.length - 1][0];
+}
+
+function splitCarsAcrossZones(
+  rng: () => number,
+  total: number,
+  zones: number,
+  minPerZone: number,
+  maxPerZone: number
+): number[] {
+  const out: number[] = [];
+  let remaining = total;
+  for (let i = 0; i < zones; i += 1) {
+    const zonesLeft = zones - i;
+    const minAllowed = Math.max(minPerZone, remaining - (zonesLeft - 1) * maxPerZone);
+    const maxAllowed = Math.min(maxPerZone, remaining - (zonesLeft - 1) * minPerZone);
+    const value = minAllowed + rng() * Math.max(0, maxAllowed - minAllowed);
+    const cars = Math.max(minPerZone, Math.min(maxPerZone, Math.round(value)));
+    out.push(cars);
+    remaining -= cars;
+  }
+  return out;
+}
+
+function resolveSeasonLabel(monthIndex: number): "winter" | "spring" | "summer" | "autumn" {
+  if (monthIndex === 11 || monthIndex <= 1) return "winter";
+  if (monthIndex <= 4) return "spring";
+  if (monthIndex <= 7) return "summer";
+  return "autumn";
+}
+
+function resolveCarwashDemand(params: {
+  worldId: WorldId;
+  year: number;
+  week: number;
+  niche: Niche;
+  companies: Company[];
+  preSimStates: Record<string, CompanyState>;
+  modifiersByCompanyId: Record<string, CompanyEffectModifiers>;
+  productPlansByCompanyId: Record<string, ProductPlanStats>;
+  economy: WorldEconomyState;
+  prevState: CarwashDemandState | null;
+}): { demand: number; nextState: CarwashDemandState; summary: Record<string, unknown> } | null {
+  const cfg = (params.niche.config as any)?.demandEngine;
+  if (!cfg || typeof cfg !== "object") return null;
+
+  const activeCompanies = Math.max(1, params.companies.length);
+  const zoneScaling = cfg.zoneScaling ?? {};
+  const zoneCount = clamp(
+    Math.round(activeCompanies / Math.max(1, safeNumber(zoneScaling.companiesPerZone, 2))),
+    safeNumber(zoneScaling.min, 1),
+    safeNumber(zoneScaling.max, 25)
+  );
+
+  const seedKey = `${params.worldId}:${params.year}:${params.week}:${String(params.niche.id)}:demand`;
+  const rng = mulberry32(fnv1a32(seedKey));
+
+  const regionRanges = Array.isArray(cfg.regionCarsTotalRanges) ? cfg.regionCarsTotalRanges : [];
+  const matchedRange =
+    regionRanges.find(
+      (range: any) =>
+        activeCompanies >= safeNumber(range.minCompanies, 0) &&
+        activeCompanies <= safeNumber(range.maxCompanies, Number.POSITIVE_INFINITY)
+    ) ?? regionRanges[regionRanges.length - 1];
+
+  const carsRange = matchedRange?.carsTotalRange ?? [80_000, 200_000];
+  const carsTotal = Math.round(
+    params.prevState?.carsTotal ??
+      (safeNumber(carsRange[0], 80_000) +
+        rng() * Math.max(0, safeNumber(carsRange[1], 200_000) - safeNumber(carsRange[0], 80_000)))
+  );
+
+  const zoneCarsRange = cfg.zoneCarsRange ?? { min: 20_000, max: 90_000 };
+  const carsByZone =
+    params.prevState?.zones?.length === zoneCount
+      ? params.prevState.zones.map((zone) => zone.cars)
+      : splitCarsAcrossZones(
+          rng,
+          carsTotal,
+          zoneCount,
+          safeNumber(zoneCarsRange.min, 20_000),
+          safeNumber(zoneCarsRange.max, 90_000)
+        );
+
+  const incomeRange = cfg.zoneIncomeIndexRange ?? [0.75, 1.35];
+  const commuterRange = cfg.zoneCommuterIndexRange ?? [0.7, 1.45];
+
+  const baseRates = cfg.baseWashesPerCarPerMonth ?? { urban: 0.45, suburban: 0.55, carHeavy: 0.65 };
+  const baseRateMin = safeNumber(baseRates.urban, 0.45);
+  const baseRateMax = safeNumber(baseRates.carHeavy, 0.65);
+
+  const monthIndex = getMonthIndexFromWeek(params.week);
+  const seasonKey = resolveSeasonLabel(monthIndex);
+  const seasonMults = cfg.seasonMultipliers ?? {};
+  const seasonMultiplier = safeNumber(seasonMults[seasonKey], 1);
+
+  const weatherProfiles = cfg.weatherProfiles ?? {};
+  const weatherProfile =
+    weatherProfiles[seasonKey] ?? weatherProfiles.default ?? {
+      sunny: 0.3,
+      cloudy: 0.25,
+      light_rain: 0.2,
+      heavy_rain: 0.15,
+      snow_freezing: 0.1,
+    };
+  let weatherKey = pickWeighted(rng, weatherProfile);
+  if (!weatherKey) weatherKey = "cloudy";
+
+  const saltWeekChance = safeNumber(cfg.saltWeekChance, 0.04);
+  const saltWeekMult = safeNumber(cfg.saltWeekMultiplier, 1.35);
+  const saltWeekActive = seasonKey === "winter" && rng() < saltWeekChance;
+
+  const weatherMults = cfg.weatherMultipliers ?? {};
+  const weatherMultiplier = saltWeekActive
+    ? saltWeekMult
+    : safeNumber(weatherMults[weatherKey], 1);
+
+  const macroBounds = cfg.macroMultiplierRange ?? { min: 0.85, max: 1.15 };
+  const macroIndexRaw = safeNumber(
+    (params.economy as any)?.macroModifiers?.demandGlobalFactor,
+    1
+  );
+  const macroMultiplier = clamp(macroIndexRaw, safeNumber(macroBounds.min, 0.85), safeNumber(macroBounds.max, 1.15));
+
+  let totalMarketing = 0;
+  let totalQuality = 0;
+  let totalCapacity = 0;
+  let qualityCount = 0;
+
+  for (const c of params.companies) {
+    if (!c.id) continue;
+    const cid = String(c.id);
+    const state = params.preSimStates[cid];
+    if (!state) continue;
+    const mod = params.modifiersByCompanyId[cid] ?? {};
+    const plan = params.productPlansByCompanyId[cid] ?? null;
+
+    const marketing = safeNumber(state.marketingLevel, 0);
+    const marketingApplied =
+      (marketing + safeNumber(mod.marketingLevelDelta, 0)) * safeNumber(mod.marketingMultiplier, 1);
+    totalMarketing += Math.max(0, marketingApplied);
+
+    const quality = safeNumber(state.qualityScore, 0.6) * safeNumber(mod.qualityMultiplier, 1);
+    totalQuality += quality;
+    qualityCount += 1;
+
+    totalCapacity += computeEffectiveCapacity(state, mod, plan);
+  }
+
+  const avgQuality = qualityCount > 0 ? totalQuality / qualityCount : 0.6;
+  const avgQualityPct = clamp(avgQuality / 1.2, 0, 1) * 100;
+  const marketingPerZone = totalMarketing / Math.max(1, zoneCount);
+  const capacityPerZone = totalCapacity / Math.max(1, zoneCount);
+
+  const captureCfg = cfg.captureRatio ?? { min: 0.35, max: 0.85, base: 0.45, convWeight: 0.2, awWeight: 0.2 };
+  const growthCfg = cfg.categoryGrowth ?? { min: 1, max: 1.6, targetCapMultiplier: 2.2 };
+  const latentCfg = cfg.latentDemand ?? {
+    carryoverRates: { sunny: 0.35, cloudy: 0.25, light_rain: 0.2, heavy_rain: 0.1, snow_freezing: 0.15 },
+  };
+
+  const segmentShares = cfg.segmentShares ?? {
+    budget: 0.3,
+    standard: 0.35,
+    premium: 0.2,
+    ultimate: 0.1,
+    noise: 0.05,
+  };
+  const incomeShift = cfg.incomeShift ?? { lowIndex: 0.8, highIndex: 1.2 };
+
+  const addOnRange = cfg.addOnRateRange ?? { min: 0.08, max: 0.16 };
+  const detailingRange = cfg.detailingRateRange ?? { min: 0.002, max: 0.01 };
+
+  let totalDemand = 0;
+  let totalCapturable = 0;
+  let totalLatent = 0;
+  let totalFleet = 0;
+  let totalDetailing = 0;
+  let totalInteriorAddOn = 0;
+  const segmentTotals = { budget: 0, standard: 0, premium: 0, ultimate: 0 };
+
+  const nextZones: CarwashZoneState[] = [];
+
+  for (let i = 0; i < zoneCount; i += 1) {
+    const prevZone = params.prevState?.zones?.[i];
+    const cars = carsByZone[i] ?? safeNumber(zoneCarsRange.min, 20_000);
+    const incomeIndex = prevZone?.incomeIndex ?? lerp(safeNumber(incomeRange[0], 0.75), safeNumber(incomeRange[1], 1.35), rng());
+    const commuterIndex =
+      prevZone?.commuterIndex ?? lerp(safeNumber(commuterRange[0], 0.7), safeNumber(commuterRange[1], 1.45), rng());
+    const urbanity =
+      prevZone?.urbanity ??
+      clamp((commuterIndex - safeNumber(commuterRange[0], 0.7)) / Math.max(0.1, safeNumber(commuterRange[1], 1.45) - safeNumber(commuterRange[0], 0.7)), 0, 1);
+
+    const prevAwareness = safeNumber(prevZone?.categoryAwareness, 35);
+    const prevSatisfaction = safeNumber(prevZone?.categorySatisfaction, 55);
+    const prevConvenience = safeNumber(prevZone?.categoryConvenience, 40);
+    const prevLatent = safeNumber(prevZone?.latentDemand, 0);
+
+    const awarenessDelta = 0.06 * Math.log(1 + marketingPerZone / 40) - 0.02;
+    const awareness = clamp(prevAwareness + awarenessDelta, 0, 100);
+    const satisfaction = clamp(lerp(prevSatisfaction, avgQualityPct, 0.1), 0, 100);
+
+    const baseRate = baseRateMin + (1 - urbanity) * (baseRateMax - baseRateMin);
+    const growthMultiplier = clamp(
+      1 +
+        0.25 * (awareness / 100) +
+        0.2 * (prevConvenience / 100) +
+        0.15 * (satisfaction / 100),
+      safeNumber(growthCfg.min, 1),
+      safeNumber(growthCfg.max, 1.6)
+    );
+
+    const monthlyTAM =
+      cars * baseRate * seasonMultiplier * weatherMultiplier * macroMultiplier * growthMultiplier;
+    const weeklyTAM = (monthlyTAM / 30) * 7;
+    const stochastic = clamp(0.85 + rng() * 0.3, 0.6, 1.4);
+    const tamWeek = Math.max(0, weeklyTAM * stochastic);
+
+    const targetCap = tamWeek * safeNumber(growthCfg.targetCapMultiplier, 2.2);
+    const convenience = clamp(
+      100 * (1 - Math.exp(-capacityPerZone / Math.max(1, targetCap))),
+      0,
+      100
+    );
+
+    const capture = clamp(
+      safeNumber(captureCfg.base, 0.45) +
+        safeNumber(captureCfg.convWeight, 0.2) * (convenience / 100) +
+        safeNumber(captureCfg.awWeight, 0.2) * (awareness / 100),
+      safeNumber(captureCfg.min, 0.35),
+      safeNumber(captureCfg.max, 0.85)
+    );
+
+    const capturable = tamWeek * capture;
+    const available = capturable + prevLatent;
+    const unserved = Math.max(0, available - capacityPerZone);
+
+    const carryRate =
+      safeNumber(latentCfg.carryoverRates?.[weatherKey], 0.25);
+    const latentDemand = unserved * carryRate;
+
+    const lowIndex = safeNumber(incomeShift.lowIndex, 0.8);
+    const highIndex = safeNumber(incomeShift.highIndex, 1.2);
+    const t = clamp((incomeIndex - lowIndex) / Math.max(0.01, highIndex - lowIndex), 0, 1);
+    const budgetMult = lerp(1.1, 0.9, t);
+    const premiumMult = lerp(0.8, 1.25, t);
+    const ultimateMult = lerp(0.8, 1.25, t);
+
+    const baseBudget = safeNumber(segmentShares.budget, 0.3) * budgetMult;
+    const basePremium = safeNumber(segmentShares.premium, 0.2) * premiumMult;
+    const baseUltimate = safeNumber(segmentShares.ultimate, 0.1) * ultimateMult;
+    const baseStandard = safeNumber(segmentShares.standard, 0.35) + safeNumber(segmentShares.noise, 0.05);
+    const sumShares = baseBudget + baseStandard + basePremium + baseUltimate || 1;
+
+    const budgetShare = baseBudget / sumShares;
+    const standardShare = baseStandard / sumShares;
+    const premiumShare = basePremium / sumShares;
+    const ultimateShare = baseUltimate / sumShares;
+
+    segmentTotals.budget += available * budgetShare;
+    segmentTotals.standard += available * standardShare;
+    segmentTotals.premium += available * premiumShare;
+    segmentTotals.ultimate += available * ultimateShare;
+
+    const addOnRate = prevZone?.addOnRate ?? lerp(safeNumber(addOnRange.min, 0.08), safeNumber(addOnRange.max, 0.16), rng());
+    const detailingRate =
+      prevZone?.detailingRate ?? lerp(safeNumber(detailingRange.min, 0.002), safeNumber(detailingRange.max, 0.01), rng());
+
+    const interiorAddOnBase = available * (standardShare + premiumShare + ultimateShare);
+    const interiorAddOnDemand = interiorAddOnBase * addOnRate;
+    const detailingDemand = available * detailingRate;
+
+    const fleetShareMax = safeNumber(cfg.fleetShareMax, 0.15);
+    const fleetShare = clamp(
+      ((commuterIndex - safeNumber(commuterRange[0], 0.7)) /
+        Math.max(0.01, safeNumber(commuterRange[1], 1.45) - safeNumber(commuterRange[0], 0.7))) *
+        fleetShareMax,
+      0,
+      fleetShareMax
+    );
+    const fleetDemand = available * fleetShare;
+
+    totalDemand += available;
+    totalCapturable += capturable;
+    totalLatent += latentDemand;
+    totalFleet += fleetDemand;
+    totalDetailing += detailingDemand;
+    totalInteriorAddOn += interiorAddOnDemand;
+
+    nextZones.push({
+      cars,
+      incomeIndex,
+      commuterIndex,
+      urbanity,
+      categoryAwareness: awareness,
+      categorySatisfaction: satisfaction,
+      categoryConvenience: convenience,
+      latentDemand,
+      addOnRate,
+      detailingRate,
+    });
+  }
+
+  const nextState: CarwashDemandState = {
+    carsTotal,
+    zones: nextZones,
+  };
+
+  const summary = {
+    totalDemand,
+    totalCapturable,
+    totalLatent,
+    zoneCount,
+    season: seasonKey,
+    weather: weatherKey,
+    saltWeekActive,
+    avgAddOnRate: zoneCount > 0 ? totalInteriorAddOn / Math.max(1, (segmentTotals.standard + segmentTotals.premium + segmentTotals.ultimate)) : 0,
+    avgDetailingRate: zoneCount > 0 ? totalDetailing / Math.max(1, totalDemand) : 0,
+    avgFleetShare: zoneCount > 0 ? totalFleet / Math.max(1, totalDemand) : 0,
+    segmentDemand: segmentTotals,
+    interiorAddOnDemand: totalInteriorAddOn,
+    detailingDemand: totalDetailing,
+    fleetDemand: totalFleet,
+  };
+
+  return { demand: totalDemand, nextState, summary };
 }
 
 function nowIso(): Timestamp {
@@ -622,11 +1119,13 @@ async function upsertCompanyStates(worldId: WorldId, states: CompanyState[]): Pr
     capacity: s.capacity,
     quality_score: s.qualityScore,
     marketing_level: s.marketingLevel,
+    awareness_score: (s as any).awarenessScore ?? 20,
     employees: s.employees,
     fixed_costs: s.fixedCosts,
     variable_cost_per_unit: s.variableCostPerUnit,
     // DB column is brand_score (legacy), domain is reputationScore
     brand_score: s.reputationScore,
+    operational_efficiency_score: (s as any).operationalEfficiencyScore ?? 50,
     utilisation_rate: s.utilisationRate,
   }));
 
@@ -733,7 +1232,7 @@ async function getLatestCompanyState(companyId: CompanyId): Promise<CompanyState
     .from("company_state")
     .select(
       // ✅ include created_at because CompanyState requires it
-      "company_id, world_id, year, week, price_level, capacity, quality_score, marketing_level, employees, fixed_costs, variable_cost_per_unit, brand_score, utilisation_rate, created_at"
+      "company_id, world_id, year, week, price_level, capacity, quality_score, marketing_level, awareness_score, employees, fixed_costs, variable_cost_per_unit, brand_score, operational_efficiency_score, utilisation_rate, created_at"
     )
     .eq("company_id", String(companyId))
     .order("year", { ascending: false })
@@ -752,10 +1251,12 @@ async function getLatestCompanyState(companyId: CompanyId): Promise<CompanyState
         capacity: number;
         quality_score: number;
         marketing_level: number;
+        awareness_score: number;
         employees: number;
         fixed_costs: number;
         variable_cost_per_unit: number;
         brand_score: number;
+        operational_efficiency_score: number;
         utilisation_rate: number;
         created_at: string;
       }
@@ -773,10 +1274,12 @@ async function getLatestCompanyState(companyId: CompanyId): Promise<CompanyState
     capacity: row.capacity as any,
     qualityScore: row.quality_score as any,
     marketingLevel: row.marketing_level as any,
+    awarenessScore: (row.awareness_score ?? 20) as any,
     employees: row.employees,
     fixedCosts: row.fixed_costs as any,
     variableCostPerUnit: row.variable_cost_per_unit as any,
     reputationScore: row.brand_score as any, // DB brand_score -> domain reputationScore
+    operationalEfficiencyScore: (row.operational_efficiency_score ?? 50) as any,
     utilisationRate: row.utilisation_rate as any,
     createdAt: row.created_at as unknown as Timestamp,
   } as CompanyState;
@@ -1023,6 +1526,8 @@ async function runWorldTickInternal(
   }
 
   const oneTimeOpexByCompanyId: Record<string, number> = {};
+  const opsIntensityByCompanyId: Record<string, number> = {};
+  const availabilityByCompanyId: Record<string, number> = {};
 
   // 7) Apply decisions -> preSimStates (switch on payload.type)
   const preSimStates: Record<string, CompanyState> = {};
@@ -1046,10 +1551,12 @@ async function runWorldTickInternal(
         capacity: 100 as any,
         qualityScore: 1 as any,
         marketingLevel: 0 as any,
+        awarenessScore: 20 as any,
         employees: 3,
         fixedCosts: 500 as any,
         variableCostPerUnit: 2 as any,
         reputationScore: 0.5 as any,
+        operationalEfficiencyScore: 50 as any,
         utilisationRate: 0 as any,
         createdAt: nowIso(),
       } as CompanyState);
@@ -1077,6 +1584,14 @@ async function runWorldTickInternal(
 
         case "SET_STAFFING":
           next.employees = Math.max(0, Math.floor(safeNumber(payload.targetEmployees, next.employees)));
+          break;
+
+        case "SET_OPERATIONS_INTENSITY":
+          opsIntensityByCompanyId[cid] = clamp(safeNumber((payload as any)?.intensity, 0.5), 0, 1);
+          break;
+
+        case "ADJUST_OPENING_HOURS":
+          availabilityByCompanyId[cid] = clamp(safeNumber((payload as any)?.availability, 1), 0.1, 1.2);
           break;
 
         case "INVEST_CAPACITY":
@@ -1257,6 +1772,53 @@ async function runWorldTickInternal(
     }
   }
 
+  for (const c of companies) {
+    if (!c.id) continue;
+    const cid = String(c.id);
+    const niche = nicheById[String((c as any)?.nicheId ?? "")];
+    if (!niche) continue;
+    const state = preSimStates[cid];
+    if (!state) continue;
+
+    const ops = resolveOpsModifiers({
+      niche,
+      state,
+      opsIntensity: opsIntensityByCompanyId[cid],
+      availability: availabilityByCompanyId[cid],
+    });
+    if (!ops) continue;
+
+    const mods = modifiersByCompanyId[cid] ?? {};
+    mods.capacityMultiplier =
+      (safeNumber(mods.capacityMultiplier, 1) *
+        safeNumber(ops.modifiers.capacityMultiplier, 1)) as any;
+    mods.qualityMultiplier =
+      (safeNumber(mods.qualityMultiplier, 1) *
+        safeNumber(ops.modifiers.qualityMultiplier, 1)) as any;
+    mods.variableCostMultiplier =
+      (safeNumber(mods.variableCostMultiplier, 1) *
+        safeNumber(ops.modifiers.variableCostMultiplier, 1)) as any;
+    modifiersByCompanyId[cid] = mods;
+
+    if (ops.extraOpex) {
+      extraOpexByCompanyId[cid] = (extraOpexByCompanyId[cid] ?? 0) + ops.extraOpex;
+    }
+  }
+
+  const companiesBySegment = new Map<string, Company[]>();
+  for (const c of companies) {
+    if (!c.id) continue;
+
+    const sectorId = String((c as any)?.sectorId ?? "");
+    const nicheId = String((c as any)?.nicheId ?? "");
+    if (!sectorId || !nicheId) continue;
+
+    const key = `${sectorId}|${nicheId}`;
+    const arr = companiesBySegment.get(key) ?? [];
+    arr.push(c);
+    companiesBySegment.set(key, arr);
+  }
+
   // 8) Macro tick
   const macroTick = macroEngine.tick({ world, economy, season });
   const macroEconomy = macroTick.nextEconomy as WorldEconomyState;
@@ -1301,6 +1863,197 @@ async function runWorldTickInternal(
     sectorDemandBySectorId[sid] = tick.demand;
   }
 
+  const segmentDemandByKey: Record<string, number> = {};
+  const marketAllocationByKey: Record<string, any> = {};
+  const nicheDemandStateBySectorId: Record<string, Record<string, CarwashDemandState>> = {};
+  const nicheDemandSummaryBySectorId: Record<string, Record<string, unknown>> = {};
+  const nicheRefPricesBySectorId: Record<string, Record<string, Record<string, number>>> = {};
+
+  for (const [key, segCompanies] of companiesBySegment.entries()) {
+    const [sectorId, nicheId] = key.split("|");
+    const niche = nicheById[nicheId];
+    if (!niche) continue;
+
+    const prevSectorState = prevSectorStateBySectorId[sectorId] ?? null;
+    const prevMetrics = ((prevSectorState as any)?.lastRoundMetrics ?? {}) as any;
+    const prevNicheState =
+      (prevMetrics.nicheDemandState && prevMetrics.nicheDemandState[nicheId]) ?? null;
+
+    const demandResult = resolveCarwashDemand({
+      worldId,
+      year: yearNum,
+      week: weekNum,
+      niche,
+      companies: segCompanies,
+      preSimStates,
+      modifiersByCompanyId,
+      productPlansByCompanyId: productPlanStatsByCompanyId,
+      economy: macroEconomy,
+      prevState: prevNicheState,
+    });
+
+    if (demandResult) {
+      segmentDemandByKey[key] = demandResult.demand;
+      const nicheState =
+        nicheDemandStateBySectorId[sectorId] ??
+        { ...((prevMetrics.nicheDemandState ?? {}) as Record<string, CarwashDemandState>) };
+      nicheState[nicheId] = demandResult.nextState;
+      nicheDemandStateBySectorId[sectorId] = nicheState;
+
+      const nicheSummary =
+        nicheDemandSummaryBySectorId[sectorId] ??
+        { ...((prevMetrics.nicheDemandSummary ?? {}) as Record<string, unknown>) };
+      nicheSummary[nicheId] = demandResult.summary;
+      nicheDemandSummaryBySectorId[sectorId] = nicheSummary;
+    }
+
+    const marketCfg = (niche.config as any)?.marketAllocation;
+    if (demandResult && marketCfg && typeof marketCfg === "object") {
+      const segmentSkuMap = (marketCfg as any).segmentSkuMap ?? {};
+      const segments = Object.keys(segmentSkuMap);
+      if (segments.length > 0) {
+        const summary = (demandResult.summary ?? {}) as Record<string, unknown>;
+        const segmentDemand: Record<string, number> = {};
+        for (const segment of segments) {
+          segmentDemand[segment] = readSegmentDemandFromSummary(summary, segment);
+        }
+
+        const fleetDemand = safeNumber(segmentDemand.fleet, 0);
+        if (fleetDemand > 0 && segmentDemand.standard != null) {
+          const standardDemand = safeNumber(segmentDemand.standard, 0);
+          const shift = Math.min(fleetDemand, standardDemand);
+          segmentDemand.standard = standardDemand - shift;
+          segmentDemand.fleet = shift;
+        }
+
+        const productList = nicheProductsByNicheId.get(nicheId) ?? [];
+        const productBySku = new Map(productList.map((product) => [product.sku, product]));
+        const segmentPricesByCompanyId: Record<string, Record<string, number>> = {};
+        const segmentEligibilityByCompanyId: Record<string, Record<string, boolean>> = {};
+        const priceSums: Record<string, number> = {};
+        const priceCounts: Record<string, number> = {};
+
+        for (const c of segCompanies) {
+          if (!c.id) continue;
+          const cid = String(c.id);
+          const state = preSimStates[cid] ?? null;
+          const mod = modifiersByCompanyId[cid] ?? {};
+          const plan = productPlanByCompanyId[cid];
+          const planItems = Array.isArray(plan?.items) ? plan?.items : [];
+          const cap = computeEffectiveCapacity(state, mod, productPlanStatsByCompanyId[cid]);
+          const priceLevel = safeNumber(state?.priceLevel, 1) * safeNumber(mod.priceLevelMultiplier, 1);
+
+          const priceBySegment: Record<string, number> = {};
+          const eligibilityBySegment: Record<string, boolean> = {};
+          const unlocked = unlockedProductsByCompanyId[cid];
+
+          for (const segment of segments) {
+            const sku = segmentSkuMap[segment];
+            const product = productBySku.get(sku);
+            if (!product) {
+              eligibilityBySegment[segment] = false;
+              continue;
+            }
+
+            const isUnlocked = unlocked ? unlocked.has(sku) : true;
+            eligibilityBySegment[segment] = isUnlocked;
+            if (!isUnlocked) continue;
+
+            const planItem = planItems.find((item) => item?.sku === sku);
+            const priceMin = safeNumber(product.priceMinEur, 0);
+            const priceMax = Math.max(priceMin, safeNumber(product.priceMaxEur, priceMin));
+            const baseline = (priceMin + priceMax) / 2 || priceMin || 1;
+            const planPrice = safeNumber(planItem?.priceEur, 0);
+            const price = clamp(planPrice > 0 ? planPrice : baseline * priceLevel, priceMin, priceMax);
+            priceBySegment[segment] = price;
+
+            if (cap > 0) {
+              priceSums[segment] = (priceSums[segment] ?? 0) + price;
+              priceCounts[segment] = (priceCounts[segment] ?? 0) + 1;
+            }
+          }
+
+          segmentPricesByCompanyId[cid] = priceBySegment;
+          segmentEligibilityByCompanyId[cid] = eligibilityBySegment;
+        }
+
+        const prevRefPrices =
+          (prevMetrics.nicheRefPrices && prevMetrics.nicheRefPrices[nicheId]) ?? {};
+        const refCfg = (marketCfg as any).referencePrice ?? {};
+        const ewmaAlpha = clamp(safeNumber(refCfg.ewmaAlpha, 0.02), 0, 1);
+        const maxMovePct = Math.max(0, safeNumber(refCfg.maxMovePct, 0.08));
+        const minPriceFloor = Math.max(0.01, safeNumber(refCfg.minPriceFloor, 1));
+        const referencePricesBySegment: Record<string, number> = {};
+
+        for (const segment of segments) {
+          const count = priceCounts[segment] ?? 0;
+          const avgPrice = count > 0 ? (priceSums[segment] ?? 0) / count : 0;
+          const sku = segmentSkuMap[segment];
+          const product = productBySku.get(sku);
+          const priceMin = Math.max(minPriceFloor, safeNumber(product?.priceMinEur, minPriceFloor));
+          const priceMax = Math.max(priceMin, safeNumber(product?.priceMaxEur, priceMin));
+          const baseline = (priceMin + priceMax) / 2 || priceMin;
+          const prevRef = safeNumber((prevRefPrices as any)?.[segment], 0);
+
+          let nextRef = avgPrice > 0 ? avgPrice : baseline;
+          if (prevRef > 0 && ewmaAlpha > 0) {
+            const target = avgPrice > 0 ? avgPrice : prevRef;
+            const ewma = (1 - ewmaAlpha) * prevRef + ewmaAlpha * target;
+            nextRef =
+              maxMovePct > 0 ? clamp(ewma, prevRef * (1 - maxMovePct), prevRef * (1 + maxMovePct)) : ewma;
+          } else if (prevRef > 0 && avgPrice <= 0) {
+            nextRef = prevRef;
+          }
+
+          referencePricesBySegment[segment] = Math.max(minPriceFloor, nextRef);
+        }
+
+        const config = {
+          elasticities: (marketCfg as any).elasticities ?? {},
+          priceFactorClamp: (marketCfg as any).priceFactorClamp ?? { min: 0.65, max: 1.45 },
+          softmaxTemperature: safeNumber((marketCfg as any).softmaxTemperature, 10),
+          weights: (marketCfg as any).weights ?? {
+            price: 1,
+            quality: 0.8,
+            marketing: 0.55,
+            reputation: 0.7,
+            availability: 0.6,
+          },
+        };
+
+        marketAllocationByKey[key] = {
+          segmentDemand,
+          segmentPricesByCompanyId,
+          segmentEligibilityByCompanyId,
+          referencePricesBySegment,
+          config,
+        };
+
+        const nicheRef =
+          nicheRefPricesBySectorId[sectorId] ??
+          { ...((prevMetrics.nicheRefPrices ?? {}) as Record<string, Record<string, number>>) };
+        nicheRef[nicheId] = referencePricesBySegment;
+        nicheRefPricesBySectorId[sectorId] = nicheRef;
+      }
+    }
+  }
+
+  for (const ss of nextWorldSectorStates) {
+    const sid = String((ss as any)?.sectorId ?? "");
+    if (!sid) continue;
+    const metrics = { ...(((ss as any)?.lastRoundMetrics ?? {}) as Record<string, unknown>) };
+    if (nicheDemandStateBySectorId[sid]) {
+      metrics.nicheDemandState = nicheDemandStateBySectorId[sid];
+    }
+    if (nicheDemandSummaryBySectorId[sid]) {
+      metrics.nicheDemandSummary = nicheDemandSummaryBySectorId[sid];
+    }
+    if (nicheRefPricesBySectorId[sid]) {
+      metrics.nicheRefPrices = nicheRefPricesBySectorId[sid];
+    }
+    (ss as any).lastRoundMetrics = metrics;
+  }
+
   for (const ss of nextWorldSectorStates) {
     await sectorRepo.upsertWorldSectorState(ss);
   }
@@ -1316,26 +2069,12 @@ async function runWorldTickInternal(
   const nextStates: Record<string, CompanyState> = {};
   const nextFinancials: Record<string, CompanyFinancials> = {};
 
-  const companiesBySegment = new Map<string, Company[]>();
-  for (const c of companies) {
-    if (!c.id) continue;
-
-    const sectorId = String((c as any)?.sectorId ?? "");
-    const nicheId = String((c as any)?.nicheId ?? "");
-    if (!sectorId || !nicheId) continue;
-
-    const key = `${sectorId}|${nicheId}`;
-    const arr = companiesBySegment.get(key) ?? [];
-    arr.push(c);
-    companiesBySegment.set(key, arr);
-  }
-
   for (const [key, segCompanies] of companiesBySegment.entries()) {
     const [sectorId, nicheId] = key.split("|");
     const niche = nicheById[nicheId];
     if (!niche) continue;
 
-    const demand = sectorDemandBySectorId[sectorId] ?? 0;
+    const demand = segmentDemandByKey[key] ?? sectorDemandBySectorId[sectorId] ?? 0;
 
     const sectorState = sectorStatesById[sectorId] ?? null;
     const botPressure = botMarketEngine.tick({
@@ -1361,6 +2100,7 @@ async function runWorldTickInternal(
       modifiersByCompanyId,
       extraOpexByCompanyId,
       productPlansByCompanyId: productPlanStatsByCompanyId,
+      marketAllocation: marketAllocationByKey[key],
       rng,
     } as unknown as Parameters<typeof companyEngine.simulate>[0]);
 

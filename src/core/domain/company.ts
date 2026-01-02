@@ -69,6 +69,9 @@ export type CompanyState = {
   /** Marketing intensity / spend index. */
   marketingLevel: Decimal;
 
+  /** Brand awareness score (0..100). */
+  awarenessScore: Decimal;
+
   /** Headcount (or FTE-equivalent). */
   employees: number;
 
@@ -80,6 +83,9 @@ export type CompanyState = {
 
   /** Company-specific reputation/brand score. */
   reputationScore: Decimal;
+
+  /** Operational efficiency score (0..100). */
+  operationalEfficiencyScore: Decimal;
 
   /** Capacity utilisation (0..1), usually derived. */
   utilisationRate: Decimal;

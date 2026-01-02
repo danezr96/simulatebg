@@ -346,17 +346,19 @@ create table if not exists public.company_state (
   year int not null,
   week int not null,
 
-  price_level numeric(18,4) not null default 1,
-  capacity numeric(18,4) not null default 0,
-  quality_score numeric(10,4) not null default 1,
-  marketing_level numeric(18,4) not null default 0,
-  employees int not null default 0,
+    price_level numeric(18,4) not null default 1,
+    capacity numeric(18,4) not null default 0,
+    quality_score numeric(10,4) not null default 1,
+    marketing_level numeric(18,4) not null default 0,
+    awareness_score numeric(10,4) not null default 20,
+    employees int not null default 0,
 
   fixed_costs numeric(18,2) not null default 0,
-  variable_cost_per_unit numeric(18,4) not null default 0,
+    variable_cost_per_unit numeric(18,4) not null default 0,
 
-  brand_score numeric(10,4) not null default 0.5,
-  utilisation_rate numeric(10,4) not null default 0,
+    brand_score numeric(10,4) not null default 0.5,
+    operational_efficiency_score numeric(10,4) not null default 50,
+    utilisation_rate numeric(10,4) not null default 0,
 
   created_at timestamptz not null default now()
 );

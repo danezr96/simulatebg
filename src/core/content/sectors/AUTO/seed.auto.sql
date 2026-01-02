@@ -343,6 +343,783 @@ on conflict (niche_id, code) do update set
   risk = excluded.risk;
 
 -- ============================================================
+-- AUTO Car Wash seed (niche + products + starting loadout)
+-- ============================================================
+
+-- Car Wash niche
+with sector as (
+  select id from public.sectors where code = 'AUTO'
+)
+insert into public.niches (sector_id, code, name, description, config)
+select
+  sector.id,
+  'AUTO_CARWASH',
+  'Car Wash',
+  'High-volume wash services with weather-driven demand',
+  $${
+    "capexIntensity":"MEDIUM",
+    "marginRange":{"min":0.1,"max":0.28},
+    "demandVolatility":0.25,
+    "priceElasticity":0.4,
+    "labourIntensity":0.25,
+    "skillIntensity":0.3,
+    "regulationRisk":0.15,
+    "assetLifetimeYears":10,
+    "capacityElasticity":0.45,
+    "ticketSize":"LOW",
+    "baseDemandLevel":520,
+    "seasonalityPattern":{"monthlyFactors":[0.9,0.92,0.97,1.03,1.08,1.12,1.1,1.05,1,0.97,0.92,0.88]},
+    "competitionType":"FRAGMENTED",
+    "decisionProfile":"SECTOR_AUTO",
+    "upgradeProfile":"SERVICE",
+    "coreAssumptions":{
+      "tickMinutes":10,
+      "ticksPerDay":144,
+      "ticksPerWeek":1008
+    },
+    "operations":{
+      "laneThroughputPerTick":{"base":2,"max":4},
+      "interiorOutputPerTickMax":2,
+      "detailingOutputPerTickMax":1
+    },
+    "maintenance":{
+      "levels":[
+        {"level":0,"costPerLanePerTick":0.05,"breakdownChancePct":0.35},
+        {"level":1,"costPerLanePerTick":0.2,"breakdownChancePct":0.2},
+        {"level":2,"costPerLanePerTick":0.45,"breakdownChancePct":0.1},
+        {"level":3,"costPerLanePerTick":0.8,"breakdownChancePct":0.06}
+      ],
+      "downtimeTicksRange":{"min":2,"max":12}
+    },
+    "queue":{
+      "waitPenalty":{
+        "low":0,
+        "medium":-0.05,
+        "high":-0.15
+      }
+    },
+    "opsResolution":{
+      "staffing":{
+        "laneFtePerLane":1,
+        "interiorFtePerBay":1,
+        "detailingFtePerBay":1,
+        "frontOfHouseFteMin":0.2,
+        "trainingProductivityPctPerLevel":3,
+        "trainingProductivityCapPct":15,
+        "absenceUsesMorale":true,
+        "staffShortageCapacityFloor":0.4
+      },
+      "supplyConsumption":{
+        "chemicalsUnitsPerWash":{
+          "carwash_basic_exterior_unit":1,
+          "carwash_standard_unit":1.2,
+          "carwash_premium_unit":1.5,
+          "carwash_ultimate_unit":1.8
+        },
+        "consumablesUnitsPerJob":{
+          "carwash_interior_quick_unit":1.2,
+          "carwash_detailing_session_unit":3.5
+        },
+        "sparePartsUnitsPerLanePerDay":0.15
+      },
+      "supplyShortageEffects":{
+        "capacityMultiplierAtZeroSupply":0.4,
+        "qualityMultiplierAtZeroSupply":0.85,
+        "cancellationRatePct":6
+      },
+      "maintenanceEffects":{
+        "downtimeCapacityMultiplier":0,
+        "queuePenaltyOnBreakdownPct":15,
+        "reputationHitPerCancelledWashPct":0.5
+      },
+      "energyModes":{
+        "normal":{"energyCostMultiplier":1,"throughputMultiplier":1,"qualityMultiplier":1},
+        "eco":{"energyCostMultiplier":0.88,"throughputMultiplier":0.94,"qualityMultiplier":0.98},
+        "peak_avoid":{"energyCostMultiplier":0.9,"throughputMultiplier":0.97,"qualityMultiplier":0.99}
+      },
+      "realizedCapacityFormula":"min(planned, laneCap * staffFactor * supplyFactor * energyFactor * downtimeFactor)"
+    },
+    "demandEngine":{
+      "zoneScaling":{"min":1,"max":25,"companiesPerZone":2},
+      "regionCarsTotalRanges":[
+        {"minCompanies":2,"maxCompanies":5,"carsTotalRange":[80000,200000]},
+        {"minCompanies":6,"maxCompanies":15,"carsTotalRange":[200000,500000]},
+        {"minCompanies":16,"maxCompanies":40,"carsTotalRange":[600000,1400000]}
+      ],
+      "zoneCarsRange":{"min":20000,"max":90000},
+      "zoneIncomeIndexRange":[0.75,1.35],
+      "zoneCommuterIndexRange":[0.7,1.45],
+      "baseWashesPerCarPerMonth":{"urban":0.45,"suburban":0.55,"carHeavy":0.65},
+      "seasonMultipliers":{"winter":1.1,"spring":0.95,"summer":0.9,"autumn":1.05},
+      "weatherMultipliers":{
+        "heavy_rain":0.55,
+        "light_rain":0.75,
+        "cloudy":0.95,
+        "sunny":1.1,
+        "snow_freezing":0.7
+      },
+      "weatherProfiles":{
+        "winter":{"snow_freezing":0.3,"cloudy":0.3,"light_rain":0.2,"heavy_rain":0.1,"sunny":0.1},
+        "spring":{"cloudy":0.3,"light_rain":0.25,"heavy_rain":0.15,"sunny":0.3},
+        "summer":{"sunny":0.45,"cloudy":0.25,"light_rain":0.15,"heavy_rain":0.1,"snow_freezing":0.05},
+        "autumn":{"cloudy":0.3,"light_rain":0.25,"heavy_rain":0.2,"sunny":0.2,"snow_freezing":0.05},
+        "default":{"sunny":0.3,"cloudy":0.25,"light_rain":0.2,"heavy_rain":0.15,"snow_freezing":0.1}
+      },
+      "saltWeekChance":0.04,
+      "saltWeekMultiplier":1.35,
+      "macroMultiplierRange":{"min":0.85,"max":1.15},
+      "categoryGrowth":{"min":1,"max":1.6,"targetCapMultiplier":2.2},
+      "captureRatio":{"min":0.35,"max":0.85,"base":0.45,"convWeight":0.2,"awWeight":0.2},
+      "segmentShares":{"budget":0.3,"standard":0.35,"premium":0.2,"ultimate":0.1,"noise":0.05},
+      "incomeShift":{"lowIndex":0.8,"highIndex":1.2},
+      "addOnRateRange":{"min":0.08,"max":0.16},
+      "detailingRateRange":{"min":0.002,"max":0.01},
+      "fleetShareMax":0.15,
+        "latentDemand":{
+          "carryoverRates":{
+            "sunny":0.35,
+            "cloudy":0.25,
+            "light_rain":0.2,
+            "heavy_rain":0.1,
+            "snow_freezing":0.15
+          }
+        }
+      },
+      "marketAllocation":{
+        "segmentSkuMap":{
+          "budget":"carwash_basic_exterior_unit",
+          "standard":"carwash_standard_unit",
+          "premium":"carwash_premium_unit",
+          "ultimate":"carwash_ultimate_unit",
+          "interior_addon":"carwash_interior_quick_unit",
+          "detailing":"carwash_detailing_session_unit",
+          "fleet":"carwash_standard_unit"
+        },
+        "elasticities":{
+          "budget":2,
+          "standard":1.3,
+          "premium":0.9,
+          "ultimate":0.7,
+          "interior_addon":1.1,
+          "detailing":0.5,
+          "fleet":1.2
+        },
+        "priceFactorClamp":{"min":0.65,"max":1.45},
+        "softmaxTemperature":10,
+        "weights":{"price":1,"quality":0.8,"marketing":0.55,"reputation":0.7,"availability":0.6},
+        "referencePrice":{"ewmaAlpha":0.02,"maxMovePct":0.08,"minPriceFloor":1}
+      },
+      "warehouse":{
+      "storageCapacityUnitsStart":10000,
+      "orderQtyRange":{"min":0,"max":50000,"step":100},
+      "reorderPointRange":{"min":0,"max":20000,"step":100},
+      "safetyStockRange":{"min":0,"max":30000,"step":100},
+      "storageUpgrades":[
+        {"capacityUnits":10000,"capexRangeEur":{"min":1500,"max":4000},"opexPerTickRangeEur":{"min":0.05,"max":0.2}},
+        {"capacityUnits":50000,"capexRangeEur":{"min":6000,"max":14000},"opexPerTickRangeEur":{"min":0.2,"max":0.6}}
+      ],
+      "holdingCostPctPerDay":0.0002,
+      "shrinkPerDayPct":{"consumables":0.0001,"chemicals":0.00005}
+    },
+    "procurement":{
+      "supplierTiers":{
+        "C":{"priceIndex":0.75,"reliabilityRange":[55,70],"qualityRange":[50,65],"leadTimeTicksRange":[12,60],"fillRateRange":[85,95],"moqUnits":2000},
+        "B":{"priceIndex":1,"reliabilityRange":[70,85],"qualityRange":[65,80],"leadTimeTicksRange":[12,36],"fillRateRange":[92,98],"moqUnits":1000},
+        "A":{"priceIndex":1.25,"reliabilityRange":[85,96],"qualityRange":[80,92],"leadTimeTicksRange":[6,24],"fillRateRange":[96,99.5],"moqUnits":800}
+      },
+      "baseChemicalsTierB":{
+        "shampooCostEur":0.22,
+        "foamCostEur":0.18,
+        "waxCostEur":0.35,
+        "ceramicLiteCostEur":0.55,
+        "wasteFactorDefault":1.1
+      },
+      "contractOptions":{
+        "spot":{"feeRangeEur":{"min":0,"max":0}},
+        "contract7d":{"feeRangeEur":{"min":250,"max":1000},"priceDiscountPctRange":{"min":3,"max":8},"reliabilityBonus":3},
+        "contract30d":{"feeRangeEur":{"min":1200,"max":4500},"priceDiscountPctRange":{"min":6,"max":15},"reliabilityBonus":6,"leadTimeVarianceReductionPct":20}
+      }
+    },
+    "marketing":{
+      "campaigns":{
+        "performance_ads":{"budgetPerTickRangeEur":{"min":0,"max":120,"step":5},"minDurationTicks":12},
+        "local_flyers_partnerships":{"budgetPerTickRangeEur":{"min":0,"max":60},"minDurationTicks":36},
+        "review_push":{"budgetPerTickRangeEur":{"min":0,"max":50},"minDurationTicks":24},
+        "hr_branding":{"budgetPerTickRangeEur":{"min":0,"max":40},"minDurationTicks":72},
+        "fleet_outreach":{"budgetPerTickRangeEur":{"min":0,"max":80},"minDurationTicks":72}
+      },
+      "upsell":{
+        "upgradeRateBoostPctPerStaffRange":{"min":0.5,"max":2.5},
+        "upgradeRateBoostTotalCapPct":18
+      }
+    },
+    "hr":{
+      "hourlyCostRangeEur":{
+        "junior_wash":[17,27],
+        "senior_wash":[22,35],
+        "detailer_skilled":[28,45],
+        "maintenance_tech":[30,50],
+        "manager":[35,60]
+      },
+      "hiringCostRangeEur":{
+        "junior_wash":[150,450],
+        "senior_wash":[300,900],
+        "detailer_skilled":[400,1200]
+      },
+      "hiringLeadTimeTicksRange":{"min":6,"max":36},
+      "firingPenaltyRangeEur":{"min":0,"max":600},
+      "trainingLevels":{"min":0,"max":5},
+      "trainingCostRangeEur":{"min":80,"max":450},
+      "trainingTimeTicksRange":{"min":6,"max":30},
+      "trainingEffects":{"productivityPctPerLevel":3,"qualityPctPerLevel":2,"upsellPctPerLevel":4},
+      "moraleBaseline":60,
+      "absenteeismChancePctByMorale":[
+        {"min":80,"max":100,"chancePct":0.03},
+        {"min":60,"max":79,"chancePct":0.07},
+        {"min":40,"max":59,"chancePct":0.14},
+        {"min":0,"max":39,"chancePct":0.25}
+      ]
+    },
+    "pricing":{
+      "promoDiscountPctRange":{"min":0,"max":35,"step":1},
+      "promoDurationTicksRange":{"min":6,"max":72},
+      "priceStepEur":0.5,
+      "detailingPriceStepEur":5
+    },
+    "finance":{
+      "startingCashRangeEur":{"min":15000,"max":40000},
+      "optionalStartLoanRangeEur":{"min":0,"max":60000},
+      "loanTypes":{
+        "working_capital":{"principalRangeEur":{"min":5000,"max":80000},"aprRangePct":{"min":6.5,"max":14.5},"termDaysRange":{"min":7,"max":60},"earlyRepayFeePctRange":{"min":0,"max":1.5}},
+        "equipment_loan":{"principalRangeEur":{"min":20000,"max":250000},"aprRangePct":{"min":4.8,"max":9.5},"termDaysRange":{"min":90,"max":720},"dscrMin":1.1},
+        "lease":{"laneLeaseCostPerTickRangeEur":{"min":1.1,"max":2.4}}
+      },
+      "extraRepayPerTickMaxEur":2000
+    },
+    "softStats":{
+      "reachFormula":"clamp(0.10 + Awareness/125, 0.10, 0.90)",
+      "conversionMultiplierFormula":"0.70 + Reputation/200",
+      "qualityRefundsPctByScore":[
+        {"min":0,"max":54,"refundRangePct":[1,4]},
+        {"min":55,"max":75,"refundRangePct":[0.3,1.2]},
+        {"min":76,"max":100,"refundRangePct":[0.05,0.4]}
+      ],
+      "efficiencyCostMultiplierFormula":"clamp(0.70, 1.08, 1.08 - Efficiency/250)",
+      "statDriftCapsPerTick":{"reputation":0.15,"awarenessUp":0.1,"awarenessDecay":-0.02,"efficiency":0.05}
+    },
+    "offers":{
+      "carwash_basic_exterior_unit":{
+        "name":"Basic Exterior",
+        "priceRangeEur":{"min":6.5,"max":12.5,"step":0.5,"baseline":9},
+        "costsEur":{"chemicals":{"min":0.35,"max":0.75},"utilities":{"min":0.2,"max":0.6},"labor":{"min":0.2,"max":0.8}},
+        "serviceTimeMinutesRange":{"min":3,"max":5}
+      },
+      "carwash_standard_unit":{
+        "name":"Standard",
+        "priceRangeEur":{"min":9.5,"max":16.5,"step":0.5,"baseline":12.5},
+        "costsEur":{"chemicals":{"min":0.55,"max":1.1},"utilities":{"min":0.3,"max":0.8},"labor":{"min":0.25,"max":0.9}}
+      },
+      "carwash_premium_unit":{
+        "name":"Premium",
+        "priceRangeEur":{"min":12.5,"max":22.5,"step":0.5,"baseline":16.5},
+        "costsEur":{"chemicals":{"min":0.85,"max":1.8},"utilities":{"min":0.35,"max":1},"labor":{"min":0.3,"max":1.2}}
+      },
+      "carwash_ultimate_unit":{
+        "name":"Ultimate",
+        "priceRangeEur":{"min":16.5,"max":29.5,"step":0.5,"baseline":21.5},
+        "costsEur":{"chemicals":{"min":1.2,"max":2.6},"utilities":{"min":0.45,"max":1.4},"labor":{"min":0.35,"max":1.4}}
+      },
+      "carwash_interior_quick_unit":{
+        "name":"Interior Quick Clean",
+        "priceRangeEur":{"min":6,"max":18,"step":0.5,"baseline":10},
+        "costsEur":{"consumables":{"min":0.6,"max":1.8},"labor":{"min":2,"max":6.5}},
+        "serviceTimeMinutesRange":{"min":8,"max":15},
+        "outputPerTickMax":2
+      },
+      "carwash_detailing_session_unit":{
+        "name":"Detailing Session",
+        "priceRangeEur":{"min":60,"max":180,"step":5,"baseline":110},
+        "costsEur":{"consumables":{"min":4,"max":18},"labor":{"min":20,"max":85}},
+        "serviceTimeMinutesRange":{"min":60,"max":180},
+        "outputPerTickMax":1
+      }
+    },
+    "decisionSchema":{
+      "operations":{
+        "targetOutputPerOffer":{"type":"integer","min":0,"maxBy":"capacity"},
+        "openStatus":{"type":"boolean","scope":"per_tick"},
+        "staffAllocation":{"type":"allocation","scope":"per_role"},
+        "maintenanceLevel":{"type":"integer","min":0,"max":3,"step":1},
+        "energyMode":{"type":"enum","options":["normal","eco","peak_avoid"]},
+        "queuePolicy":{"type":"enum","options":["walk_in_only","reservations"]}
+      },
+      "warehouse":{
+        "orderQty":{"type":"integer","min":0,"max":50000,"step":100,"unit":"wash_units"},
+        "reorderPoint":{"type":"integer","min":0,"max":20000,"step":100},
+        "safetyStock":{"type":"integer","min":0,"max":30000,"step":100},
+        "storageUpgrades":{"type":"toggle","scope":"module"}
+      },
+      "procurement":{
+        "supplierChoice":{"type":"enum","scope":"per_category"},
+        "spotOrContract":{"type":"enum","options":["spot","contract_7d","contract_30d"]},
+        "qualityLevel":{"type":"enum","options":["budget","standard","premium"]}
+      },
+      "marketing":{
+        "campaigns":{"type":"budget","scope":"per_campaign"},
+        "promotions":{"type":"discount","maxPct":35}
+      },
+      "hr":{
+        "hireFire":{"type":"integer","scope":"per_role"},
+        "wagePolicy":{"type":"range","scope":"per_role"},
+        "trainingLevel":{"type":"integer","min":0,"max":5},
+        "shiftPlanning":{"type":"schedule"}
+      },
+      "pricing":{
+        "pricePerOffer":{"type":"range","stepEur":0.5},
+        "promoDiscountPct":{"type":"range","min":0,"max":35},
+        "promoDurationTicks":{"type":"range","min":6,"max":72}
+      },
+      "finance":{
+        "loans":{"type":"option","scope":"per_loan_type"},
+        "extraRepayPerTick":{"type":"range","min":0,"max":2000}
+      }
+    },
+    "productSeasonalityKeys":{
+      "carwash_basic_exterior_unit":"car_wash_weather_seasonality",
+      "carwash_standard_unit":"car_wash_weather_seasonality",
+      "carwash_premium_unit":"car_wash_weather_seasonality",
+      "carwash_ultimate_unit":"car_wash_weather_seasonality",
+      "carwash_interior_quick_unit":"car_wash_weather_seasonality",
+      "carwash_detailing_session_unit":"car_wash_weather_seasonality"
+    },
+    "startingLoadout":{
+      "startingCash":25000,
+      "assets":[
+        {"assetId":"wash_lanes","count":1},
+        {"assetId":"interior_bays","count":0},
+        {"assetId":"detailing_bays","count":0},
+        {"assetId":"storage_capacity_wash_units","count":10000},
+        {"assetId":"chemicals_inventory_units","count":1200},
+        {"assetId":"consumables_inventory_units","count":600},
+        {"assetId":"spare_parts_inventory_units","count":200},
+        {"assetId":"reputation_score","count":0.45},
+        {"assetId":"awareness_score","count":0.2},
+        {"assetId":"service_quality_score","count":0.55},
+        {"assetId":"reliability_score","count":0.6},
+        {"assetId":"operational_efficiency_score","count":0.5},
+        {"assetId":"employee_morale_score","count":0.6}
+      ],
+      "staff":[
+        {"roleId":"junior_wash","fte":2},
+        {"roleId":"senior_wash","fte":0},
+        {"roleId":"detailer_skilled","fte":0},
+        {"roleId":"maintenance_tech","fte":0},
+        {"roleId":"manager","fte":0}
+      ],
+      "unlockedProducts":["carwash_basic_exterior_unit"]
+    },
+    "unlockRules":[
+      {"productSku":"carwash_basic_exterior_unit","startingUnlocked":true,"requirements":{}},
+      {"productSku":"carwash_standard_unit","startingUnlocked":false,"requirements":{"minReputationScore":0.5}},
+      {"productSku":"carwash_premium_unit","startingUnlocked":false,"requirements":{"minReputationScore":0.55}},
+      {"productSku":"carwash_ultimate_unit","startingUnlocked":false,"requirements":{"minReputationScore":0.6}},
+      {"productSku":"carwash_interior_quick_unit","startingUnlocked":false,"requirements":{
+        "assets":[{"assetId":"interior_bays","minCount":1}],
+        "staff":[{"roleId":"detailer_skilled","minFTE":1}],
+        "upgrades":["interior_bay"]
+      }},
+      {"productSku":"carwash_detailing_session_unit","startingUnlocked":false,"requirements":{
+        "assets":[{"assetId":"detailing_bays","minCount":1}],
+        "staff":[{"roleId":"detailer_skilled","minFTE":1}],
+        "minReputationScore":0.6,
+        "upgrades":["detailing_bay"]
+      }}
+    ]
+  }$$::jsonb
+from sector
+on conflict (sector_id, code) do update set
+  name = excluded.name,
+  description = excluded.description,
+  config = excluded.config;
+
+-- Car Wash products
+with niche as (
+  select id from public.niches where code = 'AUTO_CARWASH'
+),
+product_seed as (
+  select * from (values
+    ('carwash_basic_exterior_unit', 'Basic Exterior', 'unit', 6.5, 12.5, 8, 32, 'wash_lanes', 'Entry wash package.'),
+    ('carwash_standard_unit', 'Standard', 'unit', 9.5, 16.5, 8, 30, 'wash_lanes', 'Foam and rinse package.'),
+    ('carwash_premium_unit', 'Premium', 'unit', 12.5, 22.5, 8, 32, 'wash_lanes', 'Wax and underbody wash.'),
+    ('carwash_ultimate_unit', 'Ultimate', 'unit', 16.5, 29.5, 8, 33, 'wash_lanes', 'Premium drying and ceramic-lite finish.'),
+    ('carwash_interior_quick_unit', 'Interior Quick Clean', 'unit', 6, 18, 20, 85, 'interior_bays', 'Labor-heavy interior add-on.'),
+    ('carwash_detailing_session_unit', 'Detailing Session', 'unit', 60, 180, 25, 90, 'detailing_bays', 'High-touch detailing service.')
+  ) as t(sku, name, unit, price_min_eur, price_max_eur, cogs_pct_min, cogs_pct_max, capacity_driver, notes)
+),
+deleted as (
+  delete from public.niche_products
+  where niche_id in (select id from niche)
+)
+insert into public.niche_products (
+  niche_id,
+  sku,
+  name,
+  unit,
+  price_min_eur,
+  price_max_eur,
+  cogs_pct_min,
+  cogs_pct_max,
+  capacity_driver,
+  notes
+)
+select
+  niche.id,
+  product_seed.sku,
+  product_seed.name,
+  product_seed.unit,
+  product_seed.price_min_eur,
+  product_seed.price_max_eur,
+  product_seed.cogs_pct_min,
+  product_seed.cogs_pct_max,
+  product_seed.capacity_driver,
+  product_seed.notes
+from product_seed
+cross join niche
+on conflict do nothing;
+
+-- Car Wash upgrades
+with niche as (
+  select id from public.niches where code = 'AUTO_CARWASH'
+),
+upgrade_seed as (
+  select * from (values
+    (
+      'conveyor_speed_kit',
+      'THROUGHPUT',
+      'Conveyor Speed Kit',
+      'Increases wash throughput per lane.',
+      1,
+      0,
+      2,
+      '[{"key":"capacity","op":"mul","range":[1.12,1.18]},{"key":"opex","op":"mul","range":[1.01,1.03]}]'::jsonb,
+      null,
+      null,
+      0.01,
+      0.03,
+      'capex 9000..18000',
+      null,
+      1,
+      2,
+      null
+    ),
+    (
+      'add_second_lane',
+      'THROUGHPUT',
+      'Add Second Lane',
+      'Adds an extra wash lane for major capacity gains.',
+      2,
+      0,
+      6,
+      '[{"key":"capacity","op":"mul","range":[1.8,2.2]}]'::jsonb,
+      null,
+      null,
+      0.02,
+      0.05,
+      'capex 65000..140000',
+      null,
+      2,
+      4,
+      null
+    ),
+    (
+      'extra_dryer_modules',
+      'QUALITY',
+      'Extra Dryer Modules',
+      'Boosts drying quality and modestly improves throughput.',
+      1,
+      0,
+      3,
+      '[{"key":"capacity","op":"mul","range":[1.04,1.08]},{"key":"quality","op":"add","range":[0.03,0.05]}]'::jsonb,
+      null,
+      null,
+      0.01,
+      0.03,
+      'capex 12000..28000',
+      null,
+      1,
+      3,
+      null
+    ),
+    (
+      'water_recycling',
+      'SUSTAINABILITY',
+      'Water Recycling',
+      'Cuts water usage and improves reputation.',
+      2,
+      0,
+      4,
+      '[{"key":"unitCost","op":"mul","range":[0.6,0.75]},{"key":"reputation_score","op":"add","range":[1,3]}]'::jsonb,
+      null,
+      null,
+      0.005,
+      0.015,
+      'capex 18000..55000',
+      null,
+      1,
+      3,
+      null
+    ),
+    (
+      'solar_panels',
+      'SUSTAINABILITY',
+      'Solar Panels',
+      'Reduces energy costs and lifts green reputation.',
+      2,
+      0,
+      5,
+      '[{"key":"unitCost","op":"mul","range":[0.72,0.9]},{"key":"reputation_score","op":"add","range":[1,2]}]'::jsonb,
+      null,
+      null,
+      0.002,
+      0.008,
+      'capex 22000..70000',
+      null,
+      2,
+      4,
+      null
+    ),
+    (
+      'chemical_dosing_optimizer',
+      'SUSTAINABILITY',
+      'Chemical Dosing Optimizer',
+      'Reduces chemical waste while lifting wash quality.',
+      1,
+      0,
+      2,
+      '[{"key":"unitCost","op":"mul","range":[0.82,0.92]},{"key":"quality","op":"add","range":[0.01,0.02]}]'::jsonb,
+      null,
+      null,
+      null,
+      null,
+      'capex 6000..16000',
+      null,
+      1,
+      2,
+      null
+    ),
+    (
+      'premium_brush_set',
+      'QUALITY',
+      'Premium Brush Set',
+      'Improves finish quality and reduces complaints.',
+      2,
+      0,
+      3,
+      '[{"key":"quality","op":"add","range":[0.05,0.08]},{"key":"reputation_score","op":"add","range":[2,4]}]'::jsonb,
+      null,
+      null,
+      0.004,
+      0.01,
+      'capex 8000..22000',
+      null,
+      1,
+      3,
+      null
+    ),
+    (
+      'loyalty_system',
+      'RETENTION',
+      'Loyalty System',
+      'Improves repeat rate for returning customers.',
+      2,
+      0,
+      2,
+      '[{"key":"repeat_rate","op":"mul","range":[1.06,1.16]}]'::jsonb,
+      null,
+      null,
+      0.003,
+      0.01,
+      'capex 2500..9000',
+      null,
+      1,
+      2,
+      null
+    ),
+    (
+      'memberships',
+      'RETENTION',
+      'Memberships',
+      'Adds subscription-style demand and stabilizes volume.',
+      3,
+      0,
+      4,
+      '[{"key":"base_demand","op":"mul","range":[1.06,1.18]},{"key":"repeat_rate","op":"mul","range":[1.05,1.12]}]'::jsonb,
+      null,
+      null,
+      0.005,
+      0.02,
+      'capex 6000..20000',
+      null,
+      2,
+      4,
+      null
+    ),
+    (
+      'training_program',
+      'HR',
+      'Training Program',
+      'Improves productivity and service quality.',
+      1,
+      0,
+      2,
+      '[{"key":"unitCost","op":"mul","range":[0.96,0.99]},{"key":"quality","op":"add","range":[0.01,0.02]}]'::jsonb,
+      null,
+      null,
+      0.002,
+      0.006,
+      'capex 1000..4000',
+      null,
+      1,
+      2,
+      null
+    ),
+    (
+      'scheduling_software',
+      'HR',
+      'Scheduling Software',
+      'Cuts absentee impact and improves throughput.',
+      1,
+      0,
+      2,
+      '[{"key":"capacity","op":"mul","range":[1.02,1.05]}]'::jsonb,
+      null,
+      null,
+      0.001,
+      0.004,
+      'capex 800..3500',
+      null,
+      1,
+      2,
+      null
+    ),
+    (
+      'interior_bay',
+      'BAYS',
+      'Interior Bay',
+      'Adds an interior bay and unlocks interior services.',
+      2,
+      0,
+      4,
+      '[{"key":"unlock_products","op":"set","value":["carwash_interior_quick_unit"]},{"key":"capacity","op":"mul","range":[1.05,1.12]}]'::jsonb,
+      null,
+      null,
+      0.01,
+      0.03,
+      'capex 9000..30000',
+      null,
+      1,
+      3,
+      null
+    ),
+    (
+      'detailing_bay',
+      'BAYS',
+      'Detailing Bay',
+      'Adds a detailing bay and unlocks detailing sessions.',
+      3,
+      0,
+      5,
+      '[{"key":"unlock_products","op":"set","value":["carwash_detailing_session_unit"]},{"key":"capacity","op":"mul","range":[1.02,1.08]},{"key":"quality","op":"add","range":[0.02,0.05]}]'::jsonb,
+      null,
+      null,
+      0.02,
+      0.05,
+      'capex 18000..85000',
+      null,
+      2,
+      4,
+      null
+    )
+  ) as t(
+    code,
+    tree_key,
+    name,
+    description,
+    tier,
+    cost,
+    duration_weeks,
+    effects,
+    capex_pct_min,
+    capex_pct_max,
+    opex_pct_min,
+    opex_pct_max,
+    capex_formula,
+    opex_formula,
+    delay_weeks_min,
+    delay_weeks_max,
+    risk
+  )
+)
+insert into public.niche_upgrades (
+  niche_id,
+  code,
+  tree_key,
+  name,
+  description,
+  tier,
+  cost,
+  duration_weeks,
+  effects,
+  capex_pct_min,
+  capex_pct_max,
+  opex_pct_min,
+  opex_pct_max,
+  capex_formula,
+  opex_formula,
+  delay_weeks_min,
+  delay_weeks_max,
+  risk
+)
+select
+  niche.id,
+  upgrade_seed.code,
+  upgrade_seed.tree_key,
+  upgrade_seed.name,
+  upgrade_seed.description,
+  upgrade_seed.tier,
+  upgrade_seed.cost,
+  upgrade_seed.duration_weeks,
+  upgrade_seed.effects,
+  upgrade_seed.capex_pct_min::numeric,
+  upgrade_seed.capex_pct_max::numeric,
+  upgrade_seed.opex_pct_min::numeric,
+  upgrade_seed.opex_pct_max::numeric,
+  upgrade_seed.capex_formula,
+  upgrade_seed.opex_formula,
+  upgrade_seed.delay_weeks_min,
+  upgrade_seed.delay_weeks_max,
+  upgrade_seed.risk
+from upgrade_seed
+cross join niche
+on conflict (niche_id, code) do update set
+  tree_key = excluded.tree_key,
+  name = excluded.name,
+  description = excluded.description,
+  tier = excluded.tier,
+  cost = excluded.cost,
+  duration_weeks = excluded.duration_weeks,
+  effects = excluded.effects,
+  capex_pct_min = excluded.capex_pct_min,
+  capex_pct_max = excluded.capex_pct_max,
+  opex_pct_min = excluded.opex_pct_min,
+  opex_pct_max = excluded.opex_pct_max,
+  capex_formula = excluded.capex_formula,
+  opex_formula = excluded.opex_formula,
+  delay_weeks_min = excluded.delay_weeks_min,
+  delay_weeks_max = excluded.delay_weeks_max,
+  risk = excluded.risk;
+
+-- ============================================================
 -- AUTO Repair Shop seed (niche + products + upgrades + starting loadout)
 -- ============================================================
 
@@ -1518,6 +2295,47 @@ select
   and (config->'productFlows'->'trade_in_unit'->>'inventoryUsedUnitsDelta')::int = 1 as trade_in_flow_ok
 from public.niches
 where code = 'AUTO_DEALER';
+
+select count(*) as carwash_product_count
+from public.niche_products p
+join public.niches n on n.id = p.niche_id
+where n.code = 'AUTO_CARWASH';
+
+select
+  jsonb_array_length(config->'startingLoadout'->'unlockedProducts') = 1
+  and (config->'startingLoadout'->'unlockedProducts'->>0) = 'carwash_basic_exterior_unit' as only_basic_unlocked
+from public.niches
+where code = 'AUTO_CARWASH';
+
+select jsonb_path_exists(
+  config,
+  '$.unlockRules[*] ? (@.productSku == "carwash_interior_quick_unit" && exists(@.requirements.upgrades[*] ? (@ == "interior_bay")))'
+) as interior_bay_gate
+from public.niches
+where code = 'AUTO_CARWASH';
+
+select jsonb_path_exists(
+  config,
+  '$.unlockRules[*] ? (@.productSku == "carwash_detailing_session_unit" && exists(@.requirements.upgrades[*] ? (@ == "detailing_bay")))'
+) as detailing_bay_gate
+from public.niches
+where code = 'AUTO_CARWASH';
+
+select
+  exists(
+    select 1
+    from public.niche_upgrades u
+    join public.niches n on n.id = u.niche_id
+    where n.code = 'AUTO_CARWASH'
+      and u.code = 'interior_bay'
+  ) as interior_bay_upgrade_present,
+  exists(
+    select 1
+    from public.niche_upgrades u
+    join public.niches n on n.id = u.niche_id
+    where n.code = 'AUTO_CARWASH'
+      and u.code = 'detailing_bay'
+  ) as detailing_bay_upgrade_present;
 
 select count(*) as repair_shop_product_count
 from public.niche_products p
