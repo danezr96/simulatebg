@@ -536,6 +536,9 @@ function resolveOpsModifiers(params: {
   state: CompanyState;
   opsIntensity?: number;
   availability?: number;
+  energyMode?: "normal" | "eco" | "peak_avoid";
+  maintenanceLevel?: number;
+  trainingLevel?: number;
 }): { modifiers: CompanyEffectModifiers; extraOpex: number } | null {
   const cfg = (params.niche.config as any)?.opsResolution;
   if (!cfg || typeof cfg !== "object") return null;
@@ -560,10 +563,12 @@ function resolveOpsModifiers(params: {
   const staffFloor = clamp(safeNumber(staffing.staffShortageCapacityFloor, 0.4), 0.1, 1);
   const staffFactor = clamp(staffRatio, staffFloor, 1);
 
-  const availability = params.availability != null ? clamp(params.availability, 0.4, 1.2) : 1;
+  const availability = params.availability != null ? clamp(params.availability, 0, 1.2) : 1;
 
   const intensity = params.opsIntensity != null ? clamp(params.opsIntensity, 0, 1) : 0.5;
-  const energyKey = intensity <= 0.33 ? "eco" : intensity >= 0.75 ? "peak_avoid" : "normal";
+  const energyKey =
+    params.energyMode ??
+    (intensity <= 0.33 ? "eco" : intensity >= 0.75 ? "peak_avoid" : "normal");
   const energy = energyModes[energyKey] ?? {};
   const energyCostMult = safeNumber(energy.energyCostMultiplier, 1);
   const energyThroughputMult = safeNumber(energy.throughputMultiplier, 1);
@@ -573,6 +578,9 @@ function resolveOpsModifiers(params: {
   const qualityNorm = clamp((qualityScore - 0.4) / 0.6, 0, 1);
   let maintenanceLevel = Math.round(qualityNorm * 3);
   if (intensity > 0.75) maintenanceLevel = Math.max(0, maintenanceLevel - 1);
+  if (Number.isFinite(params.maintenanceLevel)) {
+    maintenanceLevel = clamp(Math.round(safeNumber(params.maintenanceLevel, maintenanceLevel)), 0, 3);
+  }
 
   const levels = Array.isArray(maintenance.levels) ? maintenance.levels : [];
   const levelCfg =
@@ -590,10 +598,19 @@ function resolveOpsModifiers(params: {
   const maintenanceCost = maintenanceCostPerLaneTick * laneCount * ticksPerWeek;
 
   const overstaffBoost = staffRatio > 1 ? Math.min(0.06, (staffRatio - 1) * 0.05) : 0;
+  const trainingLevel = clamp(safeNumber(params.trainingLevel, 0), 0, 5);
+  const productivityPctPerLevel = safeNumber(staffing.trainingProductivityPctPerLevel, 3);
+  const productivityCapPct = safeNumber(staffing.trainingProductivityCapPct, 15);
+  const qualityPctPerLevel = safeNumber((params.niche.config as any)?.hr?.trainingEffects?.qualityPctPerLevel, 2);
+  const qualityCapPct = safeNumber((params.niche.config as any)?.hr?.trainingEffects?.qualityCapPct, 10);
+  const productivityPct = clamp(trainingLevel * productivityPctPerLevel, 0, productivityCapPct);
+  const qualityPct = clamp(trainingLevel * qualityPctPerLevel, 0, qualityCapPct);
+  const trainingCapacityMult = 1 + productivityPct / 100;
+  const trainingQualityMult = 1 + qualityPct / 100;
 
   const mods: CompanyEffectModifiers = {
-    capacityMultiplier: (staffFactor * availability * energyThroughputMult * downtimeFactor) as any,
-    qualityMultiplier: (energyQualityMult * (1 + overstaffBoost)) as any,
+    capacityMultiplier: (staffFactor * availability * energyThroughputMult * downtimeFactor * trainingCapacityMult) as any,
+    qualityMultiplier: (energyQualityMult * (1 + overstaffBoost) * trainingQualityMult) as any,
     variableCostMultiplier: energyCostMult as any,
   };
 
@@ -1528,6 +1545,11 @@ async function runWorldTickInternal(
   const oneTimeOpexByCompanyId: Record<string, number> = {};
   const opsIntensityByCompanyId: Record<string, number> = {};
   const availabilityByCompanyId: Record<string, number> = {};
+  const carwashOpsByCompanyId: Record<string, any> = {};
+  const carwashTargetOutputByCompanyId: Record<string, Record<string, number>> = {};
+  const carwashEnergyModeByCompanyId: Record<string, "normal" | "eco" | "peak_avoid"> = {};
+  const carwashMaintenanceByCompanyId: Record<string, number> = {};
+  const carwashTrainingLevelByCompanyId: Record<string, number> = {};
 
   // 7) Apply decisions -> preSimStates (switch on payload.type)
   const preSimStates: Record<string, CompanyState> = {};
@@ -1593,6 +1615,55 @@ async function runWorldTickInternal(
         case "ADJUST_OPENING_HOURS":
           availabilityByCompanyId[cid] = clamp(safeNumber((payload as any)?.availability, 1), 0.1, 1.2);
           break;
+
+        case "SET_CARWASH_OPERATIONS": {
+          const ops = payload as any;
+          carwashOpsByCompanyId[cid] = ops;
+          if (typeof ops?.openStatus === "boolean") {
+            availabilityByCompanyId[cid] = ops.openStatus ? 1 : 0;
+          }
+          if (typeof ops?.energyMode === "string") {
+            carwashEnergyModeByCompanyId[cid] = ops.energyMode;
+          }
+          if (Number.isFinite(ops?.maintenanceLevel)) {
+            carwashMaintenanceByCompanyId[cid] = Math.round(safeNumber(ops.maintenanceLevel, 0));
+          }
+          if (ops?.targetOutputBySku && typeof ops.targetOutputBySku === "object") {
+            carwashTargetOutputByCompanyId[cid] = ops.targetOutputBySku;
+          }
+          break;
+        }
+
+        case "SET_CARWASH_MARKETING": {
+          const campaignBudget = (payload as any)?.campaignBudgetByKey ?? {};
+          if (campaignBudget && typeof campaignBudget === "object") {
+            const total = Object.values(campaignBudget).reduce<number>(
+              (sum, value) => sum + safeNumber(value, 0),
+              0
+            );
+            next.marketingLevel = Math.max(0, total) as any;
+          }
+          break;
+        }
+
+        case "SET_CARWASH_HR": {
+          const hireFire = (payload as any)?.hireFireByRole ?? {};
+          if (hireFire && typeof hireFire === "object") {
+            const delta = Object.values(hireFire).reduce<number>(
+              (sum, value) => sum + Math.trunc(safeNumber(value, 0)),
+              0
+            );
+            next.employees = Math.max(0, Math.floor(safeNumber(next.employees, 0) + delta));
+          }
+          if (Number.isFinite((payload as any)?.trainingLevel)) {
+            carwashTrainingLevelByCompanyId[cid] = clamp(
+              safeNumber((payload as any)?.trainingLevel, 0),
+              0,
+              5
+            );
+          }
+          break;
+        }
 
         case "INVEST_CAPACITY":
           next.capacity = (safeNumber(next.capacity, 0) + safeNumber(payload.addCapacity, 0)) as any;
@@ -1785,6 +1856,9 @@ async function runWorldTickInternal(
       state,
       opsIntensity: opsIntensityByCompanyId[cid],
       availability: availabilityByCompanyId[cid],
+      energyMode: carwashEnergyModeByCompanyId[cid],
+      maintenanceLevel: carwashMaintenanceByCompanyId[cid],
+      trainingLevel: carwashTrainingLevelByCompanyId[cid],
     });
     if (!ops) continue;
 
@@ -1958,6 +2032,15 @@ async function runWorldTickInternal(
             const isUnlocked = unlocked ? unlocked.has(sku) : true;
             eligibilityBySegment[segment] = isUnlocked;
             if (!isUnlocked) continue;
+
+            const targetOutputBySku = carwashTargetOutputByCompanyId[cid];
+            if (targetOutputBySku && Object.prototype.hasOwnProperty.call(targetOutputBySku, sku)) {
+              const targetOutput = safeNumber(targetOutputBySku[sku], NaN);
+              if (Number.isFinite(targetOutput) && targetOutput <= 0) {
+                eligibilityBySegment[segment] = false;
+                continue;
+              }
+            }
 
             const planItem = planItems.find((item) => item?.sku === sku);
             const priceMin = safeNumber(product.priceMinEur, 0);

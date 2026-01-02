@@ -40,6 +40,13 @@ export type CompanyDecisionType =
   | "SET_STAFFING"
   | "SET_OPERATIONS_INTENSITY"
   | "ADJUST_OPENING_HOURS"
+  | "SET_CARWASH_OPERATIONS"
+  | "SET_CARWASH_WAREHOUSE"
+  | "SET_CARWASH_PROCUREMENT"
+  | "SET_CARWASH_MARKETING"
+  | "SET_CARWASH_HR"
+  | "SET_CARWASH_PRICING"
+  | "SET_CARWASH_FINANCE"
   | "INVEST_CAPACITY"
   | "INVEST_QUALITY"
   | "START_PROJECT"
@@ -110,6 +117,59 @@ export type AdjustOpeningHoursDecision = {
    * (Restaurants = more shifts; delivery = more time slots)
    */
   availability: Decimal;
+};
+
+export type CarwashEnergyMode = "normal" | "eco" | "peak_avoid";
+
+export type CarwashQueuePolicy = "walk_in_only" | "reservations";
+
+export type SetCarwashOperationsDecision = {
+  type: "SET_CARWASH_OPERATIONS";
+  openStatus?: boolean;
+  maintenanceLevel?: number;
+  energyMode?: CarwashEnergyMode;
+  queuePolicy?: CarwashQueuePolicy;
+  targetOutputBySku?: Record<string, number>;
+  staffAllocationByRole?: Record<string, number>;
+};
+
+export type SetCarwashWarehouseDecision = {
+  type: "SET_CARWASH_WAREHOUSE";
+  orderQtyByCategory?: Record<string, number>;
+  reorderPointByCategory?: Record<string, number>;
+  safetyStockByCategory?: Record<string, number>;
+  storageUpgrades?: number[];
+};
+
+export type SetCarwashProcurementDecision = {
+  type: "SET_CARWASH_PROCUREMENT";
+  supplierTierByCategory?: Record<string, "A" | "B" | "C">;
+  contractTypeByCategory?: Record<string, "spot" | "contract_7d" | "contract_30d">;
+  qualityLevel?: "budget" | "standard" | "premium";
+};
+
+export type SetCarwashMarketingDecision = {
+  type: "SET_CARWASH_MARKETING";
+  campaignBudgetByKey?: Record<string, number>;
+};
+
+export type SetCarwashHrDecision = {
+  type: "SET_CARWASH_HR";
+  hireFireByRole?: Record<string, number>;
+  wagePolicyByRole?: Record<string, number>;
+  trainingLevel?: number;
+  shiftPlan?: "balanced" | "extended" | "peak_only";
+};
+
+export type SetCarwashPricingDecision = {
+  type: "SET_CARWASH_PRICING";
+  promoDiscountPct?: number;
+  promoDurationTicks?: number;
+};
+
+export type SetCarwashFinanceDecision = {
+  type: "SET_CARWASH_FINANCE";
+  extraRepayPerTick?: number;
 };
 
 export type InvestCapacityDecision = {
@@ -198,6 +258,13 @@ export type CompanyDecisionPayload =
   | SetStaffingDecision
   | SetOperationsIntensityDecision
   | AdjustOpeningHoursDecision
+  | SetCarwashOperationsDecision
+  | SetCarwashWarehouseDecision
+  | SetCarwashProcurementDecision
+  | SetCarwashMarketingDecision
+  | SetCarwashHrDecision
+  | SetCarwashPricingDecision
+  | SetCarwashFinanceDecision
   | InvestCapacityDecision
   | InvestQualityDecision
   | StartProjectDecision

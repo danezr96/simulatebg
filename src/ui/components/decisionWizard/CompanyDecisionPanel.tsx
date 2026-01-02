@@ -1,12 +1,21 @@
 import * as React from "react";
 
 import type {
+  CarwashEnergyMode,
+  CarwashQueuePolicy,
   Company,
   CompanyDecisionPayload,
   CompanyState,
   Niche,
   NicheProduct,
   Sector,
+  SetCarwashFinanceDecision,
+  SetCarwashHrDecision,
+  SetCarwashMarketingDecision,
+  SetCarwashOperationsDecision,
+  SetCarwashPricingDecision,
+  SetCarwashProcurementDecision,
+  SetCarwashWarehouseDecision,
   SetProductPlanDecision,
 } from "../../../core/domain";
 import type { ProjectionSummary, WhatIfProjection } from "../../../core/projections/types";
@@ -93,6 +102,26 @@ function getPriceStep(min: number, max: number) {
   if (span <= 100) return 1;
   if (span <= 1000) return 10;
   return 50;
+}
+
+const CARWASH_CATEGORIES = ["chemicals", "consumables", "spare_parts"] as const;
+
+const CARWASH_CATEGORY_LABELS: Record<string, string> = {
+  chemicals: "Chemicals",
+  consumables: "Consumables",
+  spare_parts: "Spare parts",
+};
+
+function titleize(value: string) {
+  return value
+    .split("_")
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
+function mergeRecord<T extends Record<string, unknown>>(base?: T, updates?: T): T {
+  return { ...(base ?? {}), ...(updates ?? {}) } as T;
 }
 
 function buildDefaultProductPlan(products: NicheProduct[]): ProductPlanState {
@@ -472,9 +501,12 @@ export function CompanyDecisionPanel({
         const hasProductPlan = unlockedProducts.length > 0;
         const decisionModules = getDecisionModulesForNiche(niche ?? null);
         const decisionFields = getDecisionFieldsForNiche(niche ?? null);
-        const editableFields = hasProductPlan
-          ? decisionFields.filter((field) => field.kind !== "PRICE")
-          : decisionFields;
+        const isCarwash = niche?.code === "AUTO_CARWASH";
+        const editableFields = isCarwash
+          ? []
+          : hasProductPlan
+            ? decisionFields.filter((field) => field.kind !== "PRICE")
+            : decisionFields;
         const guidance = getDecisionGuidance(niche ?? null, sector ?? null, state);
         const planDecision = findDecision(decisions, "SET_PRODUCT_PLAN") as SetProductPlanDecision | null;
         const defaultPlan = buildDefaultProductPlan(unlockedProducts);
@@ -482,6 +514,287 @@ export function CompanyDecisionPanel({
         const planSummary = summarizeProductPlan(unlockedProducts, productPlan);
         const derivedPriceLevel = computePlanPriceLevel(unlockedProducts, productPlan);
         const projection = getProjection(companyId);
+
+        const carwashConfig = isCarwash ? ((niche?.config as any) ?? {}) : {};
+        const carwashCore = carwashConfig?.coreAssumptions ?? {};
+        const carwashOperations = carwashConfig?.operations ?? {};
+        const carwashOffers = carwashConfig?.offers ?? {};
+        const carwashWarehouse =
+          carwashConfig?.warehouse ?? carwashConfig?.demandEngine?.warehouse ?? {};
+        const carwashProcurement = carwashConfig?.procurement ?? {};
+        const carwashMarketing = carwashConfig?.marketing ?? {};
+        const carwashHr = carwashConfig?.hr ?? {};
+        const carwashPricing = carwashConfig?.pricing ?? {};
+        const carwashFinance = carwashConfig?.finance ?? {};
+
+        const carwashOpsDecision = isCarwash
+          ? (findDecision(decisions, "SET_CARWASH_OPERATIONS") as SetCarwashOperationsDecision | null)
+          : null;
+        const carwashWarehouseDecision = isCarwash
+          ? (findDecision(decisions, "SET_CARWASH_WAREHOUSE") as SetCarwashWarehouseDecision | null)
+          : null;
+        const carwashProcurementDecision = isCarwash
+          ? (findDecision(decisions, "SET_CARWASH_PROCUREMENT") as SetCarwashProcurementDecision | null)
+          : null;
+        const carwashMarketingDecision = isCarwash
+          ? (findDecision(decisions, "SET_CARWASH_MARKETING") as SetCarwashMarketingDecision | null)
+          : null;
+        const carwashHrDecision = isCarwash
+          ? (findDecision(decisions, "SET_CARWASH_HR") as SetCarwashHrDecision | null)
+          : null;
+        const carwashPricingDecision = isCarwash
+          ? (findDecision(decisions, "SET_CARWASH_PRICING") as SetCarwashPricingDecision | null)
+          : null;
+        const carwashFinanceDecision = isCarwash
+          ? (findDecision(decisions, "SET_CARWASH_FINANCE") as SetCarwashFinanceDecision | null)
+          : null;
+
+        const carwashTicksPerWeek = Math.max(1, toNumber(carwashCore?.ticksPerWeek, 1008));
+        const carwashLaneThroughput = Math.max(
+          0.1,
+          toNumber(carwashOperations?.laneThroughputPerTick?.base, 2)
+        );
+        const carwashCapacityPerLaneWeek = carwashLaneThroughput * carwashTicksPerWeek;
+        const carwashPlannedCapacity = Math.max(0, toNumber(state?.capacity, 0));
+        const carwashLaneCount =
+          carwashCapacityPerLaneWeek > 0 ? carwashPlannedCapacity / carwashCapacityPerLaneWeek : 0;
+        const carwashLaneCountRounded = Math.max(0, Math.round(carwashLaneCount));
+        const carwashMaxExteriorPerTick = Math.max(
+          0,
+          Math.floor(carwashLaneCount * carwashLaneThroughput)
+        );
+
+        const carwashQualityScore = toNumber(state?.qualityScore, 0.6);
+        const carwashQualityNorm = clamp((carwashQualityScore - 0.4) / 0.6, 0, 1);
+        const carwashDefaultMaintenance = clamp(Math.round(carwashQualityNorm * 3), 0, 3);
+
+        const carwashRoleKeys = Object.keys(carwashHr?.hourlyCostRangeEur ?? {});
+        const carwashCampaignEntries = Object.entries(carwashMarketing?.campaigns ?? {});
+        const carwashPriceStepBase = toNumber(carwashPricing?.priceStepEur, 0.5);
+        const carwashDetailingPriceStep = toNumber(
+          carwashPricing?.detailingPriceStepEur,
+          carwashPriceStepBase
+        );
+
+        const getCarwashOfferMaxPerTick = (product: NicheProduct) => {
+          const offerCfg = carwashOffers?.[product.sku] ?? {};
+          const offerMax = toNumber(offerCfg?.outputPerTickMax, 0);
+          if (product.capacityDriver === "wash_lanes") return carwashMaxExteriorPerTick;
+          if (offerMax > 0) return Math.max(0, Math.round(offerMax));
+          if (product.capacityDriver === "interior_bays") {
+            return Math.max(0, Math.round(toNumber(carwashOperations?.interiorOutputPerTickMax, 0)));
+          }
+          if (product.capacityDriver === "detailing_bays") {
+            return Math.max(0, Math.round(toNumber(carwashOperations?.detailingOutputPerTickMax, 0)));
+          }
+          return 0;
+        };
+
+        const laneProducts = unlockedProducts.filter((product) => product.capacityDriver === "wash_lanes");
+        const laneShareTotal = laneProducts.reduce((sum, product) => {
+          const entry = productPlan[product.sku] ?? defaultPlan[product.sku];
+          return sum + Math.max(0, toNumber(entry?.volumeShare, 0));
+        }, 0);
+        const laneShareCount = laneProducts.length;
+        const carwashDefaultTargetOutputBySku: Record<string, number> = {};
+
+        for (const product of unlockedProducts) {
+          if (product.capacityDriver === "wash_lanes") {
+            const entry = productPlan[product.sku] ?? defaultPlan[product.sku];
+            const share =
+              laneShareTotal > 0
+                ? Math.max(0, toNumber(entry?.volumeShare, 0)) / laneShareTotal
+                : laneShareCount > 0
+                  ? 1 / laneShareCount
+                  : 0;
+            carwashDefaultTargetOutputBySku[product.sku] = Math.max(
+              0,
+              Math.round(carwashMaxExteriorPerTick * share)
+            );
+          } else {
+            carwashDefaultTargetOutputBySku[product.sku] = 0;
+          }
+        }
+
+        const carwashTargetOutputBySku = {
+          ...carwashDefaultTargetOutputBySku,
+          ...(carwashOpsDecision?.targetOutputBySku ?? {}),
+        };
+
+        const updateCarwashOperations = (updates: Partial<SetCarwashOperationsDecision>) => {
+          if (!isCarwash) return;
+          const current =
+            (findDecision(decisions, "SET_CARWASH_OPERATIONS") as SetCarwashOperationsDecision | null) ?? {
+              type: "SET_CARWASH_OPERATIONS",
+            };
+          const next: SetCarwashOperationsDecision = {
+            ...current,
+            ...updates,
+            type: "SET_CARWASH_OPERATIONS",
+          };
+          if (updates.targetOutputBySku) {
+            next.targetOutputBySku = mergeRecord(
+              current.targetOutputBySku ?? {},
+              updates.targetOutputBySku
+            ) as Record<string, number>;
+          }
+          if (updates.staffAllocationByRole) {
+            next.staffAllocationByRole = mergeRecord(
+              current.staffAllocationByRole ?? {},
+              updates.staffAllocationByRole
+            ) as Record<string, number>;
+          }
+          onDecisionChange(companyId, next as any);
+        };
+
+        const updateCarwashWarehouse = (updates: Partial<SetCarwashWarehouseDecision>) => {
+          if (!isCarwash) return;
+          const current =
+            (findDecision(decisions, "SET_CARWASH_WAREHOUSE") as SetCarwashWarehouseDecision | null) ?? {
+              type: "SET_CARWASH_WAREHOUSE",
+            };
+          const next: SetCarwashWarehouseDecision = {
+            ...current,
+            ...updates,
+            type: "SET_CARWASH_WAREHOUSE",
+          };
+          if (updates.orderQtyByCategory) {
+            next.orderQtyByCategory = mergeRecord(
+              current.orderQtyByCategory ?? {},
+              updates.orderQtyByCategory
+            ) as Record<string, number>;
+          }
+          if (updates.reorderPointByCategory) {
+            next.reorderPointByCategory = mergeRecord(
+              current.reorderPointByCategory ?? {},
+              updates.reorderPointByCategory
+            ) as Record<string, number>;
+          }
+          if (updates.safetyStockByCategory) {
+            next.safetyStockByCategory = mergeRecord(
+              current.safetyStockByCategory ?? {},
+              updates.safetyStockByCategory
+            ) as Record<string, number>;
+          }
+          onDecisionChange(companyId, next as any);
+        };
+
+        const updateCarwashProcurement = (updates: Partial<SetCarwashProcurementDecision>) => {
+          if (!isCarwash) return;
+          const current =
+            (findDecision(decisions, "SET_CARWASH_PROCUREMENT") as SetCarwashProcurementDecision | null) ?? {
+              type: "SET_CARWASH_PROCUREMENT",
+            };
+          const next: SetCarwashProcurementDecision = {
+            ...current,
+            ...updates,
+            type: "SET_CARWASH_PROCUREMENT",
+          };
+          if (updates.supplierTierByCategory) {
+            next.supplierTierByCategory = mergeRecord(
+              current.supplierTierByCategory ?? {},
+              updates.supplierTierByCategory
+            ) as Record<string, "A" | "B" | "C">;
+          }
+          if (updates.contractTypeByCategory) {
+            next.contractTypeByCategory = mergeRecord(
+              current.contractTypeByCategory ?? {},
+              updates.contractTypeByCategory
+            ) as Record<string, "spot" | "contract_7d" | "contract_30d">;
+          }
+          onDecisionChange(companyId, next as any);
+        };
+
+        const updateCarwashMarketing = (updates: Partial<SetCarwashMarketingDecision>) => {
+          if (!isCarwash) return;
+          const current =
+            (findDecision(decisions, "SET_CARWASH_MARKETING") as SetCarwashMarketingDecision | null) ?? {
+              type: "SET_CARWASH_MARKETING",
+            };
+          const next: SetCarwashMarketingDecision = {
+            ...current,
+            ...updates,
+            type: "SET_CARWASH_MARKETING",
+          };
+          if (updates.campaignBudgetByKey) {
+            next.campaignBudgetByKey = mergeRecord(
+              current.campaignBudgetByKey ?? {},
+              updates.campaignBudgetByKey
+            ) as Record<string, number>;
+          }
+          onDecisionChange(companyId, next as any);
+        };
+
+        const updateCarwashHr = (updates: Partial<SetCarwashHrDecision>) => {
+          if (!isCarwash) return;
+          const current =
+            (findDecision(decisions, "SET_CARWASH_HR") as SetCarwashHrDecision | null) ?? {
+              type: "SET_CARWASH_HR",
+            };
+          const next: SetCarwashHrDecision = {
+            ...current,
+            ...updates,
+            type: "SET_CARWASH_HR",
+          };
+          if (updates.hireFireByRole) {
+            next.hireFireByRole = mergeRecord(
+              current.hireFireByRole ?? {},
+              updates.hireFireByRole
+            ) as Record<string, number>;
+          }
+          if (updates.wagePolicyByRole) {
+            next.wagePolicyByRole = mergeRecord(
+              current.wagePolicyByRole ?? {},
+              updates.wagePolicyByRole
+            ) as Record<string, number>;
+          }
+          onDecisionChange(companyId, next as any);
+        };
+
+        const updateCarwashPricing = (updates: Partial<SetCarwashPricingDecision>) => {
+          if (!isCarwash) return;
+          const current =
+            (findDecision(decisions, "SET_CARWASH_PRICING") as SetCarwashPricingDecision | null) ?? {
+              type: "SET_CARWASH_PRICING",
+            };
+          const next: SetCarwashPricingDecision = {
+            ...current,
+            ...updates,
+            type: "SET_CARWASH_PRICING",
+          };
+          onDecisionChange(companyId, next as any);
+        };
+
+        const updateCarwashFinance = (updates: Partial<SetCarwashFinanceDecision>) => {
+          if (!isCarwash) return;
+          const current =
+            (findDecision(decisions, "SET_CARWASH_FINANCE") as SetCarwashFinanceDecision | null) ?? {
+              type: "SET_CARWASH_FINANCE",
+            };
+          const next: SetCarwashFinanceDecision = {
+            ...current,
+            ...updates,
+            type: "SET_CARWASH_FINANCE",
+          };
+          onDecisionChange(companyId, next as any);
+        };
+
+        const carwashOpenStatus = carwashOpsDecision?.openStatus ?? true;
+        const carwashEnergyMode = (carwashOpsDecision?.energyMode ?? "normal") as CarwashEnergyMode;
+        const carwashQueuePolicy = (carwashOpsDecision?.queuePolicy ?? "walk_in_only") as CarwashQueuePolicy;
+        const carwashMaintenanceLevel = clamp(
+          toNumber(carwashOpsDecision?.maintenanceLevel, carwashDefaultMaintenance),
+          0,
+          3
+        );
+        const carwashTrainingMin = toNumber(carwashHr?.trainingLevels?.min, 0);
+        const carwashTrainingMax = toNumber(carwashHr?.trainingLevels?.max, 5);
+        const carwashTrainingLevel = clamp(
+          toNumber(carwashHrDecision?.trainingLevel, carwashTrainingMin),
+          carwashTrainingMin,
+          carwashTrainingMax
+        );
+        const carwashShiftPlan = (carwashHrDecision?.shiftPlan ?? "balanced") as SetCarwashHrDecision["shiftPlan"];
 
         const resolveRangeForField = (field: DecisionField) => {
           const guidanceRange = field.guidanceKey ? guidance?.ranges[field.guidanceKey] : undefined;
@@ -669,29 +982,33 @@ export function CompanyDecisionPanel({
                         </div>
                       ))}
                     </div>
+
                   </div>
                 ) : null}
 
-                <div>
-                  <div className="text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">
-                    Presets
-                  </div>
-                  <div className="mt-2 flex flex-wrap gap-2">
-                    {PRESET_LABELS.map((preset) => (
-                      <Button
-                        key={preset.key}
-                        size="sm"
-                        variant="ghost"
-                        disabled={disabled}
-                        onClick={() => applyPreset(company, state, editableFields, preset.key, decisions)}
-                      >
-                        {preset.label}
-                      </Button>
-                    ))}
-                  </div>
-                </div>
+                {!isCarwash ? (
+                  <div>
+                    <div className="text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">
+                      Presets
+                    </div>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      {PRESET_LABELS.map((preset) => (
+                        <Button
+                          key={preset.key}
+                          size="sm"
+                          variant="ghost"
+                          disabled={disabled}
+                          onClick={() => applyPreset(company, state, editableFields, preset.key, decisions)}
+                        >
+                          {preset.label}
+                        </Button>
+                      ))}
+                    </div>
 
-                {hasProductPlan ? (
+                  </div>
+                ) : null}
+
+                {!isCarwash && hasProductPlan ? (
                   <div className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-3">
                     <div className="flex flex-col gap-1 md:flex-row md:items-start md:justify-between">
                       <div>
@@ -821,7 +1138,129 @@ export function CompanyDecisionPanel({
                   </div>
                 ) : null}
 
-                <div className="space-y-4">
+                {isCarwash && hasProductPlan ? (
+                  <div className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-3">
+                    <div className="flex flex-col gap-1 md:flex-row md:items-start md:justify-between">
+                      <div>
+                        <div className="text-sm font-semibold text-[var(--text)]">Pricing & promos</div>
+                        <div className="text-xs text-[var(--text-muted)]">
+                          Set prices per offer and active promotions.
+                        </div>
+                      </div>
+                      {planSummary ? (
+                        <div className="text-xs text-[var(--text-muted)]">
+                          Avg {formatCurrencyCompact(planSummary.avgPrice)} (
+                          {planSummary.avgMultiplier.toFixed(2)}x)
+                        </div>
+                      ) : null}
+                    </div>
+
+                    <div className="mt-3 grid grid-cols-1 gap-3">
+                      {unlockedProducts.map((product) => {
+                        const entry = productPlan[product.sku] ?? defaultPlan[product.sku];
+                        if (!entry) return null;
+                        const { min, max } = getPriceRange(product);
+                        const basePrice = getPriceBase(product);
+                        const priceEur = toNumber(entry.priceEur, basePrice);
+                        const step =
+                          product.sku.includes("detailing")
+                            ? carwashDetailingPriceStep
+                            : carwashPriceStepBase || getPriceStep(min, max);
+
+                        return (
+                          <div
+                            key={`${companyId}-carwash-price-${product.sku}`}
+                            className="rounded-2xl border border-[var(--border)] bg-[var(--bg)] p-3"
+                          >
+                            <div className="flex flex-col gap-1 md:flex-row md:items-start md:justify-between">
+                              <div>
+                                <div className="text-sm font-semibold text-[var(--text)]">{product.name}</div>
+                                <div className="text-xs text-[var(--text-muted)]">{product.sku}</div>
+                              </div>
+                              <div className="text-xs text-[var(--text-muted)]">
+                                Range {formatMoneyRange(min, max)}
+                              </div>
+                            </div>
+
+                            <label className="mt-3 block text-xs text-[var(--text-muted)]">
+                              Price
+                              <input
+                                type="number"
+                                min={min}
+                                max={max}
+                                step={step}
+                                className="mt-1 w-full rounded-2xl border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-sm outline-none"
+                                value={Number.isFinite(priceEur) ? priceEur : basePrice}
+                                onChange={(event) =>
+                                  updateProductPlan(product.sku, { priceEur: Number(event.target.value) })
+                                }
+                                disabled={disabled}
+                              />
+                            </label>
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    {lockedProducts.length > 0 ? (
+                      <div className="mt-4 rounded-2xl border border-dashed border-[var(--border)] bg-[var(--card-2)] p-3 text-xs text-[var(--text-muted)]">
+                        <div className="text-[var(--text)]">Locked products</div>
+                        <div className="mt-1">
+                          {lockedProducts.map((product) => product.name).join(", ")}. Unlock via upgrades.
+                        </div>
+                      </div>
+                    ) : null}
+
+                    <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2">
+                      <label className="text-xs text-[var(--text-muted)]">
+                        Promo discount (%)
+                        <input
+                          type="number"
+                          min={toNumber(carwashPricing?.promoDiscountPctRange?.min, 0)}
+                          max={toNumber(carwashPricing?.promoDiscountPctRange?.max, 35)}
+                          step={toNumber(carwashPricing?.promoDiscountPctRange?.step, 1)}
+                          className="mt-1 w-full rounded-2xl border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-sm outline-none"
+                          value={toNumber(carwashPricingDecision?.promoDiscountPct, 0)}
+                          onChange={(event) =>
+                            updateCarwashPricing({
+                              promoDiscountPct: clamp(
+                                toNumber(event.target.value, 0),
+                                toNumber(carwashPricing?.promoDiscountPctRange?.min, 0),
+                                toNumber(carwashPricing?.promoDiscountPctRange?.max, 35)
+                              ),
+                            })
+                          }
+                          disabled={disabled}
+                        />
+                      </label>
+                      <label className="text-xs text-[var(--text-muted)]">
+                        Promo duration (ticks)
+                        <input
+                          type="number"
+                          min={toNumber(carwashPricing?.promoDurationTicksRange?.min, 6)}
+                          max={toNumber(carwashPricing?.promoDurationTicksRange?.max, 72)}
+                          step={1}
+                          className="mt-1 w-full rounded-2xl border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-sm outline-none"
+                          value={toNumber(carwashPricingDecision?.promoDurationTicks, 6)}
+                          onChange={(event) =>
+                            updateCarwashPricing({
+                              promoDurationTicks: clamp(
+                                toNumber(event.target.value, 6),
+                                toNumber(carwashPricing?.promoDurationTicksRange?.min, 6),
+                                toNumber(carwashPricing?.promoDurationTicksRange?.max, 72)
+                              ),
+                            })
+                          }
+                          disabled={disabled}
+                        />
+                      </label>
+                    </div>
+
+                  </div>
+                ) : null}
+
+                {!isCarwash ? (
+                  <div className="space-y-4">
                   {editableFields.length === 0 ? (
                     <div className="rounded-2xl border border-[var(--border)] p-3 text-sm text-[var(--text-muted)]">
                       No decision levers available for this niche.
@@ -955,9 +1394,613 @@ export function CompanyDecisionPanel({
                       );
                     })
                   )}
-                </div>
+                  </div>
+                ) : null}
 
-                {decisionModules.length > 0 ? (
+                {isCarwash ? (
+                  <div className="space-y-4">
+                    <div className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-3">
+                      <div className="text-sm font-semibold text-[var(--text)]">Operations</div>
+                      <div className="text-xs text-[var(--text-muted)]">
+                        Set open status, energy mode, maintenance, staffing, and target output.
+                      </div>
+                      <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">
+                        <label className="text-xs text-[var(--text-muted)]">
+                          Open status
+                          <select
+                            className="mt-1 w-full rounded-2xl border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-sm outline-none"
+                            value={carwashOpenStatus ? "open" : "closed"}
+                            onChange={(event) =>
+                              updateCarwashOperations({ openStatus: event.target.value === "open" })
+                            }
+                            disabled={disabled}
+                          >
+                            <option value="open">Open</option>
+                            <option value="closed">Closed</option>
+                          </select>
+                        </label>
+                        <label className="text-xs text-[var(--text-muted)]">
+                          Energy mode
+                          <select
+                            className="mt-1 w-full rounded-2xl border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-sm outline-none"
+                            value={carwashEnergyMode}
+                            onChange={(event) =>
+                              updateCarwashOperations({ energyMode: event.target.value as CarwashEnergyMode })
+                            }
+                            disabled={disabled}
+                          >
+                            <option value="normal">Normal</option>
+                            <option value="eco">Eco</option>
+                            <option value="peak_avoid">Peak avoid</option>
+                          </select>
+                        </label>
+                        <label className="text-xs text-[var(--text-muted)]">
+                          Queue policy
+                          <select
+                            className="mt-1 w-full rounded-2xl border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-sm outline-none"
+                            value={carwashQueuePolicy}
+                            onChange={(event) =>
+                              updateCarwashOperations({ queuePolicy: event.target.value as CarwashQueuePolicy })
+                            }
+                            disabled={disabled}
+                          >
+                            <option value="walk_in_only">Walk-in only</option>
+                            <option value="reservations">Reservations</option>
+                          </select>
+                        </label>
+                        <label className="text-xs text-[var(--text-muted)]">
+                          Maintenance level (0-3)
+                          <input
+                            type="number"
+                            min={0}
+                            max={3}
+                            step={1}
+                            className="mt-1 w-full rounded-2xl border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-sm outline-none"
+                            value={carwashMaintenanceLevel}
+                            onChange={(event) =>
+                              updateCarwashOperations({
+                                maintenanceLevel: clamp(toNumber(event.target.value, 0), 0, 3),
+                              })
+                            }
+                            disabled={disabled}
+                          />
+                        </label>
+                      </div>
+                      <div className="mt-2 text-xs text-[var(--text-muted)]">
+                        Estimated lanes: {carwashLaneCountRounded} | Max exterior per tick: {carwashMaxExteriorPerTick}
+                      </div>
+
+                      {carwashRoleKeys.length > 0 ? (
+                        <div className="mt-4">
+                          <div className="text-xs font-semibold text-[var(--text)]">Staff allocation (FTE)</div>
+                          <div className="mt-2 grid grid-cols-1 gap-2 md:grid-cols-2">
+                            {carwashRoleKeys.map((role) => {
+                              const currentValue = toNumber(
+                                carwashOpsDecision?.staffAllocationByRole?.[role],
+                                0
+                              );
+                              return (
+                                <label
+                                  key={`${companyId}-carwash-staff-${role}`}
+                                  className="text-xs text-[var(--text-muted)]"
+                                >
+                                  {titleize(role)}
+                                  <input
+                                    type="number"
+                                    min={0}
+                                    step={0.25}
+                                    className="mt-1 w-full rounded-2xl border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-sm outline-none"
+                                    value={Number.isFinite(currentValue) ? currentValue : 0}
+                                    onChange={(event) =>
+                                      updateCarwashOperations({
+                                        staffAllocationByRole: {
+                                          [role]: Math.max(0, toNumber(event.target.value, 0)),
+                                        },
+                                      })
+                                    }
+                                    disabled={disabled}
+                                  />
+                                </label>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      ) : null}
+
+                      <div className="mt-4">
+                        <div className="text-xs font-semibold text-[var(--text)]">Target output per tick</div>
+                        <div className="mt-2 grid grid-cols-1 gap-2 md:grid-cols-2">
+                          {unlockedProducts.map((product) => {
+                            const maxPerTick = getCarwashOfferMaxPerTick(product);
+                            const currentValue = clamp(
+                              toNumber(carwashTargetOutputBySku[product.sku], 0),
+                              0,
+                              maxPerTick
+                            );
+                            const disabledOutput = disabled || maxPerTick <= 0;
+                            return (
+                              <label
+                                key={`${companyId}-carwash-output-${product.sku}`}
+                                className="text-xs text-[var(--text-muted)]"
+                              >
+                                {product.name}
+                                <input
+                                  type="number"
+                                  min={0}
+                                  max={maxPerTick}
+                                  step={1}
+                                  className="mt-1 w-full rounded-2xl border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-sm outline-none"
+                                  value={Number.isFinite(currentValue) ? currentValue : 0}
+                                  onChange={(event) =>
+                                    updateCarwashOperations({
+                                      targetOutputBySku: {
+                                        [product.sku]: clamp(
+                                          toNumber(event.target.value, 0),
+                                          0,
+                                          maxPerTick
+                                        ),
+                                      },
+                                    })
+                                  }
+                                  disabled={disabledOutput}
+                                />
+                                <span className="mt-1 block text-[10px] text-[var(--text-muted)]">
+                                  Max {maxPerTick} per tick{maxPerTick <= 0 ? " (requires capacity)" : ""}
+                                </span>
+                              </label>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-3">
+                      <div className="text-sm font-semibold text-[var(--text)]">Warehouse</div>
+                      <div className="text-xs text-[var(--text-muted)]">
+                        Manage order quantities, reorder points, and safety stock.
+                      </div>
+                      <div className="mt-3 space-y-3">
+                        {CARWASH_CATEGORIES.map((category) => {
+                          const orderRange = carwashWarehouse?.orderQtyRange ?? {};
+                          const reorderRange = carwashWarehouse?.reorderPointRange ?? {};
+                          const safetyRange = carwashWarehouse?.safetyStockRange ?? {};
+                          const orderValue = toNumber(
+                            carwashWarehouseDecision?.orderQtyByCategory?.[category],
+                            0
+                          );
+                          const reorderValue = toNumber(
+                            carwashWarehouseDecision?.reorderPointByCategory?.[category],
+                            0
+                          );
+                          const safetyValue = toNumber(
+                            carwashWarehouseDecision?.safetyStockByCategory?.[category],
+                            0
+                          );
+
+                          return (
+                            <div
+                              key={`${companyId}-carwash-warehouse-${category}`}
+                              className="rounded-2xl border border-[var(--border)] bg-[var(--bg)] p-3"
+                            >
+                              <div className="text-xs font-semibold text-[var(--text)]">
+                                {CARWASH_CATEGORY_LABELS[category] ?? titleize(category)}
+                              </div>
+                              <div className="mt-2 grid grid-cols-1 gap-2 md:grid-cols-3">
+                                <label className="text-xs text-[var(--text-muted)]">
+                                  Order qty
+                                  <input
+                                    type="number"
+                                    min={toNumber(orderRange?.min, 0)}
+                                    max={toNumber(orderRange?.max, 50000)}
+                                    step={toNumber(orderRange?.step, 100)}
+                                    className="mt-1 w-full rounded-2xl border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-sm outline-none"
+                                    value={Number.isFinite(orderValue) ? orderValue : 0}
+                                    onChange={(event) =>
+                                      updateCarwashWarehouse({
+                                        orderQtyByCategory: {
+                                          [category]: clamp(
+                                            toNumber(event.target.value, 0),
+                                            toNumber(orderRange?.min, 0),
+                                            toNumber(orderRange?.max, 50000)
+                                          ),
+                                        },
+                                      })
+                                    }
+                                    disabled={disabled}
+                                  />
+                                </label>
+                                <label className="text-xs text-[var(--text-muted)]">
+                                  Reorder point
+                                  <input
+                                    type="number"
+                                    min={toNumber(reorderRange?.min, 0)}
+                                    max={toNumber(reorderRange?.max, 20000)}
+                                    step={toNumber(reorderRange?.step, 100)}
+                                    className="mt-1 w-full rounded-2xl border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-sm outline-none"
+                                    value={Number.isFinite(reorderValue) ? reorderValue : 0}
+                                    onChange={(event) =>
+                                      updateCarwashWarehouse({
+                                        reorderPointByCategory: {
+                                          [category]: clamp(
+                                            toNumber(event.target.value, 0),
+                                            toNumber(reorderRange?.min, 0),
+                                            toNumber(reorderRange?.max, 20000)
+                                          ),
+                                        },
+                                      })
+                                    }
+                                    disabled={disabled}
+                                  />
+                                </label>
+                                <label className="text-xs text-[var(--text-muted)]">
+                                  Safety stock
+                                  <input
+                                    type="number"
+                                    min={toNumber(safetyRange?.min, 0)}
+                                    max={toNumber(safetyRange?.max, 30000)}
+                                    step={toNumber(safetyRange?.step, 100)}
+                                    className="mt-1 w-full rounded-2xl border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-sm outline-none"
+                                    value={Number.isFinite(safetyValue) ? safetyValue : 0}
+                                    onChange={(event) =>
+                                      updateCarwashWarehouse({
+                                        safetyStockByCategory: {
+                                          [category]: clamp(
+                                            toNumber(event.target.value, 0),
+                                            toNumber(safetyRange?.min, 0),
+                                            toNumber(safetyRange?.max, 30000)
+                                          ),
+                                        },
+                                      })
+                                    }
+                                    disabled={disabled}
+                                  />
+                                </label>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+
+                      {Array.isArray(carwashWarehouse?.storageUpgrades) &&
+                      carwashWarehouse.storageUpgrades.length > 0 ? (
+                        <div className="mt-4">
+                          <div className="text-xs font-semibold text-[var(--text)]">Storage upgrades</div>
+                          <div className="mt-2 space-y-2">
+                            {carwashWarehouse.storageUpgrades.map((upgrade: any, index: number) => {
+                              const selected = new Set<number>(
+                                carwashWarehouseDecision?.storageUpgrades ?? []
+                              );
+                              const capacityUnits = toNumber(upgrade?.capacityUnits, 0);
+                              const capexMin = toNumber(upgrade?.capexRangeEur?.min, 0);
+                              const capexMax = toNumber(upgrade?.capexRangeEur?.max, capexMin);
+                              const opexMin = toNumber(upgrade?.opexPerTickRangeEur?.min, 0);
+                              const opexMax = toNumber(upgrade?.opexPerTickRangeEur?.max, opexMin);
+                              const isChecked = selected.has(index);
+
+                              return (
+                                <label
+                                  key={`${companyId}-carwash-storage-${index}`}
+                                  className="flex items-center gap-2 rounded-2xl border border-[var(--border)] bg-[var(--bg)] p-2 text-xs text-[var(--text-muted)]"
+                                >
+                                  <input
+                                    type="checkbox"
+                                    checked={isChecked}
+                                    onChange={(event) => {
+                                      if (event.target.checked) {
+                                        selected.add(index);
+                                      } else {
+                                        selected.delete(index);
+                                      }
+                                      updateCarwashWarehouse({ storageUpgrades: Array.from(selected) });
+                                    }}
+                                    disabled={disabled}
+                                  />
+                                  <span>
+                                    +{capacityUnits.toLocaleString("nl-NL")} units | Capex{" "}
+                                    {formatMoneyRange(capexMin, capexMax)} | Opex{" "}
+                                    {formatMoneyRange(opexMin, opexMax)} / tick
+                                  </span>
+                                </label>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      ) : null}
+                    </div>
+
+                    <div className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-3">
+                      <div className="text-sm font-semibold text-[var(--text)]">Procurement</div>
+                      <div className="text-xs text-[var(--text-muted)]">
+                        Choose supplier tiers and contract types per category.
+                      </div>
+                      <div className="mt-3 space-y-3">
+                        {CARWASH_CATEGORIES.map((category) => {
+                          const tierKeys = Object.keys(carwashProcurement?.supplierTiers ?? {});
+                          const tierOptions = tierKeys.length > 0 ? tierKeys : ["A", "B", "C"];
+                          const defaultTier = tierOptions.includes("B") ? "B" : tierOptions[0];
+                          const tierValue = (carwashProcurementDecision?.supplierTierByCategory?.[category] ??
+                            defaultTier) as "A" | "B" | "C";
+                          const contractValue = (carwashProcurementDecision?.contractTypeByCategory?.[category] ??
+                            "spot") as "spot" | "contract_7d" | "contract_30d";
+
+                          return (
+                            <div
+                              key={`${companyId}-carwash-proc-${category}`}
+                              className="rounded-2xl border border-[var(--border)] bg-[var(--bg)] p-3"
+                            >
+                              <div className="text-xs font-semibold text-[var(--text)]">
+                                {CARWASH_CATEGORY_LABELS[category] ?? titleize(category)}
+                              </div>
+                              <div className="mt-2 grid grid-cols-1 gap-2 md:grid-cols-2">
+                                <label className="text-xs text-[var(--text-muted)]">
+                                  Supplier tier
+                                  <select
+                                    className="mt-1 w-full rounded-2xl border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-sm outline-none"
+                                    value={tierValue}
+                                    onChange={(event) =>
+                                      updateCarwashProcurement({
+                                        supplierTierByCategory: {
+                                          [category]: event.target.value as "A" | "B" | "C",
+                                        },
+                                      })
+                                    }
+                                    disabled={disabled}
+                                  >
+                                    {tierOptions.map((tier) => (
+                                      <option key={tier} value={tier}>
+                                        Tier {tier}
+                                      </option>
+                                    ))}
+                                  </select>
+                                </label>
+                                <label className="text-xs text-[var(--text-muted)]">
+                                  Contract type
+                                  <select
+                                    className="mt-1 w-full rounded-2xl border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-sm outline-none"
+                                    value={contractValue}
+                                    onChange={(event) =>
+                                      updateCarwashProcurement({
+                                        contractTypeByCategory: {
+                                          [category]: event.target.value as "spot" | "contract_7d" | "contract_30d",
+                                        },
+                                      })
+                                    }
+                                    disabled={disabled}
+                                  >
+                                    <option value="spot">Spot</option>
+                                    <option value="contract_7d">Contract 7d</option>
+                                    <option value="contract_30d">Contract 30d</option>
+                                  </select>
+                                </label>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                      <div className="mt-3">
+                        <label className="text-xs text-[var(--text-muted)]">
+                          Quality level
+                          <select
+                            className="mt-1 w-full rounded-2xl border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-sm outline-none"
+                            value={carwashProcurementDecision?.qualityLevel ?? "standard"}
+                            onChange={(event) =>
+                              updateCarwashProcurement({
+                                qualityLevel: event.target.value as "budget" | "standard" | "premium",
+                              })
+                            }
+                            disabled={disabled}
+                          >
+                            <option value="budget">Budget</option>
+                            <option value="standard">Standard</option>
+                            <option value="premium">Premium</option>
+                          </select>
+                        </label>
+                      </div>
+                    </div>
+
+                    <div className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-3">
+                      <div className="text-sm font-semibold text-[var(--text)]">Marketing & sales</div>
+                      <div className="text-xs text-[var(--text-muted)]">
+                        Set campaign budgets per tick.
+                      </div>
+                      {carwashCampaignEntries.length > 0 ? (
+                        <div className="mt-3 grid grid-cols-1 gap-2 md:grid-cols-2">
+                          {carwashCampaignEntries.map(([key, campaign]) => {
+                            const range = (campaign as any)?.budgetPerTickRangeEur ?? {};
+                            const min = toNumber(range?.min, 0);
+                            const max = toNumber(range?.max, 0);
+                            const step = toNumber(range?.step, 1);
+                            const currentValue = toNumber(
+                              carwashMarketingDecision?.campaignBudgetByKey?.[key],
+                              0
+                            );
+                            const minDuration = toNumber((campaign as any)?.minDurationTicks, 0);
+                            return (
+                              <label
+                                key={`${companyId}-carwash-campaign-${key}`}
+                                className="text-xs text-[var(--text-muted)]"
+                              >
+                                {titleize(key)}
+                                <input
+                                  type="number"
+                                  min={min}
+                                  max={max}
+                                  step={step}
+                                  className="mt-1 w-full rounded-2xl border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-sm outline-none"
+                                  value={Number.isFinite(currentValue) ? currentValue : 0}
+                                  onChange={(event) =>
+                                    updateCarwashMarketing({
+                                      campaignBudgetByKey: {
+                                        [key]: clamp(toNumber(event.target.value, 0), min, max),
+                                      },
+                                    })
+                                  }
+                                  disabled={disabled}
+                                />
+                                {minDuration > 0 ? (
+                                  <span className="mt-1 block text-[10px] text-[var(--text-muted)]">
+                                    Min duration {minDuration} ticks
+                                  </span>
+                                ) : null}
+                              </label>
+                            );
+                          })}
+                        </div>
+                      ) : (
+                        <div className="mt-2 text-xs text-[var(--text-muted)]">
+                          No campaigns configured.
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-3">
+                      <div className="text-sm font-semibold text-[var(--text)]">HR</div>
+                      <div className="text-xs text-[var(--text-muted)]">
+                        Manage hiring, wages, training, and shift planning.
+                      </div>
+                      <div className="mt-3 space-y-3">
+                        {carwashRoleKeys.map((role) => {
+                          const range = carwashHr?.hourlyCostRangeEur?.[role] ?? [];
+                          const min = toNumber(range[0], 0);
+                          const max = toNumber(range[1], min);
+                          const hireValue = Math.trunc(
+                            toNumber(carwashHrDecision?.hireFireByRole?.[role], 0)
+                          );
+                          const defaultWage = min === max ? min : (min + max) / 2;
+                          const wageValue = clamp(
+                            toNumber(carwashHrDecision?.wagePolicyByRole?.[role], defaultWage),
+                            min,
+                            max
+                          );
+
+                          return (
+                            <div
+                              key={`${companyId}-carwash-hr-${role}`}
+                              className="rounded-2xl border border-[var(--border)] bg-[var(--bg)] p-3"
+                            >
+                              <div className="text-xs font-semibold text-[var(--text)]">
+                                {titleize(role)}
+                              </div>
+                              <div className="mt-2 grid grid-cols-1 gap-2 md:grid-cols-2">
+                                <label className="text-xs text-[var(--text-muted)]">
+                                  Hire/fire (FTE)
+                                  <input
+                                    type="number"
+                                    step={1}
+                                    className="mt-1 w-full rounded-2xl border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-sm outline-none"
+                                    value={Number.isFinite(hireValue) ? hireValue : 0}
+                                    onChange={(event) =>
+                                      updateCarwashHr({
+                                        hireFireByRole: {
+                                          [role]: Math.trunc(toNumber(event.target.value, 0)),
+                                        },
+                                      })
+                                    }
+                                    disabled={disabled}
+                                  />
+                                </label>
+                                <label className="text-xs text-[var(--text-muted)]">
+                                  Hourly wage (EUR)
+                                  <input
+                                    type="number"
+                                    min={min}
+                                    max={max}
+                                    step={0.5}
+                                    className="mt-1 w-full rounded-2xl border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-sm outline-none"
+                                    value={Number.isFinite(wageValue) ? wageValue : min}
+                                    onChange={(event) =>
+                                      updateCarwashHr({
+                                        wagePolicyByRole: {
+                                          [role]: clamp(toNumber(event.target.value, min), min, max),
+                                        },
+                                      })
+                                    }
+                                    disabled={disabled}
+                                  />
+                                </label>
+                              </div>
+                              <div className="mt-1 text-[10px] text-[var(--text-muted)]">
+                                Range {formatMoneyRange(min, max)} / hour
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                      <div className="mt-3 grid grid-cols-1 gap-2 md:grid-cols-2">
+                        <label className="text-xs text-[var(--text-muted)]">
+                          Training level ({carwashTrainingMin}-{carwashTrainingMax})
+                          <input
+                            type="number"
+                            min={carwashTrainingMin}
+                            max={carwashTrainingMax}
+                            step={1}
+                            className="mt-1 w-full rounded-2xl border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-sm outline-none"
+                            value={carwashTrainingLevel}
+                            onChange={(event) =>
+                              updateCarwashHr({
+                                trainingLevel: clamp(
+                                  toNumber(event.target.value, carwashTrainingMin),
+                                  carwashTrainingMin,
+                                  carwashTrainingMax
+                                ),
+                              })
+                            }
+                            disabled={disabled}
+                          />
+                        </label>
+                        <label className="text-xs text-[var(--text-muted)]">
+                          Shift plan
+                          <select
+                            className="mt-1 w-full rounded-2xl border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-sm outline-none"
+                            value={carwashShiftPlan}
+                            onChange={(event) =>
+                              updateCarwashHr({
+                                shiftPlan: event.target.value as SetCarwashHrDecision["shiftPlan"],
+                              })
+                            }
+                            disabled={disabled}
+                          >
+                            <option value="balanced">Balanced</option>
+                            <option value="extended">Extended</option>
+                            <option value="peak_only">Peak only</option>
+                          </select>
+                        </label>
+                      </div>
+                    </div>
+
+                    <div className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-3">
+                      <div className="text-sm font-semibold text-[var(--text)]">Finance</div>
+                      <div className="text-xs text-[var(--text-muted)]">
+                        Optional extra repayments per tick.
+                      </div>
+                      <div className="mt-3">
+                        <label className="text-xs text-[var(--text-muted)]">
+                          Extra repay per tick (EUR)
+                          <input
+                            type="number"
+                            min={0}
+                            max={toNumber(carwashFinance?.extraRepayPerTickMaxEur, 2000)}
+                            step={10}
+                            className="mt-1 w-full rounded-2xl border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-sm outline-none"
+                            value={toNumber(carwashFinanceDecision?.extraRepayPerTick, 0)}
+                            onChange={(event) =>
+                              updateCarwashFinance({
+                                extraRepayPerTick: clamp(
+                                  toNumber(event.target.value, 0),
+                                  0,
+                                  toNumber(carwashFinance?.extraRepayPerTickMaxEur, 2000)
+                                ),
+                              })
+                            }
+                            disabled={disabled}
+                          />
+                        </label>
+                      </div>
+                    </div>
+                  </div>
+                ) : null}
+
+                {!isCarwash && decisionModules.length > 0 ? (
                   <div className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-3">
                     <div className="text-sm font-semibold text-[var(--text)]">Programs</div>
                     <div className="mt-1 text-xs text-[var(--text-muted)]">
