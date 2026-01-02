@@ -1,5 +1,6 @@
 import { formatCurrencyCompact } from "../../../utils/format";
 import { cn } from "../../../utils/format";
+import { TrendingDown, TrendingUp, Wallet } from "lucide-react";
 import { Button } from "../Button";
 
 export type StickySummaryBarProps = {
@@ -32,19 +33,28 @@ export function StickySummaryBar({
       <div className="mx-auto grid max-w-5xl gap-4 px-4 py-3 md:grid-cols-[1fr_auto]">
         <div className="grid grid-cols-3 gap-3 text-xs text-[var(--text-muted)]">
           <div>
-            <div className="uppercase tracking-wide">Safe to spend</div>
+            <div className="flex items-center gap-1 uppercase tracking-wide">
+              <Wallet className="h-3.5 w-3.5" />
+              Safe to spend
+            </div>
             <div className="mt-1 text-sm font-semibold text-[var(--text)]">
               {formatCurrencyCompact(safeToSpend ?? 0)}
             </div>
           </div>
           <div>
-            <div className="uppercase tracking-wide">Expected end cash</div>
+            <div className="flex items-center gap-1 uppercase tracking-wide">
+              <TrendingUp className="h-3.5 w-3.5" />
+              Expected end cash
+            </div>
             <div className="mt-1 text-sm font-semibold text-[var(--text)]">
               {formatCurrencyCompact(expectedEndCash ?? 0)}
             </div>
           </div>
           <div>
-            <div className="uppercase tracking-wide">Worst-case end cash</div>
+            <div className="flex items-center gap-1 uppercase tracking-wide">
+              <TrendingDown className="h-3.5 w-3.5" />
+              Worst-case end cash
+            </div>
             <div className={cn("mt-1 text-sm font-semibold", (worstEndCash ?? 0) < 0 ? "text-rose-600" : "text-[var(--text)]")}>
               {formatCurrencyCompact(worstEndCash ?? 0)}
             </div>

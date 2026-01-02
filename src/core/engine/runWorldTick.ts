@@ -265,6 +265,14 @@ function readStartingUnlockedProducts(niche?: Niche | null): string[] {
   return unlocked.map((sku: unknown) => String(sku)).filter(Boolean);
 }
 
+function readStartingAssetCount(niche: Niche | null | undefined, assetId: string, fallback = 0): number {
+  const assets = Array.isArray((niche as any)?.config?.startingLoadout?.assets)
+    ? (niche as any).config.startingLoadout.assets
+    : [];
+  const found = assets.find((asset: any) => String(asset?.assetId ?? "") === assetId);
+  return safeNumber(found?.count, fallback);
+}
+
 const ACQUISITION_OFFER_DEFAULT_EXPIRY_WEEKS = 4;
 
 function addWeeks(year: number, week: number, delta: number): { year: number; week: number } {
@@ -616,6 +624,18 @@ function resolveOpsModifiers(params: {
 
   return { modifiers: mods, extraOpex: maintenanceCost };
 }
+
+const CARWASH_CATEGORIES = ["chemicals", "consumables", "spare_parts"] as const;
+
+type CarwashWarehouseOrder = {
+  qty: number;
+  etaWeeks: number;
+};
+
+type CarwashWarehouseState = {
+  onHandByCategory: Record<string, number>;
+  pendingOrdersByCategory: Record<string, CarwashWarehouseOrder[]>;
+};
 
 type CarwashZoneState = {
   cars: number;
@@ -1144,6 +1164,7 @@ async function upsertCompanyStates(worldId: WorldId, states: CompanyState[]): Pr
     brand_score: s.reputationScore,
     operational_efficiency_score: (s as any).operationalEfficiencyScore ?? 50,
     utilisation_rate: s.utilisationRate,
+    warehouse_state: ((s as any).warehouseState ?? {}) as any,
   }));
 
   const { error } = await supabase.from("company_state").upsert(rows, { onConflict: "company_id,year,week" });
@@ -1249,7 +1270,7 @@ async function getLatestCompanyState(companyId: CompanyId): Promise<CompanyState
     .from("company_state")
     .select(
       // ✅ include created_at because CompanyState requires it
-      "company_id, world_id, year, week, price_level, capacity, quality_score, marketing_level, awareness_score, employees, fixed_costs, variable_cost_per_unit, brand_score, operational_efficiency_score, utilisation_rate, created_at"
+      "company_id, world_id, year, week, price_level, capacity, quality_score, marketing_level, awareness_score, employees, fixed_costs, variable_cost_per_unit, brand_score, operational_efficiency_score, utilisation_rate, warehouse_state, created_at"
     )
     .eq("company_id", String(companyId))
     .order("year", { ascending: false })
@@ -1275,6 +1296,7 @@ async function getLatestCompanyState(companyId: CompanyId): Promise<CompanyState
         brand_score: number;
         operational_efficiency_score: number;
         utilisation_rate: number;
+        warehouse_state: Json | null;
         created_at: string;
       }
     | null;
@@ -1298,6 +1320,7 @@ async function getLatestCompanyState(companyId: CompanyId): Promise<CompanyState
     reputationScore: row.brand_score as any, // DB brand_score -> domain reputationScore
     operationalEfficiencyScore: (row.operational_efficiency_score ?? 50) as any,
     utilisationRate: row.utilisation_rate as any,
+    warehouseState: (row.warehouse_state ?? null) as any,
     createdAt: row.created_at as unknown as Timestamp,
   } as CompanyState;
 }
@@ -1550,6 +1573,12 @@ async function runWorldTickInternal(
   const carwashEnergyModeByCompanyId: Record<string, "normal" | "eco" | "peak_avoid"> = {};
   const carwashMaintenanceByCompanyId: Record<string, number> = {};
   const carwashTrainingLevelByCompanyId: Record<string, number> = {};
+  const carwashWarehouseDecisionByCompanyId: Record<string, any> = {};
+  const carwashProcurementDecisionByCompanyId: Record<string, any> = {};
+  const carwashPricingDecisionByCompanyId: Record<string, any> = {};
+  const carwashHrDecisionByCompanyId: Record<string, any> = {};
+  const carwashQueuePolicyByCompanyId: Record<string, "walk_in_only" | "reservations"> = {};
+  const carwashStaffAllocationByCompanyId: Record<string, Record<string, number>> = {};
 
   // 7) Apply decisions -> preSimStates (switch on payload.type)
   const preSimStates: Record<string, CompanyState> = {};
@@ -1625,12 +1654,28 @@ async function runWorldTickInternal(
           if (typeof ops?.energyMode === "string") {
             carwashEnergyModeByCompanyId[cid] = ops.energyMode;
           }
+          if (typeof ops?.queuePolicy === "string") {
+            carwashQueuePolicyByCompanyId[cid] = ops.queuePolicy;
+          }
           if (Number.isFinite(ops?.maintenanceLevel)) {
             carwashMaintenanceByCompanyId[cid] = Math.round(safeNumber(ops.maintenanceLevel, 0));
           }
           if (ops?.targetOutputBySku && typeof ops.targetOutputBySku === "object") {
             carwashTargetOutputByCompanyId[cid] = ops.targetOutputBySku;
           }
+          if (ops?.staffAllocationByRole && typeof ops.staffAllocationByRole === "object") {
+            carwashStaffAllocationByCompanyId[cid] = ops.staffAllocationByRole;
+          }
+          break;
+        }
+
+        case "SET_CARWASH_WAREHOUSE": {
+          carwashWarehouseDecisionByCompanyId[cid] = payload as any;
+          break;
+        }
+
+        case "SET_CARWASH_PROCUREMENT": {
+          carwashProcurementDecisionByCompanyId[cid] = payload as any;
           break;
         }
 
@@ -1647,6 +1692,7 @@ async function runWorldTickInternal(
         }
 
         case "SET_CARWASH_HR": {
+          carwashHrDecisionByCompanyId[cid] = payload as any;
           const hireFire = (payload as any)?.hireFireByRole ?? {};
           if (hireFire && typeof hireFire === "object") {
             const delta = Object.values(hireFire).reduce<number>(
@@ -1662,6 +1708,11 @@ async function runWorldTickInternal(
               5
             );
           }
+          break;
+        }
+
+        case "SET_CARWASH_PRICING": {
+          carwashPricingDecisionByCompanyId[cid] = payload as any;
           break;
         }
 
@@ -1779,6 +1830,8 @@ async function runWorldTickInternal(
 
   const modifiersByCompanyId: Record<string, CompanyEffectModifiers> = {};
   const extraOpexByCompanyId: Record<string, number> = { ...oneTimeOpexByCompanyId };
+  const carwashWarehouseStateByCompanyId: Record<string, CarwashWarehouseState> = {};
+  const carwashPromoMultiplierByCompanyId: Record<string, number> = {};
 
   for (const c of companies) {
     if (!c.id) continue;
@@ -1877,6 +1930,497 @@ async function runWorldTickInternal(
     if (ops.extraOpex) {
       extraOpexByCompanyId[cid] = (extraOpexByCompanyId[cid] ?? 0) + ops.extraOpex;
     }
+  }
+
+  for (const c of companies) {
+    if (!c.id) continue;
+    const cid = String(c.id);
+    const niche = nicheById[String((c as any)?.nicheId ?? "")];
+    if (!niche || niche.code !== "AUTO_CARWASH") continue;
+    const state = preSimStates[cid];
+    if (!state) continue;
+
+    const cfg = (niche.config as any) ?? {};
+    const core = cfg.coreAssumptions ?? {};
+    const operations = cfg.operations ?? {};
+    const warehouseCfg = cfg.warehouse ?? cfg.demandEngine?.warehouse ?? {};
+    const procurementCfg = cfg.procurement ?? {};
+    const hrCfg = cfg.hr ?? {};
+    const pricingCfg = cfg.pricing ?? {};
+    const queueCfg = cfg.queue ?? {};
+    const opsResolution = cfg.opsResolution ?? {};
+    const supplyConsumption = opsResolution.supplyConsumption ?? {};
+    const shortageEffects = opsResolution.supplyShortageEffects ?? {};
+
+    const ticksPerWeek = Math.max(1, safeNumber(core.ticksPerWeek, 1008));
+    const ticksPerDay = Math.max(1, safeNumber(core.ticksPerDay, 144));
+    const daysPerWeek = ticksPerWeek / ticksPerDay;
+
+    const warehouseDecision = carwashWarehouseDecisionByCompanyId[cid] ?? {};
+    const procurementDecision = carwashProcurementDecisionByCompanyId[cid] ?? {};
+    const pricingDecision = carwashPricingDecisionByCompanyId[cid] ?? {};
+    const hrDecision = carwashHrDecisionByCompanyId[cid] ?? {};
+    const staffAllocation = carwashStaffAllocationByCompanyId[cid] ?? {};
+    const queuePolicy = carwashQueuePolicyByCompanyId[cid] ?? "walk_in_only";
+
+    const warehouseSeed = `${cid}:${yearNum}:${weekNum}:warehouse`;
+    const onHandByCategory: Record<string, number> = {
+      chemicals: readStartingAssetCount(niche, "chemicals_inventory_units", 0),
+      consumables: readStartingAssetCount(niche, "consumables_inventory_units", 0),
+      spare_parts: readStartingAssetCount(niche, "spare_parts_inventory_units", 0),
+    };
+
+    const storedWarehouse = (latestStateByCompanyId[cid] as any)?.warehouseState ?? null;
+    if (storedWarehouse && typeof storedWarehouse === "object") {
+      const storedOnHand = (storedWarehouse as any).onHandByCategory;
+      if (storedOnHand && typeof storedOnHand === "object") {
+        for (const category of CARWASH_CATEGORIES) {
+          const value = safeNumber((storedOnHand as any)[category], NaN);
+          if (Number.isFinite(value)) onHandByCategory[category] = Math.max(0, value);
+        }
+      }
+    }
+
+    const pendingOrdersByCategory: Record<string, CarwashWarehouseOrder[]> = {};
+    for (const category of CARWASH_CATEGORIES) {
+      const rawOrders =
+        storedWarehouse && typeof storedWarehouse === "object"
+          ? (storedWarehouse as any).pendingOrdersByCategory?.[category]
+          : null;
+      const parsed: CarwashWarehouseOrder[] = Array.isArray(rawOrders)
+        ? rawOrders
+            .map((order: any) => ({
+              qty: Math.max(0, safeNumber(order?.qty, 0)),
+              etaWeeks: Math.max(0, Math.floor(safeNumber(order?.etaWeeks, 0))),
+            }))
+            .filter((order: CarwashWarehouseOrder) => order.qty > 0 && order.etaWeeks > 0)
+        : [];
+      pendingOrdersByCategory[category] = parsed;
+    }
+
+    const storageBase = Math.max(0, safeNumber(warehouseCfg.storageCapacityUnitsStart, 0));
+    const storageUpgrades = Array.isArray(warehouseCfg.storageUpgrades) ? warehouseCfg.storageUpgrades : [];
+    const selectedUpgrades = new Set<number>(
+      Array.isArray(warehouseDecision.storageUpgrades) ? warehouseDecision.storageUpgrades : []
+    );
+    let storageExtra = 0;
+    for (let index = 0; index < storageUpgrades.length; index += 1) {
+      if (!selectedUpgrades.has(index)) continue;
+      const upgrade = storageUpgrades[index] ?? {};
+      storageExtra += Math.max(0, safeNumber(upgrade?.capacityUnits, 0));
+      const opexRange = upgrade?.opexPerTickRangeEur ?? {};
+      const opexPerTick = pickRange(
+        `${warehouseSeed}:storage:${index}:opex`,
+        opexRange.min,
+        opexRange.max,
+        0
+      );
+      if (opexPerTick) {
+        extraOpexByCompanyId[cid] = (extraOpexByCompanyId[cid] ?? 0) + opexPerTick * ticksPerWeek;
+      }
+    }
+    const storageCapacity = storageBase + storageExtra;
+
+    const supplierTiers = procurementCfg.supplierTiers ?? {};
+    const tierKeys = Object.keys(supplierTiers);
+    const defaultTier = tierKeys.includes("B") ? "B" : tierKeys[0] ?? "B";
+    const contractOptions = procurementCfg.contractOptions ?? {};
+
+    const priceMultiplierByCategory: Record<string, number> = {};
+    const qualityMultiplierByCategory: Record<string, number> = {};
+    const fillRateByCategory: Record<string, number> = {};
+    const leadTimeWeeksByCategory: Record<string, number> = {};
+    const moqByCategory: Record<string, number> = {};
+
+    for (const category of CARWASH_CATEGORIES) {
+      const tierKey = procurementDecision?.supplierTierByCategory?.[category] ?? defaultTier;
+      const tier = (supplierTiers as any)[tierKey] ?? {};
+      const contractKeyRaw = procurementDecision?.contractTypeByCategory?.[category] ?? "spot";
+      const contractKey =
+        contractKeyRaw === "contract_7d"
+          ? "contract7d"
+          : contractKeyRaw === "contract_30d"
+            ? "contract30d"
+            : contractKeyRaw;
+      const contract = (contractOptions as any)[contractKey] ?? {};
+      const priceIndex = Math.max(0.1, safeNumber(tier.priceIndex, 1));
+      const discountRange = contract?.priceDiscountPctRange ?? {};
+      const discountPct = pickRange(
+        `${warehouseSeed}:${category}:discount`,
+        discountRange.min,
+        discountRange.max,
+        0
+      );
+      priceMultiplierByCategory[category] = priceIndex * (1 - discountPct / 100);
+
+      const qualityRange = Array.isArray(tier.qualityRange) ? tier.qualityRange : [];
+      const qualityPct = pickRange(
+        `${warehouseSeed}:${category}:quality`,
+        qualityRange[0],
+        qualityRange[1],
+        75
+      );
+      const qualityLevel = procurementDecision?.qualityLevel ?? "standard";
+      const qualityLevelMult =
+        qualityLevel === "budget" ? 0.96 : qualityLevel === "premium" ? 1.04 : 1;
+      const qualityMultiplier = clamp(qualityPct / 75, 0.85, 1.15) * qualityLevelMult;
+      qualityMultiplierByCategory[category] = qualityMultiplier;
+
+      const fillRange = Array.isArray(tier.fillRateRange) ? tier.fillRateRange : [];
+      const reliabilityBonus = safeNumber(contract.reliabilityBonus, 0);
+      const fillRate = clamp(
+        pickRange(`${warehouseSeed}:${category}:fill`, fillRange[0], fillRange[1], 95) + reliabilityBonus,
+        50,
+        100
+      );
+      fillRateByCategory[category] = fillRate;
+
+      const moqUnits = Math.max(0, safeNumber(tier.moqUnits, 0));
+      moqByCategory[category] = moqUnits;
+
+      const leadRange = Array.isArray(tier.leadTimeTicksRange) ? tier.leadTimeTicksRange : [];
+      let leadMin = Math.max(0, safeNumber(leadRange[0], 0));
+      let leadMax = Math.max(leadMin, safeNumber(leadRange[1], leadMin));
+      const varianceReduction = Math.max(0, safeNumber(contract.leadTimeVarianceReductionPct, 0));
+      if (varianceReduction > 0 && leadMax > leadMin) {
+        const mid = (leadMin + leadMax) / 2;
+        const half = (leadMax - leadMin) / 2;
+        const reduced = half * (1 - varianceReduction / 100);
+        leadMin = Math.max(0, mid - reduced);
+        leadMax = Math.max(leadMin, mid + reduced);
+      }
+      const leadTicks = pickRange(
+        `${warehouseSeed}:${category}:lead`,
+        leadMin,
+        leadMax,
+        leadMin
+      );
+      leadTimeWeeksByCategory[category] = Math.max(1, Math.ceil(leadTicks / ticksPerWeek));
+
+      const feeRange = contract?.feeRangeEur ?? {};
+      const fee = pickRange(`${warehouseSeed}:${category}:fee`, feeRange.min, feeRange.max, 0);
+      if (fee) {
+        extraOpexByCompanyId[cid] = (extraOpexByCompanyId[cid] ?? 0) + fee;
+      }
+    }
+
+    for (const category of CARWASH_CATEGORIES) {
+      const orders = pendingOrdersByCategory[category] ?? [];
+      let delivered = 0;
+      const remaining: CarwashWarehouseOrder[] = [];
+      for (const order of orders) {
+        const eta = Math.max(0, Math.floor(safeNumber(order.etaWeeks, 0)) - 1);
+        if (eta <= 0) {
+          delivered += Math.max(0, safeNumber(order.qty, 0));
+        } else {
+          remaining.push({ qty: order.qty, etaWeeks: eta });
+        }
+      }
+      const fillRate = Math.max(0, Math.min(1, safeNumber(fillRateByCategory[category], 100) / 100));
+      onHandByCategory[category] = Math.max(0, onHandByCategory[category] + delivered * fillRate);
+      pendingOrdersByCategory[category] = remaining;
+    }
+
+    const shrinkPerDay = warehouseCfg.shrinkPerDayPct ?? {};
+    for (const category of CARWASH_CATEGORIES) {
+      const shrinkPctWeek = Math.max(0, safeNumber(shrinkPerDay?.[category], 0)) * daysPerWeek;
+      if (shrinkPctWeek > 0) {
+        onHandByCategory[category] = Math.max(0, onHandByCategory[category] * (1 - shrinkPctWeek));
+      }
+    }
+
+    const products = nicheProductsByNicheId.get(String(niche.id)) ?? [];
+    const unlocked = unlockedProductsByCompanyId[cid];
+    const activeProducts =
+      unlocked && unlocked.size > 0
+        ? products.filter((product) => unlocked.has(product.sku))
+        : products;
+
+    const laneProducts = activeProducts.filter((product) => product.capacityDriver === "wash_lanes");
+    const plan = productPlanByCompanyId[cid];
+    const planItems = Array.isArray(plan?.items) ? plan.items : [];
+    let laneShareTotal = 0;
+    for (const product of laneProducts) {
+      const entry = planItems.find((item) => item?.sku === product.sku);
+      laneShareTotal += Math.max(0, safeNumber(entry?.volumeShare, 0));
+    }
+    const laneShareCount = laneProducts.length;
+
+    const laneThroughput = Math.max(0.1, safeNumber(operations?.laneThroughputPerTick?.base, 2));
+    const capacityPerLaneWeek = laneThroughput * ticksPerWeek;
+    const plannedCapacity = Math.max(0, safeNumber(state.capacity, 0));
+    const laneCount = capacityPerLaneWeek > 0 ? plannedCapacity / capacityPerLaneWeek : 0;
+    const maxExteriorPerTick = Math.max(0, Math.floor(laneCount * laneThroughput));
+
+    const defaultTargetOutputBySku: Record<string, number> = {};
+    for (const product of activeProducts) {
+      if (product.capacityDriver === "wash_lanes") {
+        const entry = planItems.find((item) => item?.sku === product.sku);
+        const share =
+          laneShareTotal > 0
+            ? Math.max(0, safeNumber(entry?.volumeShare, 0)) / laneShareTotal
+            : laneShareCount > 0
+              ? 1 / laneShareCount
+              : 0;
+        defaultTargetOutputBySku[product.sku] = Math.max(0, Math.round(maxExteriorPerTick * share));
+      } else {
+        defaultTargetOutputBySku[product.sku] = 0;
+      }
+    }
+
+    const targetOutputBySku: Record<string, number> = {
+      ...defaultTargetOutputBySku,
+      ...(carwashTargetOutputByCompanyId[cid] ?? {}),
+    };
+
+    const chemicalsUnitsPerWash = supplyConsumption?.chemicalsUnitsPerWash ?? {};
+    const consumablesUnitsPerJob = supplyConsumption?.consumablesUnitsPerJob ?? {};
+    const sparePartsUnitsPerLanePerDay = Math.max(
+      0,
+      safeNumber(supplyConsumption?.sparePartsUnitsPerLanePerDay, 0)
+    );
+    let requiredChemicals = 0;
+    let requiredConsumables = 0;
+
+    for (const [sku, units] of Object.entries(chemicalsUnitsPerWash)) {
+      const perTick = Math.max(0, safeNumber(targetOutputBySku[sku], 0));
+      requiredChemicals += perTick * ticksPerWeek * Math.max(0, safeNumber(units, 0));
+    }
+    for (const [sku, units] of Object.entries(consumablesUnitsPerJob)) {
+      const perTick = Math.max(0, safeNumber(targetOutputBySku[sku], 0));
+      requiredConsumables += perTick * ticksPerWeek * Math.max(0, safeNumber(units, 0));
+    }
+    const requiredSpareParts = sparePartsUnitsPerLanePerDay * daysPerWeek * laneCount;
+
+    const requiredByCategory: Record<string, number> = {
+      chemicals: requiredChemicals,
+      consumables: requiredConsumables,
+      spare_parts: requiredSpareParts,
+    };
+
+    const supplyFactors: number[] = [];
+    for (const category of CARWASH_CATEGORIES) {
+      const required = requiredByCategory[category] ?? 0;
+      if (required <= 0) {
+        supplyFactors.push(1);
+      } else {
+        const onHand = Math.max(0, safeNumber(onHandByCategory[category], 0));
+        supplyFactors.push(clamp(onHand / required, 0, 1));
+      }
+    }
+    const supplyFactor = supplyFactors.length > 0 ? Math.min(...supplyFactors) : 1;
+
+    const capacityFloor = clamp(
+      safeNumber(shortageEffects.capacityMultiplierAtZeroSupply, 0.4),
+      0.1,
+      1
+    );
+    const qualityFloor = clamp(
+      safeNumber(shortageEffects.qualityMultiplierAtZeroSupply, 0.85),
+      0.5,
+      1
+    );
+    const cancellationRatePct = Math.max(0, safeNumber(shortageEffects.cancellationRatePct, 0));
+    const supplyCapacityMultiplier = lerp(capacityFloor, 1, supplyFactor);
+    const supplyQualityMultiplier = lerp(qualityFloor, 1, supplyFactor);
+    const cancellationMultiplier = 1 - (cancellationRatePct / 100) * (1 - supplyFactor);
+
+    const mods = modifiersByCompanyId[cid] ?? {};
+    mods.capacityMultiplier =
+      (safeNumber(mods.capacityMultiplier, 1) * supplyCapacityMultiplier * cancellationMultiplier) as any;
+    mods.qualityMultiplier =
+      (safeNumber(mods.qualityMultiplier, 1) * supplyQualityMultiplier) as any;
+
+    const procurementWeights: number[] = [];
+    const priceWeightSum: number[] = [];
+    const qualityWeightSum: number[] = [];
+    for (const category of CARWASH_CATEGORIES) {
+      const weight = Math.max(0, requiredByCategory[category] ?? 0);
+      const useWeight = weight > 0 ? weight : 1;
+      procurementWeights.push(useWeight);
+      priceWeightSum.push(priceMultiplierByCategory[category] ?? 1);
+      qualityWeightSum.push(qualityMultiplierByCategory[category] ?? 1);
+    }
+    const weightTotal = procurementWeights.reduce((sum, value) => sum + value, 0) || 1;
+    const weightedPrice = procurementWeights.reduce(
+      (sum, weight, idx) => sum + weight * (priceWeightSum[idx] ?? 1),
+      0
+    );
+    const weightedQuality = procurementWeights.reduce(
+      (sum, weight, idx) => sum + weight * (qualityWeightSum[idx] ?? 1),
+      0
+    );
+    mods.variableCostMultiplier =
+      (safeNumber(mods.variableCostMultiplier, 1) * (weightedPrice / weightTotal)) as any;
+    mods.qualityMultiplier =
+      (safeNumber(mods.qualityMultiplier, 1) * (weightedQuality / weightTotal)) as any;
+
+    const utilisation = clamp(safeNumber(state.utilisationRate, 0), 0, 1);
+    const queuePenaltyCfg = queueCfg.waitPenalty ?? {};
+    const queuePenalty =
+      utilisation >= 0.85
+        ? safeNumber(queuePenaltyCfg.high, 0)
+        : utilisation >= 0.65
+          ? safeNumber(queuePenaltyCfg.medium, 0)
+          : safeNumber(queuePenaltyCfg.low, 0);
+    const queuePenaltyApplied = queuePolicy === "reservations" ? queuePenalty * 0.5 : queuePenalty;
+    mods.qualityMultiplier =
+      (safeNumber(mods.qualityMultiplier, 1) * clamp(1 + queuePenaltyApplied, 0.6, 1.2)) as any;
+    mods.reputationMultiplier =
+      (safeNumber(mods.reputationMultiplier, 1) * clamp(1 + queuePenaltyApplied * 0.5, 0.7, 1.2)) as any;
+    if (queuePolicy === "reservations") {
+      mods.capacityMultiplier = (safeNumber(mods.capacityMultiplier, 1) * 0.97) as any;
+    }
+
+    const wageRanges = hrCfg.hourlyCostRangeEur ?? {};
+    let wageWeightedTotal = 0;
+    let wageWeightTotal = 0;
+    for (const [role, range] of Object.entries(wageRanges)) {
+      const min = safeNumber((range as any)[0], 0);
+      const max = Math.max(min, safeNumber((range as any)[1], min));
+      const baseline = min === max ? min : (min + max) / 2;
+      if (baseline <= 0) continue;
+      const desired = clamp(
+        safeNumber(hrDecision?.wagePolicyByRole?.[role], baseline),
+        min,
+        max
+      );
+      const weight = Math.max(0.25, Math.abs(safeNumber((staffAllocation as any)[role], 1)));
+      wageWeightedTotal += (desired / baseline) * weight;
+      wageWeightTotal += weight;
+    }
+    if (wageWeightTotal > 0) {
+      const wageRatio = wageWeightedTotal / wageWeightTotal;
+      mods.labourCostMultiplier = (safeNumber(mods.labourCostMultiplier, 1) * wageRatio) as any;
+    }
+
+    const hireFireByRole = hrDecision?.hireFireByRole ?? {};
+    const hiringCostRange = hrCfg.hiringCostRangeEur ?? {};
+    const firingPenaltyRange = hrCfg.firingPenaltyRangeEur ?? {};
+    for (const [role, deltaRaw] of Object.entries(hireFireByRole)) {
+      const delta = Math.trunc(safeNumber(deltaRaw, 0));
+      if (!delta) continue;
+      if (delta > 0) {
+        const range = (hiringCostRange as any)[role] ?? [];
+        const cost = pickRange(
+          `${warehouseSeed}:hire:${role}`,
+          range[0],
+          range[1],
+          0
+        );
+        extraOpexByCompanyId[cid] = (extraOpexByCompanyId[cid] ?? 0) + cost * delta;
+      } else {
+        const penalty = pickRange(
+          `${warehouseSeed}:fire:${role}`,
+          firingPenaltyRange.min,
+          firingPenaltyRange.max,
+          0
+        );
+        extraOpexByCompanyId[cid] =
+          (extraOpexByCompanyId[cid] ?? 0) + penalty * Math.abs(delta);
+      }
+    }
+
+    const trainingLevel = clamp(safeNumber(hrDecision?.trainingLevel, 0), 0, 5);
+    const trainingCostRange = hrCfg.trainingCostRangeEur ?? {};
+    const trainingCost = pickRange(
+      `${warehouseSeed}:training`,
+      trainingCostRange.min,
+      trainingCostRange.max,
+      0
+    );
+    if (trainingCost && trainingLevel > 0) {
+      const employeeCount = Math.max(1, Math.floor(safeNumber(state.employees, 0)));
+      extraOpexByCompanyId[cid] =
+        (extraOpexByCompanyId[cid] ?? 0) + trainingCost * trainingLevel * employeeCount;
+    }
+
+    const shiftPlan = hrDecision?.shiftPlan ?? "balanced";
+    if (shiftPlan === "extended") {
+      mods.capacityMultiplier = (safeNumber(mods.capacityMultiplier, 1) * 1.08) as any;
+      mods.labourCostMultiplier = (safeNumber(mods.labourCostMultiplier, 1) * 1.05) as any;
+    } else if (shiftPlan === "peak_only") {
+      mods.capacityMultiplier = (safeNumber(mods.capacityMultiplier, 1) * 0.9) as any;
+      mods.labourCostMultiplier = (safeNumber(mods.labourCostMultiplier, 1) * 0.95) as any;
+    }
+
+    modifiersByCompanyId[cid] = mods;
+
+    const holdingCostPctPerDay = Math.max(0, safeNumber(warehouseCfg.holdingCostPctPerDay, 0));
+    if (holdingCostPctPerDay > 0) {
+      const totalStock =
+        (onHandByCategory.chemicals ?? 0) +
+        (onHandByCategory.consumables ?? 0) +
+        (onHandByCategory.spare_parts ?? 0);
+      extraOpexByCompanyId[cid] =
+        (extraOpexByCompanyId[cid] ?? 0) + totalStock * holdingCostPctPerDay * daysPerWeek;
+    }
+
+    const totalPending = CARWASH_CATEGORIES.reduce((sum, category) => {
+      const list = pendingOrdersByCategory[category] ?? [];
+      return sum + list.reduce((inner, order) => inner + Math.max(0, safeNumber(order.qty, 0)), 0);
+    }, 0);
+    let remainingCapacity = Math.max(0, storageCapacity - totalPending - CARWASH_CATEGORIES.reduce(
+      (sum, category) => sum + Math.max(0, safeNumber(onHandByCategory[category], 0)),
+      0
+    ));
+
+    const orderQtyByCategory = warehouseDecision?.orderQtyByCategory ?? {};
+    const reorderPointByCategory = warehouseDecision?.reorderPointByCategory ?? {};
+    const safetyStockByCategory = warehouseDecision?.safetyStockByCategory ?? {};
+
+    for (const category of CARWASH_CATEGORIES) {
+      const onHand = Math.max(0, safeNumber(onHandByCategory[category], 0));
+      const pipeline = (pendingOrdersByCategory[category] ?? []).reduce(
+        (sum, order) => sum + Math.max(0, safeNumber(order.qty, 0)),
+        0
+      );
+      const reorderPoint = Math.max(0, safeNumber(reorderPointByCategory[category], 0));
+      const safetyStock = Math.max(0, safeNumber(safetyStockByCategory[category], 0));
+      const trigger = Math.max(reorderPoint, safetyStock);
+      const desiredQty = Math.max(0, safeNumber(orderQtyByCategory[category], 0));
+      if (desiredQty <= 0) continue;
+      if (onHand + pipeline > trigger) continue;
+      const moq = moqByCategory[category] ?? 0;
+      let orderQty = Math.max(desiredQty, moq);
+      if (remainingCapacity > 0) {
+        orderQty = Math.min(orderQty, remainingCapacity);
+      }
+      if (orderQty <= 0) continue;
+      pendingOrdersByCategory[category] = pendingOrdersByCategory[category] ?? [];
+      pendingOrdersByCategory[category].push({
+        qty: orderQty,
+        etaWeeks: leadTimeWeeksByCategory[category] ?? 1,
+      });
+      remainingCapacity = Math.max(0, remainingCapacity - orderQty);
+    }
+
+    onHandByCategory.chemicals = Math.max(
+      0,
+      onHandByCategory.chemicals - requiredChemicals * supplyFactor
+    );
+    onHandByCategory.consumables = Math.max(
+      0,
+      onHandByCategory.consumables - requiredConsumables * supplyFactor
+    );
+    onHandByCategory.spare_parts = Math.max(
+      0,
+      onHandByCategory.spare_parts - requiredSpareParts * supplyFactor
+    );
+
+    carwashWarehouseStateByCompanyId[cid] = {
+      onHandByCategory,
+      pendingOrdersByCategory,
+    };
+
+    const promoDiscountPct = Math.max(0, safeNumber(pricingDecision?.promoDiscountPct, 0));
+    const promoDurationTicks = Math.max(0, safeNumber(pricingDecision?.promoDurationTicks, 0));
+    const promoMax = Math.max(0, safeNumber(pricingCfg?.promoDiscountPctRange?.max, 35));
+    const promoPct = clamp(promoDiscountPct, 0, promoMax);
+    const coverage = ticksPerWeek > 0 ? clamp(promoDurationTicks / ticksPerWeek, 0, 1) : 0;
+    const effectiveDiscount = promoPct * coverage;
+    const promoMultiplier = clamp(1 - effectiveDiscount / 100, 0.4, 1);
+    carwashPromoMultiplierByCompanyId[cid] = promoMultiplier;
   }
 
   const companiesBySegment = new Map<string, Company[]>();
@@ -2048,10 +2592,12 @@ async function runWorldTickInternal(
             const baseline = (priceMin + priceMax) / 2 || priceMin || 1;
             const planPrice = safeNumber(planItem?.priceEur, 0);
             const price = clamp(planPrice > 0 ? planPrice : baseline * priceLevel, priceMin, priceMax);
-            priceBySegment[segment] = price;
+            const promoMultiplier = carwashPromoMultiplierByCompanyId[cid] ?? 1;
+            const adjustedPrice = Math.max(0.01, price * promoMultiplier);
+            priceBySegment[segment] = adjustedPrice;
 
             if (cap > 0) {
-              priceSums[segment] = (priceSums[segment] ?? 0) + price;
+              priceSums[segment] = (priceSums[segment] ?? 0) + adjustedPrice;
               priceCounts[segment] = (priceCounts[segment] ?? 0) + 1;
             }
           }
@@ -2189,6 +2735,12 @@ async function runWorldTickInternal(
 
     Object.assign(nextStates, sim.nextStates);
     Object.assign(nextFinancials, sim.financials);
+  }
+
+  for (const [cid, warehouseState] of Object.entries(carwashWarehouseStateByCompanyId)) {
+    const nextState = nextStates[cid];
+    if (!nextState) continue;
+    (nextState as any).warehouseState = warehouseState;
   }
 
   // 10.5) Apply holding decisions (loans + acquisitions)
@@ -2343,6 +2895,24 @@ async function runWorldTickInternal(
       const payload = (decision as any)?.payload ?? {};
 
       switch (payload.type) {
+        case "SET_HOLDING_POLICY": {
+          const maxLeverageRatio = safeNumber(payload.maxLeverageRatio, 1.5);
+          const dividendPreference = String(payload.dividendPreference ?? "REINVEST");
+          const riskAppetite = String(payload.riskAppetite ?? "MEDIUM");
+
+          const { error } = await supabase.from("holding_policies").upsert(
+            {
+              holding_id: String(holding.id),
+              max_leverage_ratio: maxLeverageRatio,
+              dividend_preference: dividendPreference,
+              risk_appetite: riskAppetite,
+            },
+            { onConflict: "holding_id" }
+          );
+          if (error) throw new Error(`Failed to update holding policy: ${error.message}`);
+          break;
+        }
+
         case "REPAY_HOLDING_LOAN": {
           const loanId = String(payload.loanId ?? "");
           const requested = safeNumber(payload.amount, 0);

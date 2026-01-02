@@ -23,6 +23,7 @@ import { scoreboardService } from "../../core/services/scoreboardService";
 import { sectorRepo } from "../../core/persistence/sectorRepo";
 import { nicheProductRepo } from "../../core/persistence/nicheProductRepo";
 import { eventRepo } from "../../core/persistence/eventRepo";
+import { financeRepo } from "../../core/persistence/financeRepo";
 import { buildBaselineProjection } from "../../core/projections/baseline";
 import { buildWhatIfProjection } from "../../core/projections/whatIf";
 import { generateBriefing } from "../../core/briefing/briefing.generator";
@@ -150,6 +151,8 @@ export const DecisionWizardPage: React.FC = () => {
     dividendPreference: "REINVEST",
     maxLeverageRatio: 1.5,
   });
+  const [draftLoanPayments, setDraftLoanPayments] = React.useState<Record<string, number>>({});
+  const [loanDraftTouched, setLoanDraftTouched] = React.useState(false);
 
   const companies = ws.companies as any[];
   const companyIds = React.useMemo(() => companies.map((c) => String(c.id)), [companies]);
@@ -281,6 +284,16 @@ export const DecisionWizardPage: React.FC = () => {
     },
     enabled: !!worldId && !!holdingId,
     staleTime: 2_500,
+  });
+
+  const holdingLoansQuery = useQuery({
+    queryKey: ["wizardHoldingLoans", holdingId ?? "none"],
+    queryFn: async () => {
+      if (!holdingId) return [];
+      return financeRepo.listLoansByHolding(asHoldingId(holdingId));
+    },
+    enabled: !!holdingId,
+    staleTime: 10_000,
   });
 
   const upgradesQuery = useQuery({
@@ -575,6 +588,12 @@ export const DecisionWizardPage: React.FC = () => {
 
   const baselineProjection = React.useMemo(() => {
     if (!holding) return null;
+    const safetyBufferPct =
+      holdingPolicy?.riskAppetite === "LOW"
+        ? 0.2
+        : holdingPolicy?.riskAppetite === "HIGH"
+          ? 0.08
+          : 0.12;
     return buildBaselineProjection({
       world: worldRecord ?? null,
       economy,
@@ -582,8 +601,9 @@ export const DecisionWizardPage: React.FC = () => {
       companies: projectionCompanies,
       holdingDecisions: (holdingDecisionsQuery.data ?? []).map((d: any) => d.payload) as HoldingDecisionPayload[],
       upgradesById,
+      safetyBufferPct,
     });
-  }, [worldRecord, economy, holding, projectionCompanies, holdingDecisionsQuery.data, upgradesById]);
+  }, [worldRecord, economy, holding, projectionCompanies, holdingDecisionsQuery.data, upgradesById, holdingPolicy]);
 
   const decisionDraft = useDecisionDraft({
     worldId,
@@ -603,6 +623,12 @@ export const DecisionWizardPage: React.FC = () => {
 
   const whatIfProjection = React.useMemo(() => {
     if (!baselineProjection || !holding) return null;
+    const safetyBufferPct =
+      holdingPolicy?.riskAppetite === "LOW"
+        ? 0.2
+        : holdingPolicy?.riskAppetite === "HIGH"
+          ? 0.08
+          : 0.12;
     return buildWhatIfProjection({
       world: worldRecord ?? null,
       economy,
@@ -610,6 +636,7 @@ export const DecisionWizardPage: React.FC = () => {
       companies: projectionCompanies,
       holdingDecisions: (holdingDecisionsQuery.data ?? []).map((d: any) => d.payload) as HoldingDecisionPayload[],
       upgradesById,
+      safetyBufferPct,
       baseline: baselineProjection,
       draftCompanyDecisions: decisionDraft.draftCompanyDecisions,
       draftHoldingAllocations: decisionDraft.draftHoldingAllocations,
@@ -626,7 +653,26 @@ export const DecisionWizardPage: React.FC = () => {
     decisionDraft.draftCompanyDecisions,
     decisionDraft.draftHoldingAllocations,
     decisionDraft.draftUpgradeQueue,
+    holdingPolicy,
   ]);
+
+  const baselineLoanPayments = React.useMemo(() => {
+    const map: Record<string, number> = {};
+    (holdingDecisionsQuery.data ?? []).forEach((row: any) => {
+      const payload = row?.payload ?? {};
+      if (payload.type !== "REPAY_HOLDING_LOAN") return;
+      const loanId = String(payload.loanId ?? "");
+      if (!loanId) return;
+      map[loanId] = toNumber(payload.amount, 0);
+    });
+    return map;
+  }, [holdingDecisionsQuery.data]);
+
+  React.useEffect(() => {
+    if (loanDraftTouched) return;
+    if (Object.keys(baselineLoanPayments).length === 0) return;
+    setDraftLoanPayments(baselineLoanPayments);
+  }, [baselineLoanPayments, loanDraftTouched]);
 
   const briefingCards = React.useMemo(() => {
     const rows = briefingQuery.data?.sectorRows ?? [];
@@ -701,6 +747,15 @@ export const DecisionWizardPage: React.FC = () => {
         riskAppetite: holdingPolicy.riskAppetite,
       } as any);
     }
+    Object.entries(draftLoanPayments).forEach(([loanId, amount]) => {
+      const payment = toNumber(amount, 0);
+      if (payment <= 0) return;
+      holdingPayloads.push({
+        type: "REPAY_HOLDING_LOAN",
+        loanId: loanId as any,
+        amount: payment,
+      } as any);
+    });
 
     const year = currentYear as any;
     const week = currentWeek as any;
@@ -777,6 +832,15 @@ export const DecisionWizardPage: React.FC = () => {
         riskAppetite: holdingPolicy.riskAppetite,
       } as any);
     }
+    Object.entries(draftLoanPayments).forEach(([loanId, amount]) => {
+      const payment = toNumber(amount, 0);
+      if (payment <= 0) return;
+      holdingPayloads.push({
+        type: "REPAY_HOLDING_LOAN",
+        loanId: loanId as any,
+        amount: payment,
+      } as any);
+    });
 
     const year = currentYear as any;
     const week = currentWeek as any;
@@ -854,6 +918,7 @@ export const DecisionWizardPage: React.FC = () => {
   const safeToSpend = summaryProjection?.safeToSpendCash ?? 0;
   const worstEndCash = summaryProjection?.riskBandEndCash.worst ?? 0;
   const expectedEndCash = summaryProjection?.expectedEndCash ?? 0;
+  const holdingLoans = holdingLoansQuery.data ?? [];
 
   return (
     <div className="mx-auto max-w-5xl px-4 pb-24 pt-6">
@@ -912,6 +977,12 @@ export const DecisionWizardPage: React.FC = () => {
         {activeStep === "holding" ? (
           <HoldingDecisionPanel
             companies={playableCompanies as any}
+            loans={holdingLoans as any}
+            draftLoanPayments={draftLoanPayments}
+            onLoanPaymentChange={(loanId, amount) => {
+              setLoanDraftTouched(true);
+              setDraftLoanPayments((prev) => ({ ...prev, [loanId]: amount }));
+            }}
             draftHoldingAllocations={decisionDraft.draftHoldingAllocations}
             onAllocationChange={decisionDraft.setHoldingAllocation}
             policy={holdingPolicy}

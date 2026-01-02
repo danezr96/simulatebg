@@ -359,6 +359,7 @@ create table if not exists public.company_state (
     brand_score numeric(10,4) not null default 0.5,
     operational_efficiency_score numeric(10,4) not null default 50,
     utilisation_rate numeric(10,4) not null default 0,
+  warehouse_state jsonb not null default '{}',
 
   created_at timestamptz not null default now()
 );

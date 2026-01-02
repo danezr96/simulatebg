@@ -736,6 +736,7 @@ export type Database = {
           brand_score: number;
           operational_efficiency_score: number;
           utilisation_rate: number;
+          warehouse_state: Json;
 
           created_at: string;
         };
@@ -759,6 +760,7 @@ export type Database = {
           brand_score?: number;
           operational_efficiency_score?: number;
           utilisation_rate?: number;
+          warehouse_state?: Json;
 
           created_at?: string;
         };
@@ -776,6 +778,7 @@ export type Database = {
           brand_score?: number;
           operational_efficiency_score?: number;
           utilisation_rate?: number;
+          warehouse_state?: Json;
         };
         Relationships: [
           {

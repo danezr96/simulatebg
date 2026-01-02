@@ -25,6 +25,7 @@ import { getDecisionGuidance } from "../../../core/config/decisionGuidance";
 import { cn, formatCurrencyCompact, formatNumber } from "../../../utils/format";
 import Card from "../Card";
 import Sparkline from "../Sparkline";
+import KPIChip from "../KPIChip";
 import { Button } from "../Button";
 import BottomSheet from "./BottomSheet";
 import WhatIfDeltaRow from "./WhatIfDeltaRow";
@@ -66,6 +67,11 @@ function clamp(value: number, min: number, max: number): number {
 }
 
 function toNumber(value: unknown, fallback = 0): number {
+  if (typeof value === "string") {
+    const normalized = value.replace(",", ".");
+    const num = Number(normalized);
+    return Number.isFinite(num) ? num : fallback;
+  }
   const num = Number(value);
   return Number.isFinite(num) ? num : fallback;
 }
@@ -550,6 +556,16 @@ export function CompanyDecisionPanel({
           : null;
 
         const carwashTicksPerWeek = Math.max(1, toNumber(carwashCore?.ticksPerWeek, 1008));
+        const carwashTicksPerDay = Math.max(1, toNumber(carwashCore?.ticksPerDay, 144));
+        const carwashDaysPerWeek = carwashTicksPerWeek / carwashTicksPerDay;
+        const carwashOpsResolution = carwashConfig?.opsResolution ?? {};
+        const carwashMaintenanceLevels = Array.isArray(carwashConfig?.maintenance?.levels)
+          ? carwashConfig.maintenance.levels
+          : [];
+        const carwashQueuePenalty = carwashConfig?.queue?.waitPenalty ?? {};
+        const carwashQueuePenaltyLow = toNumber((carwashQueuePenalty as any)?.low, 0);
+        const carwashQueuePenaltyMedium = toNumber((carwashQueuePenalty as any)?.medium, 0);
+        const carwashQueuePenaltyHigh = toNumber((carwashQueuePenalty as any)?.high, 0);
         const carwashLaneThroughput = Math.max(
           0.1,
           toNumber(carwashOperations?.laneThroughputPerTick?.base, 2)
@@ -575,6 +591,10 @@ export function CompanyDecisionPanel({
           carwashPricing?.detailingPriceStepEur,
           carwashPriceStepBase
         );
+        const carwashUpsell = carwashMarketing?.upsell ?? {};
+        const carwashUpsellMin = toNumber((carwashUpsell as any)?.upgradeRateBoostPctPerStaffRange?.min, 0);
+        const carwashUpsellMax = toNumber((carwashUpsell as any)?.upgradeRateBoostPctPerStaffRange?.max, 0);
+        const carwashUpsellCap = toNumber((carwashUpsell as any)?.upgradeRateBoostTotalCapPct, 0);
 
         const getCarwashOfferMaxPerTick = (product: NicheProduct) => {
           const offerCfg = carwashOffers?.[product.sku] ?? {};
@@ -620,6 +640,94 @@ export function CompanyDecisionPanel({
           ...carwashDefaultTargetOutputBySku,
           ...(carwashOpsDecision?.targetOutputBySku ?? {}),
         };
+        const carwashTargetOutputPerWeekBySku: Record<string, number> = {};
+        let carwashTargetOutputTotalPerWeek = 0;
+        for (const product of unlockedProducts) {
+          const perTick = Math.max(0, toNumber(carwashTargetOutputBySku[product.sku], 0));
+          const perWeek = perTick * carwashTicksPerWeek;
+          carwashTargetOutputPerWeekBySku[product.sku] = perWeek;
+          carwashTargetOutputTotalPerWeek += perWeek;
+        }
+
+        const carwashSupplyConsumption = carwashOpsResolution?.supplyConsumption ?? {};
+        const chemicalsUnitsPerWash = carwashSupplyConsumption?.chemicalsUnitsPerWash ?? {};
+        const consumablesUnitsPerJob = carwashSupplyConsumption?.consumablesUnitsPerJob ?? {};
+        const sparePartsUnitsPerLanePerDay = toNumber(
+          carwashSupplyConsumption?.sparePartsUnitsPerLanePerDay,
+          0
+        );
+        let weeklyChemicalsUsage = 0;
+        let weeklyConsumablesUsage = 0;
+        for (const product of unlockedProducts) {
+          const perWeek = carwashTargetOutputPerWeekBySku[product.sku] ?? 0;
+          const chemicalUnits = toNumber((chemicalsUnitsPerWash as any)?.[product.sku], 0);
+          const consumableUnits = toNumber((consumablesUnitsPerJob as any)?.[product.sku], 0);
+          weeklyChemicalsUsage += perWeek * chemicalUnits;
+          weeklyConsumablesUsage += perWeek * consumableUnits;
+        }
+        const weeklySparePartsUsage = sparePartsUnitsPerLanePerDay * carwashDaysPerWeek * carwashLaneCount;
+
+        const carwashStartingAssets = Array.isArray(carwashConfig?.startingLoadout?.assets)
+          ? carwashConfig.startingLoadout.assets
+          : [];
+        const carwashStartingAssetsById = new Map<string, number>(
+          carwashStartingAssets.map((asset: any) => [String(asset?.assetId ?? ""), toNumber(asset?.count, 0)])
+        );
+        const storedWarehouse = state && typeof (state as any).warehouseState === "object"
+          ? (state as any).warehouseState
+          : null;
+        const storedOnHand =
+          storedWarehouse && typeof storedWarehouse.onHandByCategory === "object"
+            ? storedWarehouse.onHandByCategory
+            : null;
+        const carwashBaselineStock = {
+          chemicals: Number.isFinite(toNumber((storedOnHand as any)?.chemicals, NaN))
+            ? toNumber((storedOnHand as any)?.chemicals, 0)
+            : toNumber(carwashStartingAssetsById.get("chemicals_inventory_units"), 0),
+          consumables: Number.isFinite(toNumber((storedOnHand as any)?.consumables, NaN))
+            ? toNumber((storedOnHand as any)?.consumables, 0)
+            : toNumber(carwashStartingAssetsById.get("consumables_inventory_units"), 0),
+          spare_parts: Number.isFinite(toNumber((storedOnHand as any)?.spare_parts, NaN))
+            ? toNumber((storedOnHand as any)?.spare_parts, 0)
+            : toNumber(carwashStartingAssetsById.get("spare_parts_inventory_units"), 0),
+        };
+
+        const carwashWarehouseStorageBase = toNumber(carwashWarehouse?.storageCapacityUnitsStart, 0);
+        const carwashSelectedStorageUpgrades = new Set<number>(
+          carwashWarehouseDecision?.storageUpgrades ?? []
+        );
+        const carwashWarehouseStorageExtra = Array.isArray(carwashWarehouse?.storageUpgrades)
+          ? carwashWarehouse.storageUpgrades.reduce((sum: number, upgrade: any, index: number) => {
+              if (!carwashSelectedStorageUpgrades.has(index)) return sum;
+              return sum + toNumber(upgrade?.capacityUnits, 0);
+            }, 0)
+          : 0;
+        const carwashWarehouseStorageTotal = carwashWarehouseStorageBase + carwashWarehouseStorageExtra;
+
+        const promoDiscountPct = toNumber(carwashPricingDecision?.promoDiscountPct, 0);
+        const marketAllocation = carwashConfig?.demandEngine?.marketAllocation ?? {};
+        const segmentSkuMap = (marketAllocation as any)?.segmentSkuMap ?? {};
+        const segmentElasticities = (marketAllocation as any)?.elasticities ?? {};
+        const relevantElasticities: number[] = [];
+        Object.entries(segmentSkuMap).forEach(([segment, sku]) => {
+          if (!unlockedProducts.some((product) => product.sku === sku)) return;
+          const elasticity = toNumber((segmentElasticities as any)?.[segment], NaN);
+          if (Number.isFinite(elasticity)) relevantElasticities.push(elasticity);
+        });
+        const promoElasticityMin =
+          relevantElasticities.length > 0 ? Math.min(...relevantElasticities) : 0;
+        const promoElasticityMax =
+          relevantElasticities.length > 0 ? Math.max(...relevantElasticities) : 0;
+        const promoLiftMinPct = promoDiscountPct * promoElasticityMin;
+        const promoLiftMaxPct = promoDiscountPct * promoElasticityMax;
+        const carwashUnlockRules = Array.isArray(carwashConfig?.unlockRules)
+          ? carwashConfig.unlockRules
+          : [];
+        const carwashUnlockRuleBySku = new Map<string, any>();
+        carwashUnlockRules.forEach((rule: any) => {
+          if (!rule || !rule.productSku) return;
+          carwashUnlockRuleBySku.set(String(rule.productSku), rule);
+        });
 
         const updateCarwashOperations = (updates: Partial<SetCarwashOperationsDecision>) => {
           if (!isCarwash) return;
@@ -795,6 +903,68 @@ export function CompanyDecisionPanel({
           carwashTrainingMax
         );
         const carwashShiftPlan = (carwashHrDecision?.shiftPlan ?? "balanced") as SetCarwashHrDecision["shiftPlan"];
+        const carwashHiringLeadTimeMin = toNumber(carwashHr?.hiringLeadTimeTicksRange?.min, 0);
+        const carwashHiringLeadTimeMax = toNumber(carwashHr?.hiringLeadTimeTicksRange?.max, 0);
+        const carwashTrainingCostMin = toNumber(carwashHr?.trainingCostRangeEur?.min, 0);
+        const carwashTrainingCostMax = toNumber(carwashHr?.trainingCostRangeEur?.max, 0);
+        const carwashTrainingTimeMin = toNumber(carwashHr?.trainingTimeTicksRange?.min, 0);
+        const carwashTrainingTimeMax = toNumber(carwashHr?.trainingTimeTicksRange?.max, 0);
+        const carwashTrainingEffects = carwashHr?.trainingEffects ?? {};
+        const carwashTrainingProductivityPct = toNumber(
+          (carwashTrainingEffects as any)?.productivityPctPerLevel,
+          0
+        );
+        const carwashTrainingQualityPct = toNumber((carwashTrainingEffects as any)?.qualityPctPerLevel, 0);
+        const carwashTrainingUpsellPct = toNumber((carwashTrainingEffects as any)?.upsellPctPerLevel, 0);
+        const carwashEnergyModes = carwashOpsResolution?.energyModes ?? {};
+        const carwashEnergyConfig = carwashEnergyModes?.[carwashEnergyMode] ?? {};
+        const carwashEnergyCostMultiplier = toNumber(carwashEnergyConfig?.energyCostMultiplier, 1);
+        const carwashEnergyThroughputMultiplier = toNumber(carwashEnergyConfig?.throughputMultiplier, 1);
+        const carwashEnergyQualityMultiplier = toNumber(carwashEnergyConfig?.qualityMultiplier, 1);
+        const carwashInteriorOutputPerTickMax = Math.max(
+          0,
+          Math.round(toNumber(carwashOperations?.interiorOutputPerTickMax, 0))
+        );
+        const carwashDetailingOutputPerTickMax = Math.max(
+          0,
+          Math.round(toNumber(carwashOperations?.detailingOutputPerTickMax, 0))
+        );
+        const carwashMaintenanceInfo =
+          carwashMaintenanceLevels.find((level: any) => Number(level?.level) === carwashMaintenanceLevel) ?? null;
+        const carwashMaintenanceCostPerLanePerTick = toNumber(
+          carwashMaintenanceInfo?.costPerLanePerTick,
+          0
+        );
+        const carwashBreakdownChancePct = toNumber(carwashMaintenanceInfo?.breakdownChancePct, 0);
+        const carwashMaintenanceCostPerWeek =
+          carwashMaintenanceCostPerLanePerTick * carwashLaneCount * carwashTicksPerWeek;
+        const carwashExteriorCapacityPerWeek = carwashMaxExteriorPerTick * carwashTicksPerWeek;
+        const carwashInteriorCapacityPerWeek = carwashInteriorOutputPerTickMax * carwashTicksPerWeek;
+        const carwashDetailingCapacityPerWeek = carwashDetailingOutputPerTickMax * carwashTicksPerWeek;
+        const carwashExteriorCapacityPerWeekEffective =
+          carwashExteriorCapacityPerWeek * carwashEnergyThroughputMultiplier;
+        const carwashInteriorCapacityPerWeekEffective =
+          carwashInteriorCapacityPerWeek * carwashEnergyThroughputMultiplier;
+        const carwashDetailingCapacityPerWeekEffective =
+          carwashDetailingCapacityPerWeek * carwashEnergyThroughputMultiplier;
+        const getOfferUtilityRange = (sku: string) => {
+          const offer = carwashOffers?.[sku] ?? {};
+          const utilities = (offer as any)?.costsEur?.utilities ?? {};
+          const min = toNumber(utilities?.min, 0);
+          const max = Math.max(min, toNumber(utilities?.max, min));
+          return { min, max };
+        };
+        let weeklyUtilityCostMin = 0;
+        let weeklyUtilityCostMax = 0;
+        for (const product of unlockedProducts) {
+          const perWeek = carwashTargetOutputPerWeekBySku[product.sku] ?? 0;
+          if (perWeek <= 0) continue;
+          const range = getOfferUtilityRange(product.sku);
+          weeklyUtilityCostMin += perWeek * range.min;
+          weeklyUtilityCostMax += perWeek * range.max;
+        }
+        weeklyUtilityCostMin *= carwashEnergyCostMultiplier;
+        weeklyUtilityCostMax *= carwashEnergyCostMultiplier;
 
         const resolveRangeForField = (field: DecisionField) => {
           const guidanceRange = field.guidanceKey ? guidance?.ranges[field.guidanceKey] : undefined;
@@ -914,6 +1084,31 @@ export function CompanyDecisionPanel({
                       {formatCurrencyCompact(projection.delta?.profit ?? 0)}
                     </div>
                   </div>
+                </div>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <KPIChip
+                    label="Util"
+                    value={`${Math.round(clamp(toNumber(state?.utilisationRate, 0), 0, 1) * 100)}%`}
+                    trend={
+                      clamp(toNumber(state?.utilisationRate, 0), 0, 1) >= 0.75
+                        ? "up"
+                        : clamp(toNumber(state?.utilisationRate, 0), 0, 1) <= 0.35
+                          ? "down"
+                          : "neutral"
+                    }
+                  />
+                  <KPIChip
+                    label="Cap"
+                    value={formatNumber(toNumber(state?.capacity, 0), "nl-NL", 0)}
+                    trend="neutral"
+                    subtle
+                  />
+                  <KPIChip
+                    label="Mkt"
+                    value={formatNumber(toNumber(state?.marketingLevel, 0), "nl-NL", 0)}
+                    trend={toNumber(state?.marketingLevel, 0) > 0 ? "up" : "neutral"}
+                    subtle
+                  />
                 </div>
               </div>
               <div className="flex flex-col items-end gap-2">
@@ -1075,10 +1270,13 @@ export function CompanyDecisionPanel({
                                   min={min}
                                   max={max}
                                   step={getPriceStep(min, max)}
+                                  inputMode="decimal"
                                   className="mt-1 w-full rounded-2xl border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-sm outline-none"
                                   value={Number.isFinite(priceEur) ? priceEur : basePrice}
                                   onChange={(event) =>
-                                    updateProductPlan(product.sku, { priceEur: Number(event.target.value) })
+                                    updateProductPlan(product.sku, {
+                                      priceEur: toNumber(event.target.value, priceEur),
+                                    })
                                   }
                                   disabled={disabled}
                                 />
@@ -1130,8 +1328,44 @@ export function CompanyDecisionPanel({
                     {lockedProducts.length > 0 ? (
                       <div className="mt-4 rounded-2xl border border-dashed border-[var(--border)] bg-[var(--card-2)] p-3 text-xs text-[var(--text-muted)]">
                         <div className="text-[var(--text)]">Locked products</div>
-                        <div className="mt-1">
-                          {lockedProducts.map((product) => product.name).join(", ")}. Unlock via upgrades.
+                        <div className="mt-1 space-y-1">
+                          {lockedProducts.map((product) => {
+                            const rule = carwashUnlockRuleBySku.get(product.sku) ?? null;
+                            const requirements = (rule as any)?.requirements ?? {};
+                            const notes: string[] = [];
+                            const upgrades = Array.isArray(requirements?.upgrades)
+                              ? requirements.upgrades.map(String)
+                              : [];
+                            if (upgrades.length) notes.push(`Upgrades: ${upgrades.join(", ")}`);
+                            const assets = Array.isArray(requirements?.assets)
+                              ? requirements.assets
+                                  .map((asset: any) => `${asset.assetId ?? "asset"} ${asset.minCount ?? 0}+`)
+                                  .join(", ")
+                              : "";
+                            if (assets) notes.push(`Assets: ${assets}`);
+                            const staff = Array.isArray(requirements?.staff)
+                              ? requirements.staff
+                                  .map((role: any) => `${role.roleId ?? "role"} ${role.minFTE ?? 0}+`)
+                                  .join(", ")
+                              : "";
+                            if (staff) notes.push(`Staff: ${staff}`);
+                            if (Number.isFinite(requirements?.minReputationScore)) {
+                              notes.push(`Min reputation ${requirements.minReputationScore}`);
+                            }
+                            if (Number.isFinite(requirements?.minComplianceScore)) {
+                              notes.push(`Min compliance ${requirements.minComplianceScore}`);
+                            }
+
+                            return (
+                              <div key={`${companyId}-locked-${product.sku}`}>
+                                {product.name}
+                                {notes.length > 0 ? ` | ${notes.join(" | ")}` : " | Unlock via upgrades"}
+                              </div>
+                            );
+                          })}
+                        </div>
+                        <div className="mt-2 text-[10px] text-[var(--text-muted)]">
+                          Queue upgrades in the Upgrades step to unlock these products.
                         </div>
                       </div>
                     ) : null}
@@ -1189,10 +1423,13 @@ export function CompanyDecisionPanel({
                                 min={min}
                                 max={max}
                                 step={step}
+                                inputMode="decimal"
                                 className="mt-1 w-full rounded-2xl border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-sm outline-none"
                                 value={Number.isFinite(priceEur) ? priceEur : basePrice}
                                 onChange={(event) =>
-                                  updateProductPlan(product.sku, { priceEur: Number(event.target.value) })
+                                  updateProductPlan(product.sku, {
+                                    priceEur: toNumber(event.target.value, priceEur),
+                                  })
                                 }
                                 disabled={disabled}
                               />
@@ -1255,6 +1492,12 @@ export function CompanyDecisionPanel({
                         />
                       </label>
                     </div>
+                    {promoDiscountPct > 0 && promoElasticityMax > 0 ? (
+                      <div className="mt-2 text-[10px] text-[var(--text-muted)]">
+                        Estimated promo demand lift: +{formatNumber(promoLiftMinPct, "nl-NL", 0)}% to +
+                        {formatNumber(promoLiftMaxPct, "nl-NL", 0)}% (based on price elasticities).
+                      </div>
+                    ) : null}
 
                   </div>
                 ) : null}
@@ -1351,6 +1594,7 @@ export function CompanyDecisionPanel({
                               min={range.min}
                               max={range.max}
                               step={range.step}
+                              inputMode={field.kind === "PRICE" || field.kind === "QUALITY" ? "decimal" : "numeric"}
                               className="w-full rounded-2xl border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-sm outline-none"
                               value={Number.isFinite(value) ? value : 0}
                               disabled={disabled}
@@ -1466,8 +1710,41 @@ export function CompanyDecisionPanel({
                           />
                         </label>
                       </div>
-                      <div className="mt-2 text-xs text-[var(--text-muted)]">
-                        Estimated lanes: {carwashLaneCountRounded} | Max exterior per tick: {carwashMaxExteriorPerTick}
+                      <div className="mt-2 space-y-1 text-xs text-[var(--text-muted)]">
+                        <div>
+                          Status: {carwashOpenStatus ? "Open" : "Closed"} | Queue policy{" "}
+                          {carwashQueuePolicy === "walk_in_only" ? "Walk-in only" : "Reservations"} | Availability{" "}
+                          {carwashOpenStatus ? "100%" : "0%"} | Queue penalties (low/med/high){" "}
+                          {formatNumber(carwashQueuePenaltyLow * 100, "nl-NL", 0)}% /{" "}
+                          {formatNumber(carwashQueuePenaltyMedium * 100, "nl-NL", 0)}% /{" "}
+                          {formatNumber(carwashQueuePenaltyHigh * 100, "nl-NL", 0)}%
+                          {!carwashOpenStatus ? " | Fixed costs still run" : ""}
+                        </div>
+                        <div>
+                          Energy mode: throughput {carwashEnergyThroughputMultiplier.toFixed(2)}x | energy cost{" "}
+                          {carwashEnergyCostMultiplier.toFixed(2)}x | quality{" "}
+                          {carwashEnergyQualityMultiplier.toFixed(2)}x
+                        </div>
+                        <div>
+                          Maintenance: {formatCurrencyCompact(carwashMaintenanceCostPerWeek)} / week | breakdown chance{" "}
+                          {formatNumber(carwashBreakdownChancePct, "nl-NL", 0)}%
+                        </div>
+                        <div>
+                          Capacity per week (effective): Exterior{" "}
+                          {formatNumber(carwashExteriorCapacityPerWeekEffective, "nl-NL", 0)} | Interior{" "}
+                          {formatNumber(carwashInteriorCapacityPerWeekEffective, "nl-NL", 0)} | Detailing{" "}
+                          {formatNumber(carwashDetailingCapacityPerWeekEffective, "nl-NL", 0)}
+                        </div>
+                        <div>
+                          Target output per week: {formatNumber(carwashTargetOutputTotalPerWeek, "nl-NL", 0)} |{" "}
+                          Estimated lanes: {carwashLaneCountRounded}
+                        </div>
+                        {weeklyUtilityCostMax > 0 ? (
+                          <div>
+                            Utility cost / week (energy mode applied):{" "}
+                            {formatMoneyRange(weeklyUtilityCostMin, weeklyUtilityCostMax)}
+                          </div>
+                        ) : null}
                       </div>
 
                       {carwashRoleKeys.length > 0 ? (
@@ -1508,16 +1785,17 @@ export function CompanyDecisionPanel({
                       ) : null}
 
                       <div className="mt-4">
-                        <div className="text-xs font-semibold text-[var(--text)]">Target output per tick</div>
+                        <div className="text-xs font-semibold text-[var(--text)]">Target output per week</div>
                         <div className="mt-2 grid grid-cols-1 gap-2 md:grid-cols-2">
                           {unlockedProducts.map((product) => {
                             const maxPerTick = getCarwashOfferMaxPerTick(product);
+                            const maxPerWeek = maxPerTick * carwashTicksPerWeek;
                             const currentValue = clamp(
-                              toNumber(carwashTargetOutputBySku[product.sku], 0),
+                              toNumber(carwashTargetOutputPerWeekBySku[product.sku], 0),
                               0,
-                              maxPerTick
+                              maxPerWeek
                             );
-                            const disabledOutput = disabled || maxPerTick <= 0;
+                            const disabledOutput = disabled || maxPerWeek <= 0;
                             return (
                               <label
                                 key={`${companyId}-carwash-output-${product.sku}`}
@@ -1527,25 +1805,29 @@ export function CompanyDecisionPanel({
                                 <input
                                   type="number"
                                   min={0}
-                                  max={maxPerTick}
+                                  max={maxPerWeek}
                                   step={1}
                                   className="mt-1 w-full rounded-2xl border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-sm outline-none"
                                   value={Number.isFinite(currentValue) ? currentValue : 0}
                                   onChange={(event) =>
                                     updateCarwashOperations({
                                       targetOutputBySku: {
-                                        [product.sku]: clamp(
-                                          toNumber(event.target.value, 0),
-                                          0,
-                                          maxPerTick
-                                        ),
+                                        [product.sku]:
+                                          carwashTicksPerWeek > 0
+                                            ? clamp(
+                                                toNumber(event.target.value, 0),
+                                                0,
+                                                maxPerWeek
+                                              ) / carwashTicksPerWeek
+                                            : 0,
                                       },
                                     })
                                   }
                                   disabled={disabledOutput}
                                 />
                                 <span className="mt-1 block text-[10px] text-[var(--text-muted)]">
-                                  Max {maxPerTick} per tick{maxPerTick <= 0 ? " (requires capacity)" : ""}
+                                  Max {formatNumber(maxPerWeek, "nl-NL", 0)} per week
+                                  {maxPerWeek <= 0 ? " (requires capacity)" : ""}
                                 </span>
                               </label>
                             );
@@ -1558,6 +1840,15 @@ export function CompanyDecisionPanel({
                       <div className="text-sm font-semibold text-[var(--text)]">Warehouse</div>
                       <div className="text-xs text-[var(--text-muted)]">
                         Manage order quantities, reorder points, and safety stock.
+                      </div>
+                      <div className="mt-1 text-xs text-[var(--text-muted)]">
+                        Current stock uses live warehouse state when available. Weekly usage is estimated from target output.
+                      </div>
+                      <div className="mt-1 text-xs text-[var(--text-muted)]">
+                        Storage capacity: {formatNumber(carwashWarehouseStorageTotal, "nl-NL", 0)} units
+                        {carwashWarehouseStorageExtra > 0
+                          ? ` (base ${formatNumber(carwashWarehouseStorageBase, "nl-NL", 0)} + upgrades)`
+                          : ""}
                       </div>
                       <div className="mt-3 space-y-3">
                         {CARWASH_CATEGORIES.map((category) => {
@@ -1576,6 +1867,22 @@ export function CompanyDecisionPanel({
                             carwashWarehouseDecision?.safetyStockByCategory?.[category],
                             0
                           );
+                          const weeklyUsage =
+                            category === "chemicals"
+                              ? weeklyChemicalsUsage
+                              : category === "consumables"
+                                ? weeklyConsumablesUsage
+                                : weeklySparePartsUsage;
+                          const baselineStock = toNumber((carwashBaselineStock as any)?.[category], 0);
+                          const shrinkPerDayPct = toNumber(
+                            (carwashWarehouse?.shrinkPerDayPct as any)?.[category],
+                            0
+                          );
+                          const shrinkPerWeek = shrinkPerDayPct * carwashDaysPerWeek;
+                          const projectedNoOrder = baselineStock * (1 - shrinkPerWeek) - weeklyUsage;
+                          const projectedWithOrder = projectedNoOrder + orderValue;
+                          const reorderWeeks = weeklyUsage > 0 ? reorderValue / weeklyUsage : 0;
+                          const safetyWeeks = weeklyUsage > 0 ? safetyValue / weeklyUsage : 0;
 
                           return (
                             <div
@@ -1656,6 +1963,17 @@ export function CompanyDecisionPanel({
                                   />
                                 </label>
                               </div>
+                              <div className="mt-2 text-[10px] text-[var(--text-muted)]">
+                                Current stock {formatNumber(baselineStock, "nl-NL", 0)} | Usage / week{" "}
+                                {formatNumber(weeklyUsage, "nl-NL", 0)} | Reorder cover{" "}
+                                {weeklyUsage > 0 ? formatNumber(reorderWeeks, "nl-NL", 1) : "n/a"} w | Safety cover{" "}
+                                {weeklyUsage > 0 ? formatNumber(safetyWeeks, "nl-NL", 1) : "n/a"} w
+                              </div>
+                              <div className="mt-1 text-[10px] text-[var(--text-muted)]">
+                                Projected stock (no order): {formatNumber(projectedNoOrder, "nl-NL", 0)} | With order:{" "}
+                                {formatNumber(projectedWithOrder, "nl-NL", 0)}
+                                {shrinkPerWeek > 0 ? ` | Shrink ${(shrinkPerWeek * 100).toFixed(2)}%/week` : ""}
+                              </div>
                             </div>
                           );
                         })}
@@ -1722,6 +2040,25 @@ export function CompanyDecisionPanel({
                             defaultTier) as "A" | "B" | "C";
                           const contractValue = (carwashProcurementDecision?.contractTypeByCategory?.[category] ??
                             "spot") as "spot" | "contract_7d" | "contract_30d";
+                          const tierDetails = (carwashProcurement?.supplierTiers ?? {})[tierValue] ?? {};
+                          const tierPriceIndex = toNumber((tierDetails as any)?.priceIndex, NaN);
+                          const tierReliability = (tierDetails as any)?.reliabilityRange ?? [];
+                          const tierQuality = (tierDetails as any)?.qualityRange ?? [];
+                          const tierLeadTime = (tierDetails as any)?.leadTimeTicksRange ?? [];
+                          const tierFillRate = (tierDetails as any)?.fillRateRange ?? [];
+                          const tierMoq = toNumber((tierDetails as any)?.moqUnits, 0);
+                          const contractDetails =
+                            (carwashProcurement?.contractOptions ?? {})[contractValue] ?? {};
+                          const contractFee = (contractDetails as any)?.feeRangeEur ?? {};
+                          const contractDiscount = (contractDetails as any)?.priceDiscountPctRange ?? {};
+                          const contractReliabilityBonus = toNumber(
+                            (contractDetails as any)?.reliabilityBonus,
+                            0
+                          );
+                          const contractLeadTimeVariance = toNumber(
+                            (contractDetails as any)?.leadTimeVarianceReductionPct,
+                            0
+                          );
 
                           return (
                             <div
@@ -1773,6 +2110,25 @@ export function CompanyDecisionPanel({
                                   </select>
                                 </label>
                               </div>
+                              <div className="mt-2 text-[10px] text-[var(--text-muted)]">
+                                {Number.isFinite(tierPriceIndex) ? `Price index ${tierPriceIndex.toFixed(2)}x` : "Price index n/a"}
+                                {" | "}
+                                Reliability {formatRange(toNumber(tierReliability?.[0], 0), toNumber(tierReliability?.[1], 0), 0)}%
+                                {" | "}
+                                Quality {formatRange(toNumber(tierQuality?.[0], 0), toNumber(tierQuality?.[1], 0), 0)}%
+                                {" | "}
+                                Lead time {formatRange(toNumber(tierLeadTime?.[0], 0), toNumber(tierLeadTime?.[1], 0), 0)} ticks
+                                {" | "}
+                                Fill rate {formatRange(toNumber(tierFillRate?.[0], 0), toNumber(tierFillRate?.[1], 0), 0)}%
+                                {tierMoq > 0 ? ` | MOQ ${formatNumber(tierMoq, "nl-NL", 0)}` : ""}
+                              </div>
+                              <div className="mt-1 text-[10px] text-[var(--text-muted)]">
+                                Contract fees {formatMoneyRange(toNumber(contractFee?.min, 0), toNumber(contractFee?.max, 0))}
+                                {" | "}
+                                Discount {formatRange(toNumber(contractDiscount?.min, 0), toNumber(contractDiscount?.max, 0), 0)}%
+                                {contractReliabilityBonus > 0 ? ` | Reliability +${contractReliabilityBonus}` : ""}
+                                {contractLeadTimeVariance > 0 ? ` | Lead time variance -${contractLeadTimeVariance}%` : ""}
+                              </div>
                             </div>
                           );
                         })}
@@ -1795,6 +2151,9 @@ export function CompanyDecisionPanel({
                             <option value="premium">Premium</option>
                           </select>
                         </label>
+                        <div className="mt-1 text-[10px] text-[var(--text-muted)]">
+                          Quality trades price for reliability and customer satisfaction.
+                        </div>
                       </div>
                     </div>
 
@@ -1851,6 +2210,12 @@ export function CompanyDecisionPanel({
                           No campaigns configured.
                         </div>
                       )}
+                      {carwashUpsellCap > 0 ? (
+                        <div className="mt-2 text-[10px] text-[var(--text-muted)]">
+                          Upsell boost per staff: {formatRange(carwashUpsellMin, carwashUpsellMax, 1)}% | Cap{" "}
+                          {formatNumber(carwashUpsellCap, "nl-NL", 0)}%
+                        </div>
+                      ) : null}
                     </div>
 
                     <div className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-3">
@@ -1858,11 +2223,26 @@ export function CompanyDecisionPanel({
                       <div className="text-xs text-[var(--text-muted)]">
                         Manage hiring, wages, training, and shift planning.
                       </div>
+                      <div className="mt-1 text-xs text-[var(--text-muted)]">
+                        Hiring lead time {formatRange(carwashHiringLeadTimeMin, carwashHiringLeadTimeMax, 0)} ticks |
+                        Training cost {formatMoneyRange(carwashTrainingCostMin, carwashTrainingCostMax)} | Training time{" "}
+                        {formatRange(carwashTrainingTimeMin, carwashTrainingTimeMax, 0)} ticks
+                      </div>
+                      <div className="mt-1 text-[10px] text-[var(--text-muted)]">
+                        Training effects per level: +{formatNumber(carwashTrainingProductivityPct, "nl-NL", 0)}%
+                        productivity | +{formatNumber(carwashTrainingQualityPct, "nl-NL", 0)}% quality | +
+                        {formatNumber(carwashTrainingUpsellPct, "nl-NL", 0)}% upsell
+                      </div>
                       <div className="mt-3 space-y-3">
                         {carwashRoleKeys.map((role) => {
                           const range = carwashHr?.hourlyCostRangeEur?.[role] ?? [];
                           const min = toNumber(range[0], 0);
                           const max = toNumber(range[1], min);
+                          const hiringRange = carwashHr?.hiringCostRangeEur?.[role] ?? [];
+                          const hiringMin = toNumber(hiringRange[0], 0);
+                          const hiringMax = toNumber(hiringRange[1], hiringMin);
+                          const firingPenaltyMin = toNumber(carwashHr?.firingPenaltyRangeEur?.min, 0);
+                          const firingPenaltyMax = toNumber(carwashHr?.firingPenaltyRangeEur?.max, 0);
                           const hireValue = Math.trunc(
                             toNumber(carwashHrDecision?.hireFireByRole?.[role], 0)
                           );
@@ -1922,6 +2302,12 @@ export function CompanyDecisionPanel({
                               <div className="mt-1 text-[10px] text-[var(--text-muted)]">
                                 Range {formatMoneyRange(min, max)} / hour
                               </div>
+                              {hiringMax > 0 ? (
+                                <div className="mt-1 text-[10px] text-[var(--text-muted)]">
+                                  Hiring cost {formatMoneyRange(hiringMin, hiringMax)} | Firing penalty{" "}
+                                  {formatMoneyRange(firingPenaltyMin, firingPenaltyMax)}
+                                </div>
+                              ) : null}
                             </div>
                           );
                         })}
@@ -1972,6 +2358,9 @@ export function CompanyDecisionPanel({
                       <div className="text-sm font-semibold text-[var(--text)]">Finance</div>
                       <div className="text-xs text-[var(--text-muted)]">
                         Optional extra repayments per tick.
+                      </div>
+                      <div className="mt-1 text-[10px] text-[var(--text-muted)]">
+                        Holding-level repayments are not wired yet.
                       </div>
                       <div className="mt-3">
                         <label className="text-xs text-[var(--text-muted)]">

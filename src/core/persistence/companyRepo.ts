@@ -63,6 +63,8 @@ function mapCompanyState(row: CompanyStateRow): CompanyState {
     operationalEfficiencyScore: ((row as any).operational_efficiency_score ?? 50) as any,
     utilisationRate: row.utilisation_rate as any,
 
+    warehouseState: ((row as any).warehouse_state ?? null) as any,
+
     createdAt: row.created_at as any,
   } as any;
 }
@@ -238,6 +240,7 @@ export const companyRepo = {
 ),
       operational_efficiency_score: Number((state as any).operationalEfficiencyScore ?? 50),
       utilisation_rate: Number((state as any).utilisationRate ?? 0),
+      warehouse_state: ((state as any).warehouseState ?? {}) as any,
     };
 
     const { data, error } = await supabase

@@ -11,6 +11,7 @@ import type{
   WeekNumber,
   Decimal,
   Money,
+  JsonObject,
 } from "./common";
 
 /**
@@ -89,6 +90,9 @@ export type CompanyState = {
 
   /** Capacity utilisation (0..1), usually derived. */
   utilisationRate: Decimal;
+
+  /** Optional warehouse/inventory state for niche-specific simulations. */
+  warehouseState?: JsonObject | null;
 
   createdAt: Timestamp;
 };
