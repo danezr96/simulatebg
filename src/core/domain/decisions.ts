@@ -151,6 +151,7 @@ export type SetCarwashProcurementDecision = {
 export type SetCarwashMarketingDecision = {
   type: "SET_CARWASH_MARKETING";
   campaignBudgetByKey?: Record<string, number>;
+  campaignDurationWeeksByKey?: Record<string, number>;
 };
 
 export type SetCarwashHrDecision = {

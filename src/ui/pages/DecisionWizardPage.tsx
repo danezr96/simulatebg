@@ -556,6 +556,11 @@ export const DecisionWizardPage: React.FC = () => {
     return map;
   }, [nicheUpgradesQuery.data, startupCostByNicheId]);
 
+  const upgradeCostById = React.useMemo(
+    () => Object.fromEntries(Object.entries(upgradesById).map(([id, value]) => [id, toNumber(value?.cost, 0)])),
+    [upgradesById]
+  );
+
   const upgradeSpendByCompany = React.useMemo(() => {
     const map = new Map<string, number>();
     const prev = previousRound(currentYear, currentWeek);
@@ -809,8 +814,8 @@ export const DecisionWizardPage: React.FC = () => {
     }
   };
 
-  const onSave = async () => {
-    if (!worldId || !holdingId || !economy) return;
+  const onSave = async (): Promise<boolean> => {
+    if (!worldId || !holdingId || !economy) return false;
     setCommitError(null);
 
     const holdingPayloads: HoldingDecisionPayload[] = [];
@@ -887,7 +892,9 @@ export const DecisionWizardPage: React.FC = () => {
       }
     } catch (error) {
       setCommitError(String((error as Error)?.message ?? error ?? "Save failed"));
+      return false;
     }
+    return true;
   };
 
   if (ws.isLoading) {
@@ -919,6 +926,7 @@ export const DecisionWizardPage: React.FC = () => {
   const worstEndCash = summaryProjection?.riskBandEndCash.worst ?? 0;
   const expectedEndCash = summaryProjection?.expectedEndCash ?? 0;
   const holdingLoans = holdingLoansQuery.data ?? [];
+  const primaryLabel = activeStep === "review" ? "Submit" : "Save & continue";
 
   return (
     <div className="mx-auto max-w-5xl px-4 pb-24 pt-6">
@@ -964,6 +972,11 @@ export const DecisionWizardPage: React.FC = () => {
             nichesById={nichesById}
             nicheProductsById={nicheProductsById}
             unlockedProductsByCompany={unlockedProductsByCompany}
+            nicheUpgradesByCompany={nicheUpgradesByCompany as any}
+            ownedUpgradesByCompany={ownedUpgradesByCompany as any}
+            draftUpgradeQueue={decisionDraft.draftUpgradeQueue}
+            upgradeCostById={upgradeCostById}
+            onToggleUpgrade={decisionDraft.toggleUpgrade}
             statesById={stateById}
             baseline={baselineProjection}
             whatIf={compareMode ? whatIfProjection : null}
@@ -998,9 +1011,7 @@ export const DecisionWizardPage: React.FC = () => {
             upgradesByCompany={nicheUpgradesByCompany as any}
             ownedUpgradesByCompany={ownedUpgradesByCompany as any}
             draftUpgradeQueue={decisionDraft.draftUpgradeQueue}
-            upgradeCostById={Object.fromEntries(
-              Object.entries(upgradesById).map(([id, value]) => [id, toNumber(value?.cost, 0)])
-            )}
+            upgradeCostById={upgradeCostById}
             currentYear={currentYear}
             currentWeek={currentWeek}
             onToggleUpgrade={decisionDraft.toggleUpgrade}
@@ -1035,7 +1046,7 @@ export const DecisionWizardPage: React.FC = () => {
         safeToSpend={safeToSpend}
         expectedEndCash={expectedEndCash}
         worstEndCash={worstEndCash}
-        primaryLabel={activeStep === "review" ? "Submit" : "Next step"}
+        primaryLabel={primaryLabel}
         secondaryLabel={canGoBack ? "Back" : undefined}
         onSecondary={() => canGoBack && setActiveStep(STEPS[activeIndex - 1].key)}
         saveLabel="Save"
@@ -1049,9 +1060,12 @@ export const DecisionWizardPage: React.FC = () => {
             }
             return;
           }
-          if (canGoNext) {
-            setActiveStep(STEPS[activeIndex + 1].key);
-          }
+          void onSave().then((ok) => {
+            if (!ok) return;
+            if (canGoNext) {
+              setActiveStep(STEPS[activeIndex + 1].key);
+            }
+          });
         }}
         disabled={isTicking}
       />

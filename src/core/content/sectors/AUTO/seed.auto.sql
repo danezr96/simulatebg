@@ -542,11 +542,12 @@ select
     },
     "marketing":{
       "campaigns":{
-        "performance_ads":{"budgetPerTickRangeEur":{"min":0,"max":120,"step":5},"minDurationTicks":12},
-        "local_flyers_partnerships":{"budgetPerTickRangeEur":{"min":0,"max":60},"minDurationTicks":36},
-        "review_push":{"budgetPerTickRangeEur":{"min":0,"max":50},"minDurationTicks":24},
-        "hr_branding":{"budgetPerTickRangeEur":{"min":0,"max":40},"minDurationTicks":72},
-        "fleet_outreach":{"budgetPerTickRangeEur":{"min":0,"max":80},"minDurationTicks":72}
+        "performance_ads":{"budgetPerTickRangeEur":{"min":0,"max":120,"step":5},"minDurationTicks":12,"maxDurationTicks":120,"expectedLiftPctRange":{"min":0.6,"max":2.2}},
+        "local_flyers_partnerships":{"budgetPerTickRangeEur":{"min":0,"max":60,"step":2},"minDurationTicks":36,"maxDurationTicks":180,"expectedLiftPctRange":{"min":0.3,"max":1.1}},
+        "review_push":{"budgetPerTickRangeEur":{"min":0,"max":50,"step":2},"minDurationTicks":24,"maxDurationTicks":120,"expectedLiftPctRange":{"min":0.2,"max":0.9}},
+        "hr_branding":{"budgetPerTickRangeEur":{"min":0,"max":40,"step":2},"minDurationTicks":72,"maxDurationTicks":240,"expectedLiftPctRange":{"min":0.15,"max":0.6}},
+        "fleet_outreach":{"budgetPerTickRangeEur":{"min":0,"max":80,"step":4},"minDurationTicks":72,"maxDurationTicks":200,"expectedLiftPctRange":{"min":0.4,"max":1.6}},
+        "referral_rewards":{"budgetPerTickRangeEur":{"min":0,"max":70,"step":3},"minDurationTicks":24,"maxDurationTicks":160,"expectedLiftPctRange":{"min":0.35,"max":1.4}}
       },
       "upsell":{
         "upgradeRateBoostPctPerStaffRange":{"min":0.5,"max":2.5},
