@@ -1035,7 +1035,7 @@ export const DecisionWizardPage: React.FC = () => {
               onSoftCommit={() => decisionDraft.setSoftCommit(true)}
               onUnlock={() => decisionDraft.setSoftCommit(false)}
               onCommit={onCommit}
-              disabled={isTicking}
+              disabled={false}
               isTicking={isTicking}
             />
           </div>
@@ -1067,7 +1067,7 @@ export const DecisionWizardPage: React.FC = () => {
             }
           });
         }}
-        disabled={isTicking}
+        disabled={false}
       />
     </div>
   );

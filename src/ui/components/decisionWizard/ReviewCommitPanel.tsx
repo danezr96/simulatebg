@@ -134,7 +134,7 @@ export function ReviewCommitPanel({
             Lock preview
           </Button>
         )}
-        <Button onClick={onCommit} disabled={disabled || !softCommitted || isTicking}>
+        <Button onClick={onCommit} disabled={disabled || !softCommitted}>
           Submit
         </Button>
       </div>
