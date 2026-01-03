@@ -190,6 +190,32 @@ function getPriceStep(min: number, max: number) {
   return 50;
 }
 
+function getProductIcon(product: NicheProduct) {
+  const sku = String(product.sku ?? "").toLowerCase();
+  const driver = String(product.capacityDriver ?? "").toLowerCase();
+  const iconClass = "h-4 w-4 text-[var(--text-muted)]";
+
+  if (driver.includes("wash") || sku.includes("wash")) return <Droplets className={iconClass} />;
+  if (driver.includes("detail") || sku.includes("detail")) return <Wrench className={iconClass} />;
+  if (driver.includes("interior")) return <Users className={iconClass} />;
+  if (driver.includes("fleet") || sku.includes("fleet")) return <Truck className={iconClass} />;
+  if (driver.includes("inventory") || driver.includes("storage")) return <Warehouse className={iconClass} />;
+  if (driver.includes("charger") || sku.includes("charging") || sku.includes("kwh")) {
+    return <BatteryCharging className={iconClass} />;
+  }
+  if (sku.includes("membership") || sku.includes("subscription") || sku.includes("pass")) {
+    return <Users className={iconClass} />;
+  }
+  if (sku.includes("insurance") || sku.includes("warranty") || sku.includes("compliance")) {
+    return <Target className={iconClass} />;
+  }
+  if (sku.includes("finance") || sku.includes("loan") || sku.includes("contract")) {
+    return <TrendingUp className={iconClass} />;
+  }
+
+  return <Package className={iconClass} />;
+}
+
 const CARWASH_CATEGORIES = ["chemicals", "consumables", "spare_parts"] as const;
 
 const CARWASH_CATEGORY_LABELS: Record<string, string> = {
@@ -607,8 +633,6 @@ export function CompanyDecisionPanel({
         if (unlockedSkuSet.size === 0 && nicheProducts.length > 0) {
           unlockedSkuSet.add(nicheProducts[0].sku);
         }
-        const unlockedProducts = nicheProducts.filter((product) => unlockedSkuSet.has(product.sku));
-        const lockedProducts = nicheProducts.filter((product) => !unlockedSkuSet.has(product.sku));
         const availableUpgrades = nicheUpgradesByCompany?.get(companyId) ?? [];
         const ownedUpgrades = ownedUpgradesByCompany?.get(companyId) ?? [];
         const upgradeById = new Map(availableUpgrades.map((upgrade) => [String(upgrade.id), upgrade]));
@@ -633,6 +657,20 @@ export function CompanyDecisionPanel({
             .filter(Boolean)
             .map(String)
         );
+        if (plannedUpgradeIds.size > 0) {
+          plannedUpgradeIds.forEach((upgradeId) => {
+            const upgrade = upgradeById.get(String(upgradeId));
+            const effects = Array.isArray((upgrade as any)?.effects) ? (upgrade as any).effects : [];
+            effects.forEach((effect: any) => {
+              if (String(effect?.key ?? "") !== "unlock_products") return;
+              const value = effect?.value;
+              if (!Array.isArray(value)) return;
+              value.forEach((sku: unknown) => unlockedSkuSet.add(String(sku)));
+            });
+          });
+        }
+        const unlockedProducts = nicheProducts.filter((product) => unlockedSkuSet.has(product.sku));
+        const lockedProducts = nicheProducts.filter((product) => !unlockedSkuSet.has(product.sku));
         const hasProductPlan = unlockedProducts.length > 0;
         const decisionModules = getDecisionModulesForNiche(niche ?? null);
         const decisionFields = getDecisionFieldsForNiche(niche ?? null);
@@ -667,6 +705,9 @@ export function CompanyDecisionPanel({
             requirements.staff.length ||
             requirements.thresholds.length ||
             requirements.anyOf.length;
+          const { min, max } = getPriceRange(product);
+          const priceRangeLabel = min > 0 || max > 0 ? formatMoneyRange(min, max) : "n/a";
+          const cogsLabel = formatRange(product.cogsPctMin, product.cogsPctMax, 0);
           const upgradeItems = requirements.upgrades
             .map((code) => upgradeByCode.get(code))
             .filter(Boolean) as NicheUpgrade[];
@@ -683,6 +724,8 @@ export function CompanyDecisionPanel({
           const isPlanned =
             missingUpgradeItems.length > 0 &&
             missingUpgradeItems.every((upgrade) => plannedUpgradeIds.has(String(upgrade.id)));
+          const planLabel =
+            unlockCost > 0 ? `Invest ${formatCurrencyCompact(unlockCost)}` : "Plan unlock";
 
           return (
             <div
@@ -693,9 +736,15 @@ export function CompanyDecisionPanel({
                 <div>
                   <div className="flex items-center gap-2 text-xs font-semibold text-[var(--text)]">
                     <Lock className="h-3 w-3" />
+                    {getProductIcon(product)}
                     {product.name}
                   </div>
-                  <div className="text-[10px] text-[var(--text-muted)]">{product.sku}</div>
+                  <div className="text-[10px] text-[var(--text-muted)]">
+                    {product.sku} | {product.unit} | Range {priceRangeLabel}
+                  </div>
+                  <div className="text-[10px] text-[var(--text-muted)]">
+                    Driver {product.capacityDriver} | COGS {cogsLabel}%
+                  </div>
                 </div>
                 <div className="flex items-center gap-2">
                   <button
@@ -719,13 +768,16 @@ export function CompanyDecisionPanel({
                         });
                       }}
                     >
-                      {isPlanned ? "Planned" : "Plan unlock"}
+                      {isPlanned ? "Planned" : planLabel}
                     </Button>
                   ) : null}
                 </div>
               </div>
               {!hasRequirements ? (
                 <div className="mt-1 text-[10px] text-[var(--text-muted)]">Unlock via upgrades.</div>
+              ) : null}
+              {product.notes ? (
+                <div className="mt-1 text-[10px] text-[var(--text-muted)]">{product.notes}</div>
               ) : null}
               {requirements.upgrades.length > 0 ? (
                 <div className="mt-2 flex flex-wrap gap-1">
@@ -772,13 +824,13 @@ export function CompanyDecisionPanel({
                   Any of: {requirements.anyOf.join(" OR ")}
                 </div>
               ) : null}
-              {requirements.upgrades.length > 0 ? (
+              {requirements.upgrades.length > 0 && unlockCost > 0 ? (
                 <div className="mt-2 text-[10px] text-[var(--text-muted)]">
-                  Unlock price: {formatCurrencyCompact(unlockCost)}
+                  Unlock investment: {formatCurrencyCompact(unlockCost)}
                 </div>
               ) : hasRequirements ? (
                 <div className="mt-2 text-[10px] text-[var(--text-muted)]">
-                  Unlock price: n/a (non-upgrade requirements)
+                  Unlock investment: n/a (non-upgrade requirements)
                 </div>
               ) : null}
               {isExpanded ? (
@@ -1705,7 +1757,10 @@ export function CompanyDecisionPanel({
                             <div className="flex flex-col gap-1 md:flex-row md:items-start md:justify-between">
                               <div>
                                 <div className="text-sm font-semibold text-[var(--text)]">
-                                  {product.name}
+                                  <span className="inline-flex items-center gap-2">
+                                    {getProductIcon(product)}
+                                    {product.name}
+                                  </span>
                                 </div>
                                 <div className="text-xs text-[var(--text-muted)]">
                                   {product.sku} - {product.unit} - COGS {cogsLabel}%
@@ -1832,7 +1887,12 @@ export function CompanyDecisionPanel({
                           >
                             <div className="flex flex-col gap-1 md:flex-row md:items-start md:justify-between">
                               <div>
-                                <div className="text-sm font-semibold text-[var(--text)]">{product.name}</div>
+                                <div className="text-sm font-semibold text-[var(--text)]">
+                                  <span className="inline-flex items-center gap-2">
+                                    {getProductIcon(product)}
+                                    {product.name}
+                                  </span>
+                                </div>
                                 <div className="text-xs text-[var(--text-muted)]">{product.sku}</div>
                               </div>
                               <div className="text-xs text-[var(--text-muted)]">

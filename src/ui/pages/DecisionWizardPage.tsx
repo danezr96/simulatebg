@@ -983,7 +983,7 @@ export const DecisionWizardPage: React.FC = () => {
             draftDecisions={decisionDraft.draftCompanyDecisions}
             onDecisionChange={decisionDraft.setCompanyDecision}
             onPreset={decisionDraft.setCompanyDecisions}
-            disabled={decisionDraft.softCommitted || isTicking}
+            disabled={false}
           />
         ) : null}
 
@@ -1001,7 +1001,7 @@ export const DecisionWizardPage: React.FC = () => {
             policy={holdingPolicy}
             onPolicyChange={setHoldingPolicy}
             safeToSpend={safeToSpend}
-            disabled={decisionDraft.softCommitted || isTicking}
+            disabled={false}
           />
         ) : null}
 
@@ -1015,7 +1015,7 @@ export const DecisionWizardPage: React.FC = () => {
             currentYear={currentYear}
             currentWeek={currentWeek}
             onToggleUpgrade={decisionDraft.toggleUpgrade}
-            disabled={decisionDraft.softCommitted || isTicking}
+            disabled={false}
           />
         ) : null}
 
